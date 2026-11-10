@@ -25,8 +25,9 @@ function trackStrip(tr){
   if(!st){ st=makeStrip(A.ctx,A.bus); A.ts.set(tr.id,st); applyStrip(st,tr,A.ctx,true,trackAudible(tr)); }
   return st;
 }
+let PREVIEW=null; /* a track being auditioned alone from its ▶ button */
 const anySolo=()=>PROJ.tracks.some(t=>t.solo);
-const trackAudible=t=>!t.mute && (!anySolo()||t.solo);
+const trackAudible=t=>PREVIEW?t.id===PREVIEW:(!t.mute && (!anySolo()||t.solo));
 function refreshTrackGains(){ if(!A.ctx) return; PROJ.tracks.forEach(t=>{ const st=A.ts.get(t.id); if(st) applyStrip(st,t,A.ctx,false,trackAudible(t)); }); }
 /* channel lookup for dials, faders and learn targets: 'keys' | 'pads' | 'master' | track id */
 function chCfg(id){ return MIX[id]||PROJ.tracks.find(t=>t.id===id); }
@@ -66,6 +67,7 @@ document.addEventListener('input',e=>{ const r=e.target.closest&&e.target.closes
 document.addEventListener('click',e=>{
   const m=e.target.closest('[data-mute]'); if(m){ const cfg=chCfg(m.dataset.mute); cfg.mute=!cfg.mute; chApply(m.dataset.mute); MIX[m.dataset.mute]?saveMix():saveProject(); m.classList.toggle('on',cfg.mute); m.setAttribute('aria-pressed',cfg.mute); renderTracks(); return; }
   const s=e.target.closest('[data-solo]'); if(s){ const cfg=chCfg(s.dataset.solo); cfg.solo=!cfg.solo; refreshTrackGains(); saveProject(); renderTracks(); }
+  if(m||s) refreshTrackGains();
 });
 function renderMixer(){
   const ch=[['keys','Keys',zoneInst('keys').name],['pads','Pads',zoneInst('pads').name],['master','Master','After effects']];

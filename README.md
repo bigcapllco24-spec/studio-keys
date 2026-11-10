@@ -2,7 +2,19 @@
 
 A personal MIDI studio that runs in the browser. Plug in a USB MIDI controller (Arturia, Akai, Novation and other class-compliant keyboards) and play sampled and synthesized instruments, build songs by talking or typing, sing melodies into the microphone, and export loop packs for Ableton.
 
-The whole app is one static file, `index.html`, with all sounds embedded. There is no server and no build step on the host.
+The whole app is one static file, `index.html`, with all sounds embedded. A small Cloudflare Worker (`cloudflare/worker.js`) serves it and adds the AI assistant.
+
+## The assistant
+
+The Studio has a named voice assistant (default name **Keys**, changeable in the app). Turn on **Always listening** and talk to it by name ("Keys, make a 125 bpm house beat", "Keys, add a bassline", "Keys, turn the drums down"), or tap the orb to speak once, or type. When the song is stopped, humming or singing a phrase adds it as a new melody track.
+
+- On the hosted site the assistant calls `/api/assistant` on the Worker, which runs Llama 3.3 70B on Cloudflare Workers AI and returns a list of song actions.
+- If the Worker has an `ANTHROPIC_API_KEY` secret, it uses Claude instead (model from the optional `CLAUDE_MODEL` variable, default `claude-haiku-5-5`).
+- Opened as a local file, the app falls back to a built-in command parser.
+
+## Songs and tracks
+
+Tracks work like a small DAW: rename, change instrument, volume, mute/solo, play one track on its own, duplicate, delete, and open an editor (a piano roll for instruments, a step sequencer for drums). Songs autosave in the browser; **New**, **Open** and **Save a copy** manage several songs. Export as a zip of WAV stems plus MIDI for Ableton or FL Studio.
 
 ## Run it
 
@@ -11,12 +23,9 @@ The whole app is one static file, `index.html`, with all sounds embedded. There 
 
 Safari does not support Web MIDI. Speech recognition uses the browser's speech service, so it needs Chrome or Edge and an internet connection.
 
-## Deploy on Cloudflare Pages
+## Hosting
 
-1. In the Cloudflare dashboard go to **Workers & Pages → Create → Pages → Connect to Git**.
-2. Pick this repository and the `main` branch.
-3. Build settings: framework preset **None**, build command empty, build output directory `/`.
-4. Deploy. Every push to `main` redeploys automatically.
+The live site is the `studio-keys` Cloudflare Worker. It fetches `index.html` from this repository's `main` branch (cached for 2 minutes), so pushing to `main` updates the site. The Worker needs a Workers AI binding named `AI`. To redeploy the Worker itself, upload `cloudflare/worker.js` as an ES module with that binding.
 
 ## Change the code
 
@@ -39,7 +48,10 @@ python3 tools/build.py
 | `src/controller.js` | Controller layouts per model and the studio scene |
 | `src/music.js` | Keys, chords and generators for drums, hi-hats, bass, chords and melody |
 | `src/studio.js` | Song project, transport, looper, sung takes, saving, export (WAV, MIDI, zip) |
-| `src/maker.js` | Talk/type commands |
+| `src/daw.js` | Track list, piano roll, step sequencer, song manager |
+| `src/actions.js` | The song actions the assistant can run |
+| `src/assistant.js` | The named voice assistant, wake word, hum-to-track |
+| `src/maker.js` | Offline command parser (used when the AI is not available) |
 | `src/mic.js` | Microphone pitch detection |
 | `src/lab.js`, `src/dsp.js` | Sound Lab: element extraction from songs |
 | `src/samples.json` | Embedded audio samples (base64 MP3) |

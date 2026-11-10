@@ -6,7 +6,7 @@ let PROJ=Object.assign(newProject(),store.get('project',{}));
 const AUD=new Map();
 let projSaveT=0;
 function serialize(p){ return JSON.parse(JSON.stringify(p)); }
-function saveProject(){ clearTimeout(projSaveT); projSaveT=setTimeout(()=>store.set('project',serialize(PROJ)),250); }
+function saveProject(){ clearTimeout(projSaveT); projSaveT=setTimeout(()=>store.set('project',serialize(PROJ)),250); if(typeof autoSaveNamed==='function'){ $('#saveState').textContent='Saving…'; autoSaveNamed(); } }
 const roleOfInst=inst=>{ const I=INST.get(inst)||{}; return I.drums?'drums':I.cat==='Bass'?'bass':'free'; };
 function makeTrack(o){
   const role=o.role||'free', mix=ROLE_MIX[role]||ROLE_MIX.free, I=INST.get(o.inst);
@@ -32,6 +32,7 @@ $('#keySel').innerHTML='<option value="">Key: auto</option>'+['major','minor'].m
 $('#keySel').addEventListener('change',e=>{ const v=e.target.value; setKey(v?{tonic:+v.split(':')[0],mode:v.split(':')[1]}:null); });
 $('#barsSel').addEventListener('change',e=>setBars(+e.target.value));
 $('#projName').addEventListener('input',e=>{ PROJ.name=e.target.value.slice(0,60)||'Untitled song'; saveProject(); });
+$('#addBars').onclick=()=>setBars(PROJ.bars*2);
 
 /* ---------- tempo ---------- */
 function setTempo(b){
@@ -98,6 +99,7 @@ function finalizeFirst(){
 }
 function endOverdub(){ LOOP.closeAll(); PROJ.tracks=PROJ.tracks.filter(t=>t.kind!=='notes'||t.events.length); PROJ.tracks.forEach(t=>t.events.forEach(e=>delete e.raw)); LOOP.pass=null; LOOP.state='playing'; saveProject(); uiLoop(); renderTracks(); }
 function loopStop(){
+  if(typeof PREVIEW!=='undefined' && PREVIEW){ PREVIEW=null; setTimeout(()=>{ refreshTrackGains(); renderTracks(); },0); }
   if(LOOP.state==='recording') finalizeFirst();
   if(LOOP.state==='overdub') endOverdub();
   if(LOOP.state==='take') TAKE.cancel();
@@ -110,8 +112,8 @@ function loopPlay(){
 }
 function loopClear(){ trStop(); LOOP.pass=null; LOOP.open.clear(); LOOP.state='empty'; uiLoop(); }
 $('#loopBtn').onclick=loopPress; $('#recBtn').onclick=recordPress; $('#stopBtn').onclick=loopStop;
-$('#playBtn').onclick=()=>{ if(LOOP.state==='stopped') loopPlay(); else if(LOOP.state==='empty') toast('Add a part or record something first.'); };
-$('#undoBtn').onclick=()=>{ const t=PROJ.tracks[PROJ.tracks.length-1]; if(t){ removeTrack(t.id); toast(`Removed “${t.name}”`); } };
+$('#playBtn').onclick=()=>{ if(LOOP.state==='stopped') loopPlay(); else if(LOOP.state==='empty') toast('Add a track or record something first.'); };
+
 
 function click(t,accent){ const c=A.ctx, o=osc(c,'sine',accent?1760:1175), g=env(c,t,accent?0.9:0.55,0.001,0.012); o.connect(g).connect(A.click); o.start(t); o.stop(t+0.08); }
 function scheduleEvent(tr,e,t,dur){
@@ -183,11 +185,11 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,
     this.chunks=[]; this.notes=[];
     LOOP.state='playing'; saveProject(); renderTracks(); uiLoop();
     $('#micStatus').textContent=`Take saved: ${notes.length} notes on “Sung melody” and your voice on “Voice take”. It’s playing back now.`;
-    say(`Saved your take: ${notes.length} notes${key?' in '+keyName(key):''}, plus the recorded voice.`);
+    ASSIST.say(`Saved your take: ${notes.length} notes${key?' in '+keyName(key):''} on “Sung melody”, plus your recorded voice on “Voice take”.`);
   }
 };
 function makeBuf(pcm,sr){ const b=new AudioBuffer({length:Math.max(1,pcm.length),numberOfChannels:1,sampleRate:sr}); b.copyToChannel(pcm,0); return b; }
-$('#takeBtn').onclick=()=>TAKE.start();
+
 
 /* ---------- UI ---------- */
 function uiLoop(){
@@ -202,57 +204,10 @@ function uiLoop(){
   $('#loopPill').innerHTML=`<span class="${ledCls}"></span><span>${pill}</span>`;
   lcd({counting:'COUNT-IN',recording:'REC',playing:'PLAY',overdub:'OVERDUB',stopped:'STOP',empty:'READY',take:'TAKE'}[st]);
   const has=PROJ.tracks.length>0;
-  $('#exportZip').disabled=!has; $('#exportMid').disabled=!has; $('#undoBtn').disabled=!has; $('#playBtn').disabled=st!=='stopped';
+  $('#exportZip').disabled=!has; $('#exportMid').disabled=!has; $('#playBtn').disabled=!has||PLAYING.has(st);
   $('#recBtn').classList.toggle('on',st==='recording'||st==='overdub'); $('#playBtn').classList.toggle('on',PLAYING.has(st));
   document.querySelectorAll('.tp').forEach(b=>b.classList.toggle('on',(b.dataset.tp==='play'&&PLAYING.has(st))||(b.dataset.tp==='rec'&&(st==='recording'||st==='overdub'||st==='take'))||(b.dataset.tp==='loop'&&st!=='empty'&&st!=='stopped')));
 }
-let instOpts='';
-function instOptions(){ if(!instOpts){ instOpts=CAT_ORDER.concat(['Mine']).map(cat=>{ const l=ORDER.map(id=>INST.get(id)).filter(i=>i.cat===cat); return l.length?`<optgroup label="${cat}">${l.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('')}</optgroup>`:''; }).join(''); } return instOpts; }
-function renderTracks(){
-  instOpts='';
-  const box=$('#tracks'); $('#projName').value=PROJ.name; $('#barsSel').value=String(PROJ.bars); $('#keySel').value=PROJ.key?`${PROJ.key.tonic}:${PROJ.key.mode}`:'';
-  $('#keyInfo').textContent=PROJ.key?'':`· detected ${keyName(projectKey())}`;
-  if(!PROJ.tracks.length){ box.innerHTML='<div class="custom-empty big">Your song is empty. Pick a style above, tell Studio Keys what to add, press Record and play, or sing a part.</div>'; drawRolls(); return; }
-  box.innerHTML=PROJ.tracks.map(t=>{ const I=INST.get(t.inst);
-    return `<div class="trk${trackAudible(t)?'':' quiet'}" data-tid="${t.id}" style="--c:${t.color}">
-      <div class="tinfo"><span class="tsw"></span><div class="tmeta"><input class="tname" value="${esc(t.name)}" data-tname="${t.id}" aria-label="Track name"><span class="trole">${ROLE_NAME[t.role]||'Part'} · ${t.kind==='audio'?'recorded audio':t.events.length+' notes'}</span>
-        ${t.kind==='notes'?`<select class="select inline tinst" data-tinst="${t.id}" aria-label="Instrument">${instOptions()}</select>`:`<span class="trole">Your microphone</span>`}</div></div>
-      <canvas class="troll" data-roll="${t.id}" aria-label="${esc(t.name)} pattern"></canvas>
-      <div class="tmix">${stripControls(t.id,t,{solo:true,name:t.name})}<button class="btn small ghost" type="button" data-tdel="${t.id}" title="Delete track">Delete</button></div>
-    </div>`; }).join('');
-  PROJ.tracks.forEach(t=>{ const s=box.querySelector(`[data-tinst="${t.id}"]`); if(s) s.value=t.inst; });
-  drawRolls(); renderFaders();
-}
-$('#tracks').addEventListener('change',e=>{ const s=e.target.closest('[data-tinst]'); if(s){ const t=PROJ.tracks.find(x=>x.id===s.dataset.tinst); const I=INST.get(s.value); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); if(t.name===(INST.get(t.inst)||{}).name) t.name=I.name; t.inst=s.value; saveProject(); renderTracks(); } });
-$('#tracks').addEventListener('input',e=>{ const n=e.target.closest('[data-tname]'); if(n){ const t=PROJ.tracks.find(x=>x.id===n.dataset.tname); t.name=n.value.slice(0,40); saveProject(); } });
-$('#tracks').addEventListener('click',e=>{ const d=e.target.closest('[data-tdel]'); if(d){ const t=removeTrack(d.dataset.tdel); if(t) toast(`Deleted “${t.name}”`); } });
-function drawRolls(){
-  const L=PROJ.bars*4, line=cssVar('--line'), mut=cssVar('--muted');
-  PROJ.tracks.forEach(t=>{ const cv=document.querySelector(`[data-roll="${t.id}"]`); if(!cv) return; const {g,w,h}=prepCanvas(cv);
-    for(let b=0;b<=L;b++){ g.fillStyle=b%4===0?mut+'66':line; g.fillRect(Math.min(w-1,b/L*w),0,1,h); }
-    g.fillStyle=t.color;
-    if(t.kind==='audio'){ const buf=AUD.get(t.id); if(!buf){ g.fillStyle=mut; g.font='11px '+cssVar('--mono'); g.fillText('loading audio…',6,h/2); return; } const d=buf.getChannelData(0), per=Math.max(1,Math.floor(d.length/w)), secW=w/(L*spb())*buf.duration;
-      for(let x=0;x<Math.min(w,secW);x++){ let m=0; for(let i=x*per;i<(x+1)*per&&i<d.length;i+=4) m=Math.max(m,Math.abs(d[i])); g.fillRect(x,h/2-m*h*0.45,1,Math.max(1,m*h*0.9)); } return; }
-    if(!t.events.length) return; const ns=t.events.map(e=>e.n), lo=Math.min(...ns), hi=Math.max(...ns), rngN=Math.max(6,hi-lo);
-    t.events.forEach(e=>{ const x=mod(e.b,L)/L*w, y=h-4-((e.n-lo)/rngN)*(h-10); g.globalAlpha=0.45+0.55*e.v; g.fillRect(x,y-2,Math.max(2,e.d/L*w-1),4); }); g.globalAlpha=1; });
-}
-(function anim(){ requestAnimationFrame(anim); const ph=$('#playhead'), first=document.querySelector('.troll');
-  if(!TR.running||!first||!LOOP.L||LOOP.state==='counting'){ ph.style.display='none'; return; }
-  const r=first.getBoundingClientRect(), pr=$('#tracks').getBoundingClientRect(), pos=mod(LOOP.rawBeat(),LOOP.L)/LOOP.L;
-  ph.style.display='block'; ph.style.left=(r.left-pr.left+pos*r.width)+'px'; ph.style.height=pr.height+'px'; })();
-
-/* ---------- save, load and manage songs ---------- */
-async function refreshProjList(){ let list=[]; try{ list=await IDB.all('projects'); }catch(e){} list.sort((a,b)=>b.savedAt-a.savedAt);
-  $('#projList').innerHTML='<option value="">Saved songs…</option>'+list.map(p=>`<option value="${esc(p.key)}">${esc(p.name)} · ${p.bpm} BPM · ${new Date(p.savedAt).toLocaleDateString()}</option>`).join(''); }
-async function saveNamed(){ const key=PROJ.id; try{ await IDB.put(key,{key,name:PROJ.name,bpm:CTRL.bpm,savedAt:Date.now(),proj:Object.assign(serialize(PROJ),{bpm:CTRL.bpm})},'projects'); toast(`Saved “${PROJ.name}”`); refreshProjList(); }catch(e){ toast('Couldn’t save in this browser: '+e.message); } }
-async function loadAudioFor(p){ for(const t of p.tracks){ if(t.kind==='audio' && !AUD.has(t.id)){ try{ const r=await IDB.get('aud:'+t.id,'audio'); if(r) AUD.set(t.id,makeBuf(r.data,r.sr)); }catch(e){} } } }
-async function loadNamed(key){ let r=null; try{ r=await IDB.get(key,'projects'); }catch(e){} if(!r) return; loopStop(); PROJ=Object.assign(newProject(),r.proj); if(r.proj.bpm) setTempo(r.proj.bpm); await loadAudioFor(PROJ); preloadTracks(); LOOP.state=PROJ.tracks.length?'stopped':'empty'; saveProject(); renderTracks(); uiLoop(); toast(`Opened “${PROJ.name}”`); }
-async function newSong(){ if(PROJ.tracks.length) await saveNamed(); loopStop(); PROJ=newProject(); LOOP.state='empty'; saveProject(); renderTracks(); uiLoop(); say('New song started. Your last one is under Saved songs.'); }
-function preloadTracks(){ PROJ.tracks.forEach(t=>{ const I=INST.get(t.inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); }); }
-$('#saveBtn').onclick=saveNamed; $('#newBtn').onclick=newSong;
-$('#projList').addEventListener('change',e=>{ if(e.target.value) loadNamed(e.target.value); e.target.value=''; });
-$('#delProj').onclick=async()=>{ /* deletes the current song from Saved songs */ try{ await IDB.del(PROJ.id,'projects'); toast(`Removed “${PROJ.name}” from saved songs`); refreshProjList(); }catch(e){} };
-
 /* ---------- export: MIDI, WAV, zip ---------- */
 function vlq(n){ const b=[n&0x7F]; while(n>>=7) b.unshift((n&0x7F)|0x80); return b; }
 function strBytes(s){ return Array.from(new TextEncoder().encode(s)); }

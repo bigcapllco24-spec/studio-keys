@@ -28,7 +28,7 @@ function micStop(){
 }
 $('#micBtn').onclick=()=>MIC.on?micStop():micStart();
 function micNoteOn(n){
-  const zone=$('#micZone').value; MIC.active=n;
+  const zone=ASSIST.listening?'none':$('#micZone').value; MIC.active=n; MIC.activeT=performance.now(); MIC.zone=zone; ASSIST.onMicNote(n,true);
   MIC.hist.push({n,t0:(performance.now()-MIC.t0)/1000,t1:null}); if(MIC.hist.length>300) MIC.hist.shift();
   if(LOOP.state==='take') TAKE.noteOn(n,MIC.vel);
   if(zone!=='none') noteOn(n,MIC.vel,'mic',zone==='pads'?{zone:'pads',pitch:n}:{zone:'keys'}); else lit(n,1);
@@ -36,7 +36,7 @@ function micNoteOn(n){
   lcd(`SING ${noteName(n)}`);
 }
 function micNoteOff(){
-  if(MIC.active==null) return; const n=MIC.active, zone=$('#micZone').value;
+  if(MIC.active==null) return; const n=MIC.active, zone=MIC.zone||'none'; ASSIST.onMicNote(n,false);
   const h=MIC.hist[MIC.hist.length-1]; if(h&&h.t1==null) h.t1=(performance.now()-MIC.t0)/1000;
   if(LOOP.state==='take') TAKE.noteOff();
   if(zone!=='none') noteOff(n,'mic'); else lit(n,-1);
@@ -58,7 +58,7 @@ function micLoop(){
     MIC.trace.push({t,m}); MIC.silent=0;
     $('#micHz').textContent=r.f.toFixed(1)+' Hz'; $('#micCents').textContent=(cents>0?'+':'')+cents+'¢'; $('#micNeedle').style.left=`calc(${50+cents}% - 2px)`;
     MIC.vel=Math.round(clamp(45+r.rms*700,45,127));
-    const reattack=MIC.active!=null && MIC.env.length>=6 && r.rms>Math.min(...MIC.env.slice(0,-1))*2.2 && r.rms>gate*2.5;
+    const reattack=MIC.active!=null && performance.now()-MIC.activeT>150 && MIC.env.length>=6 && r.rms>Math.min(...MIC.env.slice(0,-1))*2.2 && r.rms>gate*2.5;
     if(MIC.active!=null && Math.abs(m-MIC.active)<0.7 && !reattack){ MIC.cand=null; MIC.candN=0; }
     else if(reattack && Math.abs(m-MIC.active)<0.7){ micNoteOff(); micNoteOn(n); MIC.env=[r.rms]; }
     else { if(n===MIC.cand) MIC.candN++; else { MIC.cand=n; MIC.candN=1; }
