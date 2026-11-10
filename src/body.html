@@ -1,0 +1,307 @@
+<body>
+<header class="top">
+  <div class="brand">
+    <div class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div><h1>Studio Keys</h1><div class="sub" id="greet">Your personal MIDI studio</div></div>
+  </div>
+  <nav class="jump" aria-label="Sections"><a href="#studio">Studio</a><a href="#sounds">Sounds</a><a href="#effects">Effects</a><a href="#sing">Sing</a><a href="#lab">Sound Lab</a></nav>
+  <div class="pills">
+    <button class="pill" id="audioPill" type="button"><span class="led warn"></span><span>Sound off · click to start</span></button>
+    <span class="pill" id="loopPill"><span class="led"></span><span>Studio empty</span></span>
+    <span class="pill" id="midiPill"><span class="led"></span><span>Looking for MIDI…</span></span>
+  </div>
+</header>
+
+<div class="wrap"><div class="banner" id="soundBanner" hidden>
+  <span>Your controller is sending notes, but the browser keeps sound off until you click the page once.</span>
+  <button class="btn primary small" type="button" id="bannerBtn">Turn on sound</button>
+</div></div>
+
+<main class="grid">
+
+  <!-- CONTROLLER -->
+  <section class="panel keys" aria-labelledby="keysH">
+    <div class="kb-bar">
+      <h2 id="keysH">Your controller</h2>
+      <div class="row" style="gap:16px">
+        <span class="stepper">Computer keys <button class="btn small" type="button" id="octDown" aria-label="Octave down">−</button><span class="val" id="octVal">C4</span><button class="btn small" type="button" id="octUp" aria-label="Octave up">+</button></span>
+        <span class="stepper">Transpose <button class="btn small" type="button" id="trDown" aria-label="Transpose down">−</button><span class="val" id="trVal">0</span><button class="btn small" type="button" id="trUp" aria-label="Transpose up">+</button></span>
+        <span class="ind"><span class="led" id="susLed"></span>Sustain</span>
+        <span class="ind"><span class="led" id="modLed"></span>Mod</span>
+        <span class="ind"><span class="led" id="bendLed"></span><span id="bendVal">Bend 0</span></span>
+        <button class="btn small" type="button" id="panic">All notes off</button>
+      </div>
+    </div>
+    <div class="stage" id="stage">
+      <canvas id="scene" aria-hidden="true"></canvas>
+      <div class="ctrl-body" id="ctrlBody">
+        <div class="ctrl-top">
+          <div class="wheels" id="wheelsBox"></div>
+          <div class="lcd">
+            <div class="lcd-brand"><span id="lcdBrand">Studio Keys</span><span id="lcdTempo">120 BPM</span></div>
+            <div class="lcd-name" id="lcdName">No controller · on-screen mode</div>
+            <div class="lcd-line" id="lcdLine">Press a key</div>
+            <div class="lcd-sub" id="lcdSub">KEYS Grand Piano</div>
+            <div class="lcd-sub" id="lcdSub2">PADS Acoustic Kit</div>
+          </div>
+          <div class="knobs" id="knobs" aria-label="Knobs"></div>
+          <div class="faders" id="faders" aria-label="Faders"></div>
+          <div class="pads-wrap" id="padsDrop">
+            <span class="pads-lbl" id="padsLbl">Pads · ch 10 · Acoustic Kit</span>
+            <div class="pads" id="pads" aria-label="Pads"></div>
+          </div>
+        </div>
+        <div class="hw-row">
+          <div class="transport-hw" id="hwTransport" aria-label="Transport">
+            <button class="tp" type="button" data-tp="loop" title="Loop: record, play, overdub">Loop</button>
+            <button class="tp" type="button" data-tp="rec" title="Record">● Rec</button>
+            <button class="tp" type="button" data-tp="play" title="Play">▶ Play</button>
+            <button class="tp" type="button" data-tp="stop" title="Stop">■ Stop</button>
+          </div>
+          <span class="hint" id="routeHint">Keys and pads each play their own sound. Drag a sound onto the keys or the pads.</span>
+        </div>
+        <div class="kb-wrap"><div class="keyboard" id="keyboard" aria-label="Piano keyboard"></div></div>
+      </div>
+    </div>
+    <div class="hint">Everything you touch lights up here. Computer keys: A W S E D F T G Y H U J K O L P · Z/X octave · 1–0 load a sound on the keys · Shift+1–0 on the pads.</div>
+  </section>
+
+  <!-- STUDIO -->
+  <section class="panel loop" id="studio" aria-labelledby="loopH">
+    <div class="panel-head">
+      <div class="row"><h2 id="loopH">Studio</h2><input class="input inline proj" id="projName" type="text" maxlength="60" aria-label="Song name" value="Untitled song"></div>
+      <div class="row">
+        <select class="select inline" id="projList" aria-label="Open a saved song"><option value="">Saved songs…</option></select>
+        <button class="btn small" type="button" id="saveBtn">Save song</button>
+        <button class="btn small ghost" type="button" id="newBtn">New song</button>
+        <button class="btn small ghost" type="button" id="delProj" title="Remove this song from Saved songs">Remove saved</button>
+      </div>
+    </div>
+
+    <div class="maker">
+      <form class="maker-bar" id="makerForm">
+        <button class="talk" type="button" id="talkBtn" aria-label="Talk to Studio Keys"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg><span>Talk</span></button>
+        <input class="input" id="makerIn" type="text" autocomplete="off" placeholder="Tell Studio Keys what to add, e.g. “125 bpm house drums, hi-hats on 8ths”">
+        <button class="btn primary" type="submit">Add</button>
+      </form>
+      <div class="chips-row" aria-label="Styles">
+        <span class="lbl-sm">Start a style</span>
+        <button class="sc" type="button" data-cmd="house drums with hi-hats">House</button>
+        <button class="sc" type="button" data-cmd="techno drums">Techno</button>
+        <button class="sc" type="button" data-cmd="hip hop beat">Hip-hop</button>
+        <button class="sc" type="button" data-cmd="lofi beat">Lo-fi</button>
+        <button class="sc" type="button" data-cmd="trap beat">Trap</button>
+        <button class="sc" type="button" data-cmd="pop drums">Pop</button>
+        <button class="sc" type="button" data-cmd="rock drums">Rock</button>
+        <button class="sc" type="button" data-cmd="reggaeton beat">Reggaeton</button>
+        <button class="sc" type="button" data-cmd="drum and bass beat">Drum &amp; bass</button>
+        <button class="sc" type="button" data-cmd="afro house drums">Afro house</button>
+        <button class="sc" type="button" data-cmd="bhangra beat">Bhangra</button>
+        <button class="sc" type="button" data-cmd="bollywood drums">Bollywood</button>
+      </div>
+      <div class="chips-row" aria-label="Add parts">
+        <span class="lbl-sm">Add a part</span>
+        <button class="sc add" type="button" data-cmd="add drums">Drums</button>
+        <button class="sc add" type="button" data-cmd="hi-hats on 8ths">Hi-hats 8ths</button>
+        <button class="sc add" type="button" data-cmd="hi-hats on 16ths">Hi-hats 16ths</button>
+        <button class="sc add" type="button" data-cmd="add a bassline">Bassline</button>
+        <button class="sc add" type="button" data-cmd="add chords">Chords</button>
+        <button class="sc add" type="button" data-cmd="add a melody">Melody</button>
+        <button class="sc add sing" type="button" id="takeBtn">Sing a part</button>
+      </div>
+      <div class="maker-say" id="makerSay" aria-live="polite"><div class="say old">Try saying: “put a 125 bpm drum on 4/4”, then “hi-hats on 8ths”, then “add a bassline”, then “sing”.</div></div>
+    </div>
+
+    <div class="transport">
+      <button class="loopbtn" type="button" id="loopBtn" data-state="empty"><span class="led" id="loopLed"></span><span id="loopLbl">Record loop</span></button>
+      <button class="btn" type="button" id="recBtn">● Record</button>
+      <button class="btn" type="button" id="playBtn">▶ Play</button>
+      <button class="btn" type="button" id="stopBtn">■ Stop</button>
+      <button class="btn ghost" type="button" id="undoBtn">Undo last track</button>
+      <span class="tempo"><label for="bpm">Tempo</label><input class="input inline mono" type="number" id="bpm" min="40" max="240" step="0.1" value="120"><button class="btn small" type="button" id="tapBtn">Tap</button><span class="ind" title="Follows MIDI clock when your controller sends it"><span class="led" id="clockLed"></span>Clock</span></span>
+      <label for="keySel"><select class="select inline" id="keySel" aria-label="Key"></select><span class="hint" id="keyInfo"></span></label>
+      <label for="barsSel">Length <select class="select inline" id="barsSel"><option value="1">1 bar</option><option value="2">2 bars</option><option value="4" selected>4 bars</option><option value="8">8 bars</option><option value="16">16 bars</option></select></label>
+      <label for="loopLen">First recording <select class="select inline" id="loopLen"><option value="0">Auto length</option><option value="1">1 bar</option><option value="2">2 bars</option><option value="4">4 bars</option><option value="8">8 bars</option></select></label>
+      <label for="quant">Quantize <select class="select inline" id="quant"><option value="0">Off</option><option value="0.25">1/16</option><option value="0.5">1/8</option><option value="1">1/4</option></select></label>
+      <label for="metro"><input type="checkbox" id="metro"> Metronome</label>
+      <label for="countIn"><input type="checkbox" id="countIn"> Count-in</label>
+    </div>
+
+    <div class="tracks-wrap"><div class="tracks" id="tracks"></div><div class="playhead" id="playhead"></div></div>
+
+    <div class="mixer-wrap">
+      <h3>Live mixer</h3>
+      <div class="mixer" id="mixer"></div>
+    </div>
+
+    <div class="row" style="justify-content:space-between">
+      <div class="row">
+        <button class="btn primary" type="button" id="exportZip">Download song pack (.zip)</button>
+        <button class="btn" type="button" id="exportMid">Download MIDI only</button>
+        <span class="status" id="exportStatus"></span>
+      </div>
+      <div class="switchers">
+        <span>Controller loop button</span><button class="btn small" type="button" data-learn="loop" id="learn-loop">Learn</button><span class="map" id="map-loop"></span>
+        <span>Stop</span><button class="btn small" type="button" data-learn="stop" id="learn-stop">Learn</button><span class="map" id="map-stop"></span>
+      </div>
+    </div>
+    <div class="hint">Songs save in this browser as you work. “Save song” keeps a copy under Saved songs. The pack holds a WAV mix, a WAV per track (your EQ, volume and effects printed in), MIDI files and the song file, each exactly one loop long and named with the tempo so Ableton lines it up.</div>
+  </section>
+
+  <!-- PROFILE -->
+  <aside class="panel profile" aria-labelledby="profH">
+    <div class="panel-head"><h2 id="profH">Controller profile</h2><div class="row"><button class="btn small primary" type="button" id="testBtn">Run MIDI test</button><button class="btn small" type="button" id="connectBtn">Connect MIDI</button></div></div>
+    <div class="test" id="testOut" hidden></div>
+    <div class="setup" id="setupBox" hidden></div>
+    <div class="field"><label for="playerName">Player</label><input class="input" id="playerName" type="text" maxlength="40" placeholder="Your name" autocomplete="off"></div>
+    <div id="devInfo"></div>
+    <div class="layout-info" id="layoutInfo"></div>
+    <div class="row" style="justify-content:space-between">
+      <label class="lbl-sm" for="padCh">Pads send on channel</label>
+      <div class="row"><select class="select inline mono" id="padCh"></select><button class="btn small" type="button" id="padDetect">Set up keys &amp; pads</button></div>
+    </div>
+    <div><h3 style="margin-bottom:6px">Controls detected</h3><div id="devSeen"></div></div>
+    <div class="hw">
+      <div class="row" style="justify-content:space-between"><span>Hardware ID over SysEx</span><button class="btn small" type="button" id="hwBtn">Read hardware ID</button></div>
+      <div id="hwOut">Asks the controller for its maker code and firmware. Your browser asks for permission first.</div>
+    </div>
+    <div>
+      <div class="row" style="justify-content:space-between;margin-bottom:6px"><h3>MIDI monitor</h3><button class="btn small ghost" type="button" id="clearMon">Clear</button></div>
+      <ul class="monitor" id="monitor"></ul>
+    </div>
+  </aside>
+
+  <!-- SOUNDS -->
+  <section class="panel rack" id="sounds" aria-labelledby="rackH">
+    <div class="panel-head"><h2 id="rackH">Sounds</h2><button class="btn small" type="button" id="setupKP">Set up keys &amp; pads</button></div>
+    <div class="zones">
+      <div class="zone k" id="zoneKeys" data-zone="keys"><span class="zl">Keys</span><span class="zn" id="zKeysName">Grand Piano</span><span class="zs" id="zKeysSub">Drop a sound here</span></div>
+      <div class="zone p" id="zonePads" data-zone="pads"><span class="zl">Pads</span><span class="zn" id="zPadsName">Acoustic Kit</span><span class="zs" id="zPadsSub">Drop a sound here</span></div>
+    </div>
+    <div class="rack-filter">
+      <div class="tabs" id="catTabs" role="tablist" aria-label="Sound categories"></div>
+      <input class="input inline" id="soundSearch" type="search" placeholder="Search sounds" aria-label="Search sounds">
+    </div>
+    <div class="inst-grid" id="builtinGrid"></div>
+    <div class="panel-head" style="margin-top:4px">
+      <h3>My sounds</h3>
+      <div class="switchers">
+        <span>Controller buttons for the keys sound:</span>
+        <button class="btn small" type="button" data-learn="prev" id="learn-prev">Learn ‹ Prev</button><span class="map" id="map-prev"></span>
+        <button class="btn small" type="button" data-learn="next" id="learn-next">Learn Next ›</button><span class="map" id="map-next"></span>
+      </div>
+    </div>
+    <div class="inst-grid" id="customGrid"></div>
+    <div class="controls">
+      <div class="ctl">
+        <div class="ctl-top"><label for="ctl-volume">Main volume</label><span class="val" id="val-volume">80%</span></div>
+        <input type="range" id="ctl-volume" min="0" max="100" value="80">
+        <div class="ctl-bot"><span class="map" id="map-volume">CC 7</span><button class="btn small ghost" type="button" data-learn="volume" id="learn-volume">Learn</button></div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-top"><label for="ctl-curve">Velocity feel</label><span class="val" id="val-curve">Linear</span></div>
+        <select class="select" id="ctl-curve">
+          <option value="soft">Soft: light touch plays louder</option>
+          <option value="linear" selected>Linear</option>
+          <option value="hard">Hard: dig in for loud notes</option>
+          <option value="fixed">Fixed velocity</option>
+        </select>
+        <div class="ctl-bot"><span class="muted" style="font-size:12px">Saved per controller</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EFFECTS -->
+  <section class="panel fx" id="effects" aria-labelledby="fxH">
+    <div class="panel-head">
+      <h2 id="fxH">Effects · 8 knobs</h2>
+      <span class="hint">Each sound loads with effect settings that suit it. Turn a knob on your controller once to assign it; after a reset, a knob takes over when it reaches the current value. Double-click a dial to reset it.</span>
+    </div>
+    <div class="fx-grid" id="fxGrid"></div>
+    <div class="row"><button class="btn small ghost" type="button" id="fxDefaults">Restore default effects</button><button class="btn small ghost" type="button" id="fxForget">Forget knob assignments</button></div>
+  </section>
+
+  <!-- SING -->
+  <section class="panel voice" id="sing" aria-labelledby="voiceH">
+    <div class="panel-head"><h2 id="voiceH">Sing to play</h2><span class="tag">Microphone</span></div>
+    <p class="lede">Sing or hum one note at a time. Studio Keys finds the pitch, shows the note and plays it on your sound. Press “Sing a part” in the Studio to record a take: your notes become a melody track and your voice is saved as its own track. Use headphones so the speakers don’t feed back into the mic.</p>
+    <div class="voice-grid">
+      <div class="notecard">
+        <div class="row" style="justify-content:space-between"><span class="lbl-sm" style="color:var(--signal)">Detected note</span><span id="micHz">— Hz</span></div>
+        <div class="bignote" id="micNote">—</div>
+        <div class="tuner" title="Flat ← in tune → sharp"><i id="micNeedle"></i></div>
+        <div class="row" style="justify-content:space-between"><span>♭ flat</span><span id="micCents">0¢</span><span>sharp ♯</span></div>
+        <div class="meter" title="Input level"><i id="micLevel"></i></div>
+      </div>
+      <div class="result-col">
+        <div class="row">
+          <button class="btn primary" type="button" id="micBtn">Start microphone</button>
+          <label class="hint" for="micZone">Play on <select class="select inline" id="micZone"><option value="keys">Keys sound</option><option value="pads">Pads sound</option><option value="none">Nothing (show notes only)</option></select></label>
+          <label class="hint" for="micOct">Octave <select class="select inline" id="micOct"><option value="-24">−2</option><option value="-12">−1</option><option value="0" selected>0</option><option value="12">+1</option><option value="24">+2</option></select></label>
+          <label class="hint" for="micSens">Sensitivity <input type="range" id="micSens" min="0" max="100" value="60" style="width:110px"></label>
+          <label class="hint" for="micSnap"><input type="checkbox" id="micSnap" checked> Snap to the song’s key</label>
+        </div>
+        <div class="status" id="micStatus">Microphone off.</div>
+        <canvas id="micRoll" aria-label="Sung notes over the last 8 seconds"></canvas>
+        <div class="chips-s" id="micList"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SOUND LAB -->
+  <section class="panel lab" id="lab" aria-labelledby="labH">
+    <div class="panel-head"><h2 id="labH">Sound Lab</h2><span class="tag">Beta · element extraction</span></div>
+    <p class="lede">Load a song, mark a few seconds where the part you want is clearly audible, pick the element, and turn it into a sound you can play from your controller.</p>
+    <div class="lab-top">
+      <div class="result-col">
+        <h3>1 · Load a song</h3>
+        <label class="drop" id="drop" for="fileIn"><span>Drop an MP3, WAV, FLAC, OGG or M4A here, or <u>choose a file</u></span><input type="file" id="fileIn" accept="audio/*,.mp3,.wav,.flac,.ogg,.m4a,.aac"></label>
+        <div class="row" style="justify-content:space-between"><span class="file-meta" id="fileMeta">No song loaded</span><button class="btn small ghost" type="button" id="demoBtn">Reload demo loop</button></div>
+      </div>
+      <div class="result-col"><h3>2 · Pick the element</h3><div class="chips" id="elements"></div></div>
+    </div>
+    <div class="wave-box"><canvas id="wave" aria-label="Song waveform. Drag to select a region."></canvas></div>
+    <div class="wave-bar">
+      <span class="file-meta" id="selInfo">Drag across the waveform to choose up to 20 seconds</span>
+      <div class="row"><button class="btn small" type="button" id="playSel">Play selection</button><button class="btn small ghost" type="button" id="stopLab">Stop</button></div>
+    </div>
+    <div class="opts">
+      <label for="focusSel">Stereo focus <select class="select inline" id="focusSel"><option value="auto" selected>Auto for this element</option><option value="center">Center of the mix</option><option value="sides">Sides (wide parts)</option><option value="all">Whole stereo field</option></select></label>
+      <label for="isStem"><input type="checkbox" id="isStem"> This file is already a separated stem</label>
+      <button class="btn primary" type="button" id="extractBtn">3 · Extract element</button>
+      <span class="status" id="labStatus" role="status"></span>
+    </div>
+    <div class="empty" id="resultEmpty">Your extracted sound and its analysis appear here.</div>
+    <div class="result" id="result" hidden>
+      <div class="result-col">
+        <h4 id="resTitle">Extracted element</h4>
+        <canvas id="isoWave" aria-label="Isolated element waveform with the chosen slice highlighted"></canvas>
+        <div class="row"><button class="btn small" type="button" id="playIso">Play isolated part</button><button class="btn small" type="button" id="playSlice">Play chosen slice</button></div>
+        <div class="recipe" id="recipe"></div>
+        <canvas id="harm" aria-label="Harmonic or spectral profile"></canvas>
+      </div>
+      <div class="result-col">
+        <dl class="stats" id="stats"></dl>
+        <div class="make">
+          <h3>4 · Make it playable</h3>
+          <div class="field"><label for="sndName">Sound name</label><input class="input" id="sndName" type="text" maxlength="40"></div>
+          <div class="row"><button class="btn primary" type="button" id="addSampler">Add as sampler</button><button class="btn" type="button" id="addSynth">Add as synth</button></div>
+          <div class="hint">Sampler plays the real slice, pitched across your keys. Synth rebuilds the sound from its measured harmonics and envelope, so long notes sustain cleanly.</div>
+        </div>
+      </div>
+    </div>
+    <details class="dev">
+      <summary>How extraction works (for the dev team)</summary>
+      <ol>
+        <li>The selected region (max 20 s) goes through a short-time Fourier transform (2048-point Hann, hop 512) in a Web Worker.</li>
+        <li>Three soft masks are multiplied per time–frequency bin: a stereo mask from left/right similarity, a harmonic/percussive mask from median filtering, and a band mask for the element's frequency range.</li>
+        <li>The masked spectrum is resynthesized by overlap-add. Drum elements take the strongest onset; tonal elements run an NSDF pitch tracker that tolerates octave jumps and take the longest stable note.</li>
+        <li>The slice is analyzed for root pitch, harmonic amplitudes, spectral centroid, flatness, envelope and stereo width, which build the resynth patch.</li>
+        <li>To plug in an ML separator (Demucs, an ONNX model or your own API), register it in <code>SEPARATION_ENGINES</code>: it receives left/right PCM, sample rate and the element recipe and returns a mono Float32Array.</li>
+      </ol>
+    </details>
+  </section>
+</main>
+<footer class="credits"><p>Sound credits: Grand Piano from the Salamander Grand Piano V2 by Alexander Holm (CC BY 3.0). Sampled melodic instruments and basses from the FluidR3 GM SoundFont by Frank Wen (CC BY 3.0), via midi-js-soundfonts by Benjamin Gleitzman. Sampled drum kits and the hall reverb from the Tone.js audio collection (originally from Chris Wilson's web-audio-samples). 808, 909 and Trap kits and the synth basses are generated in the browser.</p></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="application/json" id="samples">__SAMPLES__</script>
