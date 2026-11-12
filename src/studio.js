@@ -3,6 +3,9 @@
 const TRACK_COLORS=['#2fd39a','#9fe3c8','#7fb8e6','#f0a3b1','#e6d29a','#b9a3e3','#5cc8d0','#c6e07a','#ef8f8f','#e8ece4'];
 const newProject=()=>({id:'p'+Date.now().toString(36),name:'Untitled song',bars:4,key:null,style:null,tracks:[]});
 let PROJ=Object.assign(newProject(),store.get('project',{}));
+/* older versions saved the raw voice of every sung take as its own track; drop those (voice notes stay) */
+function dropTakeVoices(p){ if(p&&p.tracks) p.tracks=p.tracks.filter(t=>!(t.kind==='audio'&&/-voice$/.test(t.take||''))); return p; }
+dropTakeVoices(PROJ);
 const AUD=new Map();
 let projSaveT=0;
 function serialize(p){ return JSON.parse(JSON.stringify(p)); }
@@ -214,12 +217,12 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     PROJ.tracks.filter(t=>t.take===part||t.take===part+'-voice').forEach(t=>removeTrack(t.id)); /* a new take of the same part replaces the last one */
     const inst=partInst(part); { const I=INST.get(inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); }
     let mt=null; if(notes.length) mt=addTrack({role:part,inst,name:PART_NAME[part],events:notes,cyc:0,take:part});
-    const at=makeTrack({kind:'audio',role:'voice',inst:null,name:part==='melody'?'Voice take':`Voice (${part} guide)`,events:[],cyc:0,take:part+'-voice',mute:part!=='melody'}); PROJ.tracks.push(at); AUD.set(at.id,makeBuf(pcm,sr)); IDB.put('aud:'+at.id,{sr,data:pcm},'audio').catch(()=>{});
+    /* the raw recording is only used to find the notes; it isn't added as a track (owner, 13 Nov) */
     this.chunks=[]; this.notes=[];
     LOOP.state='playing'; refreshTrackGains(); saveProject(); renderTracks(); uiLoop();
     const what=part==='chords'?`${Math.round(notes.length/3)} chords built on the notes you sang`:`${notes.length} notes`;
     $('#micStatus').textContent=`Take saved: ${what} on “${PART_NAME[part]}”. It’s playing back now.`;
-    ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Your voice is kept on its own track${part==='melody'?'':' (muted)'}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
+    ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
   }
 };
 function makeBuf(pcm,sr){ const b=new AudioBuffer({length:Math.max(1,pcm.length),numberOfChannels:1,sampleRate:sr}); b.copyToChannel(pcm,0); return b; }
