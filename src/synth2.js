@@ -27,7 +27,21 @@ const SYN_KITS={
   trap:{kick:(V,c,t,v)=>kickVoice(V,c,t,v,{f0:42,sweep:3,pitchT:0.06,level:1,hold:0.1,decay:1.6,drive:2.6,click:0.12}),
         snare:(V,c,t,v)=>{ DRUMS.clap(V,c,t,v); return snare909(V,c,t,v*0.8,220); },
         hatC:(V,c,t,v)=>hat909(V,c,t,v,0.015,0.2), hatP:(V,c,t,v)=>hat909(V,c,t,v*0.7,0.02,0.25), hatO:(V,c,t,v)=>hat909(V,c,t,v,0.12,0.9)}
+  ,
+  /* melodic house: round deep kick, soft roomy clap, crisp short hats, shaker, wooden rim and congas */
+  melodic:{kick:(V,c,t,v)=>kickVoice(V,c,t,v,{f0:49,sweep:2.7,pitchT:0.045,level:1,hold:0.03,decay:0.55,drive:1.7,click:0.1}),
+        snare:(V,c,t,v)=>snare909(V,c,t,v*0.7,195),
+        clap:(V,c,t,v)=>{ DRUMS.clap(V,c,t,v*0.9); const nz=V.src(noise(c)), g=env(c,t+0.012,0.12*v,0.004,0.18); nz.connect(filt(c,'bandpass',1500,0.8)).connect(g).connect(V.amp); nz.start(t,Math.random()); return 0.9; },
+        hatC:(V,c,t,v)=>hat909(V,c,t,v*0.8,0.012,0.18), hatO:(V,c,t,v)=>hat909(V,c,t,v*0.8,0.11,0.8),
+        hatP:(V,c,t,v)=>shaker(V,c,t,v)},
+  /* deep/melodic techno: heavier kick with a low rumble, dry hats, driving ride */
+  techno:{kick:(V,c,t,v)=>{ const d=kickVoice(V,c,t,v,{f0:47,sweep:3.4,pitchT:0.04,level:1,hold:0.03,decay:0.6,drive:3.2,click:0.2});
+          const r=V.src(osc(c,'sine',47)), g=gainN(c,0); g.gain.setValueAtTime(0,t+0.08); g.gain.linearRampToValueAtTime(0.18*v,t+0.14); g.gain.setTargetAtTime(0,t+0.2,0.12); r.connect(filt(c,'lowpass',120)).connect(g).connect(V.amp); r.start(t); return d+0.3; },
+        snare:(V,c,t,v)=>snare909(V,c,t,v*0.8,175),
+        hatC:(V,c,t,v)=>hat909(V,c,t,v*0.85,0.014,0.2), hatP:(V,c,t,v)=>shaker(V,c,t,v), hatO:(V,c,t,v)=>hat909(V,c,t,v*0.85,0.13,0.9)}
 };
+function shaker(V,c,t,v){ const nz=V.src(noise(c)), g=gainN(c,0); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.28*v,t+0.012); g.gain.setTargetAtTime(0,t+0.014,0.022);
+  nz.connect(filt(c,'bandpass',6500,1.1)).connect(filt(c,'highpass',3500)).connect(g).connect(V.amp); nz.start(t,Math.random()); return 0.2; }
 function playSynKit(kitId,c,dest,n,v,t){
   const V=new Voice(c,dest); V.oneShot=true; const piece=drumPiece(n), K=SYN_KITS[kitId], fn=(K&&K[piece])||DRUMS[piece];
   V.piece=piece; V.stopAt(t+fn(V,c,t,v)); return V;
@@ -66,3 +80,23 @@ function playSubBass(c,dest,n,v,t){
   const sh=c.createWaveShaper(); sh.curve=satCurve(1.6); const eg=gainN(c,0); adsr(eg.gain,t,0.005,0.3,0.9,0.5*(0.6+0.4*v));
   o.connect(sh); h.connect(hg).connect(sh); sh.connect(eg).connect(V.amp); o.start(t); h.start(t); V.rel=0.1; return V;
 }
+
+/* melodic house / techno synths */
+function playRollBass(c,dest,n,v,t){ /* analog-style sequenced bass: saw + square through a snappy filter, sub underneath */
+  const V=new Voice(c,dest), f=mtof(n), lp=filt(c,'lowpass',200,4.5), base=90+f*1.4, pk=base+400+2200*v;
+  lp.frequency.setValueAtTime(pk,t); lp.frequency.setTargetAtTime(base+60,t,0.07);
+  const o=V.src(osc(c,'sawtooth',f)), q=V.src(osc(c,'square',f,-6)), qg=gainN(c,0.35); o.connect(lp); q.connect(qg).connect(lp);
+  const sub=V.src(osc(c,'sine',f)), sg=gainN(c,0.55); const sh=c.createWaveShaper(); sh.curve=satCurve(1.6);
+  const eg=gainN(c,0); adsr(eg.gain,t,0.003,0.18,0.45,0.12); lp.connect(sh).connect(eg); sub.connect(sg).connect(eg); eg.connect(V.amp);
+  o.start(t); q.start(t); sub.start(t); V.rel=0.06; return V; }
+function playMHPluck(c,dest,n,v,t){ /* bright detuned pluck that opens and closes fast */
+  const V=new Voice(c,dest), f=mtof(n), lp=filt(c,'lowpass',300,3), pk=Math.min(15000,900+f*3+4500*v);
+  lp.frequency.setValueAtTime(pk,t); lp.frequency.setTargetAtTime(350+f*0.8,t+0.005,0.09);
+  [-9,0,9].forEach(d=>{ const o=V.src(osc(c,'sawtooth',f,d)), g=gainN(c,0.32); o.connect(g).connect(lp); o.start(t); });
+  const eg=gainN(c,0); adsr(eg.gain,t,0.002,0.35,0.12,0.35); lp.connect(eg).connect(V.amp); V.rel=0.35; return V; }
+function playDarkPad(c,dest,n,v,t){ /* deep, slowly breathing pad for melodic techno and house */
+  const V=new Voice(c,dest), f=mtof(n), lp=filt(c,'lowpass',500+300*v,2.2), hp=filt(c,'highpass',120,0.5);
+  [-12,-4,5,13].forEach(d=>{ const o=V.src(osc(c,'sawtooth',f,d)), g=gainN(c,0.22); o.connect(g).connect(lp); o.start(t+Math.random()*0.01); });
+  const lfo=V.src(osc(c,'sine',0.11+Math.random()*0.05)), lg=gainN(c,420); lfo.connect(lg).connect(lp.frequency); lfo.start(t);
+  lp.frequency.setValueAtTime(200,t); lp.frequency.linearRampToValueAtTime(700+400*v,t+1.4);
+  const eg=gainN(c,0); adsr(eg.gain,t,1.1,1.5,0.85,0.1); lp.connect(hp).connect(eg).connect(V.amp); V.rel=2.2; return V; }

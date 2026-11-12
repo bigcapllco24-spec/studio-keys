@@ -41,33 +41,83 @@ function normAction(a){
   return {type:k,[field]:v};
 }
 const L_=()=>PROJ.bars*4;
-const pickStyle=s=>STYLES[s]?s:(STYLE_WORDS.find(([k,re])=>re.test(' '+String(s||'').toLowerCase()+' '))||[])[0]||PROJ.style||'house';
+const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
+let BATCH={}; const LAST_TAKE={part:null};
+const newSeed=()=>1+Math.floor(Math.random()*2e9);
+function tasteArtist(){ const p=TASTE.profile; if(!p||!p.artists) return null; for(const a of p.artists){ const A=findArtist(a); if(A) return A; } return null; }
+/* style + artist for a request: named artist > named style > the song's vibe > the person's taste > house */
+function resolveVibe(a){
+  let artist=findArtist(a.ref||a.artist||a.like); let named=artist?null:pickStyle(a.style); /* a known artist decides the style; the AI's style guess is ignored */
+  const pl=typeof findPlaylist==='function'?findPlaylist(a.playlist||(/playlist/i.test(a.ref||a.like||'')?(a.ref||a.like):null)):null;
+  if(pl){ artist=artist||pl.artists.map(findArtist).find(Boolean)||null; named=named||pl.style||(artist&&artist.style)||null; }
+  if(!artist&&!named&&PROJ.ref) artist=findArtist(PROJ.ref);
+  if(!artist&&!named&&!PROJ.style) artist=tasteArtist();
+  const s=named||(artist&&artist.style)||PROJ.style||tasteStyle()||'house';
+  return {s,artist};
+}
+function adoptVibe(s,artist,a,noKey){
+  if(a.style||artist||!PROJ.style) PROJ.style=s;
+  if(artist&&(a.ref||a.artist||a.like)) PROJ.ref=artist.name;
+  const b=+a.bpm; if(b&&!BATCH.tempo&&Math.abs(b-BATCH.startBpm)>0.5) setTempo(b); else if(!PROJ.tracks.length&&!BATCH.tempo&&!BATCH.vibe) setTempo(artist?artist.bpm:STYLES[s].bpm);
+  if(!noKey&&!PROJ.key&&!BATCH.key&&artist&&!PROJ.tracks.some(t=>t.role!=='drums')) setKey(parseKey(artist.key));
+}
+function ensureProg(force){ if(PROJ.prog&&!force) return; const k=projectKey(), list=PROGS[k.mode]||PROGS.minor; let p, n=0; do{ p=list[Math.floor(Math.random()*list.length)]; n++; }while(force&&PROJ.prog&&n<9&&p.join()===PROJ.prog.join()); PROJ.prog=p.slice(); }
+const HAT_KIND={'8':'8th','8ths':'8th',eighth:'8th',eighths:'8th','8th':'8th','16':'16th','16ths':'16th',sixteenth:'16th',sixteenths:'16th','16th':'16th',quarters:'quarter',quarter:'quarter','4':'quarter',offbeat:'offbeat',offbeats:'offbeat',shuffle:'shuffle16',shuffled:'shuffle16',shuffle16:'shuffle16',trap:'trap',rolls:'trap',drill:'drill',none:'none',off:'none'};
+function grooveOver(a){
+  const o={kick:a.kick,back:a.back||(a.claps===true||a.clap===true?'clap':a.snare===true?'snare':undefined),open:a.open,shaker:a.shaker,ghost:a.ghost,swing:a.swing,energy:a.energy,fill:a.fill,ride:a.ride};
+  if(a.hats===false) o.hats='none'; else if(typeof a.hats==='string'){ const k=HAT_KIND[a.hats.toLowerCase()]||a.hats.toLowerCase(); if(k==='open') o.open=true; else if(k==='shaker') o.shaker=true; else o.hats=k; }
+  if(a.swing!=null&&+a.swing>1) o.swing=clamp(+a.swing/100,0,0.4);
+  const pw=[a.perc,a.percussion,a.congas===true?'congas':null].filter(x=>typeof x==='string').join(' ').toLowerCase();
+  if(pw){ const set=[]; [[45,/conga|bongo|hand/],[37,/rim/],[47,/tom/],[56,/cowbell/],[50,/high tom|timbale/]].forEach(([n,re])=>{ if(re.test(pw)) set.push(n); }); if(set.length){ o.percSet=set; o.perc=set.length; } else o.perc=2; }
+  else if(a.perc!=null) o.perc=clamp(Math.round(+a.perc),0,3);
+  return o;
+}
+function regenTrack(t,opts={}){
+  if(!t||!t.gen) return null; const s=t.style||PROJ.style||'house', seed=opts.seed||newSeed();
+  if(t.role==='drums'){ const rec=Object.assign({},t.recipe||grooveRecipe(s,findArtist(t.ref)),opts.recipe||{}); rec.energy=clamp(Math.round(+rec.energy||3),1,5); const g=makeGroove(rec,L_(),seed); Object.assign(t,{events:g.events,recipe:rec,seed,desc:g.desc}); return g.desc; }
+  if(t.role==='bass'){ t.events=genBass(s,L_(),seed); t.seed=seed; return 'a new bassline'; }
+  if(t.role==='chords'){ t.events=genChords(s,L_(),seed); t.seed=seed; return 'a new chord rhythm'; }
+  if(t.role==='melody'){ t.events=genMelody(L_(),seed,s); t.seed=seed; return 'a new melody'; }
+  return null;
+}
+const loadI=id=>{ const I=INST.get(id); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); return I; };
 const ACT={
-  tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); return `Tempo ${CTRL.bpm} BPM`; },
+  vibe(a){ const {s,artist}=resolveVibe(a); if(!artist&&!pickStyle(a.style)) return; PROJ.style=s; if(artist) PROJ.ref=artist.name;
+    if(!BATCH.tempo) setTempo(+a.bpm&&Math.abs(+a.bpm-BATCH.startBpm)>0.5?+a.bpm:(artist?artist.bpm:STYLES[s].bpm)); BATCH.vibe=true; const k=parseKey(a.key)||(artist?parseKey(artist.key):null); if(k&&!PROJ.key) setKey(k); ensureProg(true);
+    return artist?`Vibe: ${artist.name}, ${artist.desc} (${CTRL.bpm} BPM, ${keyName(projectKey())})`:`Vibe: ${STYLES[s].name}, ${CTRL.bpm} BPM`; },
+  add_drums(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a,true);
+    const rec=grooveRecipe(s,artist,grooveOver(a)), seed=+a.seed||newSeed();
+    const kit=resolveInst(a.kit||a.instrument,'drums')||(artist&&artist.sounds.kit)||STYLES[s].kit, I=loadI(kit);
+    const g=makeGroove(rec,L_(),seed);
+    addTrack({role:'drums',inst:kit,zone:'pads',gen:true,name:'Drums',events:g.events,recipe:rec,seed,style:s,ref:artist?artist.name:undefined,desc:g.desc},{replaceRole:'drums'});
+    return `${artist?artist.name+'-style':STYLES[s].name} drums on ${I.name}: ${g.desc}`; },
+  hats(a){ const kind=HAT_KIND[String(a.pattern||a.value||'8th').toLowerCase()]||String(a.pattern||a.value||'8th').toLowerCase();
+    let t=findTrack('drums'); if(!t||!t.recipe){ return ACT.add_drums(Object.assign({},a,{hats:kind})); }
+    const over=kind==='open'?{open:true}:kind==='shaker'?{shaker:true}:{hats:kind};
+    regenTrack(t,{seed:t.seed,recipe:over}); return kind==='none'?'Hi-hats removed':`Hi-hats: ${t.desc}`; },
+  groove(a){ const t=findTrack(a.track||'drums'); if(!t||t.role!=='drums') return;
+    if(!t.recipe) return ACT.add_drums(a);
+    const over=grooveOver(a); if(a.change!=null) over.energy=(t.recipe.energy||3)+Math.sign(+a.change);
+    Object.keys(over).forEach(k=>over[k]===undefined&&delete over[k]);
+    regenTrack(t,{seed:a.fresh?undefined:t.seed,recipe:over}); return `Groove: ${t.desc}`; },
+  vary(a){ const t=findTrack(a.track||'drums'); if(!t) return;
+    if(!t.gen){ return `${t.name} is your own part, so I left it as it is`; }
+    if(t.role==='chords'&&a.progression!==false){ ensureProg(true); PROJ.tracks.filter(x=>x.gen&&(x.role==='bass'||x.role==='chords'||x.role==='melody')).forEach(x=>regenTrack(x)); return `New chord progression (${PROJ.prog.map(d=>['i','ii','iii','iv','v','vi','vii'][d]).join('–')}); bass and melody follow it`; }
+    const d=regenTrack(t); return d?`${t.name}: ${d}`:null; },
+  add_bass(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'bass')||(artist&&artist.sounds.bass)||STYLES[s].bass, I=loadI(id), seed=+a.seed||newSeed();
+    addTrack({role:'bass',inst:id,gen:true,name:'Bassline',events:genBass(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},{replaceRole:'bass'}); return `Bassline on ${I.name} in ${keyName(projectKey())}`; },
+  add_chords(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.chords)||STYLES[s].chords, I=loadI(id), seed=+a.seed||newSeed();
+    addTrack({role:'chords',inst:id,gen:true,name:'Chords',events:genChords(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},{replaceRole:'chords'}); return `Chords on ${I.name} in ${keyName(projectKey())}`; },
+  add_melody(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.lead)||STYLES[s].lead||'lead', I=loadI(id), seed=+a.seed||newSeed();
+    addTrack({role:'melody',inst:id,gen:true,name:'Melody',events:genMelody(L_(),seed,s),seed,style:s,ref:artist?artist.name:undefined},{replaceRole:'melody'}); return `A melody on ${I.name}`; },
+  tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
   bars(a){ setBars(+a.bars||+a.value||4); return `${PROJ.bars} bars`; },
-  key(a){ const k=parseKey(a.key||a.value); if(!k) return; setKey(k); return `Key ${keyName(k)}`; },
-  style(a){ const s=pickStyle(a.style||a.value); PROJ.style=s; if(a.keepTempo!==true && !a.bpm) setTempo(STYLES[s].bpm); return `${STYLES[s].name} style`; },
-  add_drums(a){ const s=pickStyle(a.style); if(a.style||!PROJ.style) PROJ.style=s; const S=STYLES[s]; const kit=resolveInst(a.kit||a.instrument,'drums')||S.kit;
-    const I=INST.get(kit); if(I&&I.set) loadSet(I.set).catch(()=>{});
-    const hats=a.hats===false||a.hats==='none'?'none':(typeof a.hats==='string'?a.hats:undefined);
-    addTrack({role:'drums',inst:kit,zone:'pads',gen:true,name:'Drums',events:drumEvents(s,L_(),hats)},{replaceRole:'drums'});
-    return `${S.name} drums on ${INST.get(kit).name}`; },
-  hats(a){ const kind=({'8':'8th','8ths':'8th',eighth:'8th','16':'16th','16ths':'16th',sixteenth:'16th',quarters:'quarter','4':'quarter'})[String(a.pattern||a.value||'8th').toLowerCase()]||String(a.pattern||a.value||'8th').toLowerCase();
-    let t=findTrack('drums'); const s=pickStyle(a.style), S=STYLES[s];
-    if(!t){ t=addTrack({role:'drums',inst:S.kit,zone:'pads',gen:true,name:'Drums',events:[]}); }
-    t.events=t.events.filter(e=>!HAT_NOTES.includes(e.n));
-    if(kind!=='none' && HATS[kind]) t.events.push(...patternEvents(HATS[kind],L_(),{swing:S.swing||0,trapRolls:kind==='trap',seed:5}));
-    t.events.forEach(e=>delete e.cyc); return kind==='none'?'Hi-hats removed':`Hi-hats on ${{'8th':'8th notes','16th':'16th notes',offbeat:'the offbeats',trap:'16ths with rolls',open:'open offbeats',quarter:'quarter notes',shaker:'a shaker groove'}[kind]||kind}`; },
+  key(a){ const k=parseKey(a.key||a.value); if(!k) return; setKey(k); BATCH.key=true; return `Key ${keyName(k)}`; },
+  style(a){ const s=pickStyle(a.style||a.value)||(findArtist(a.style||a.value)||{}).style; if(!s) return; PROJ.style=s; if(a.keepTempo!==true && !a.bpm) setTempo(STYLES[s].bpm); return `${STYLES[s].name} style`; },
   drum_pattern(a){ const rows=a.rows||a.pattern||{}; const spec={};
     for(const [name,str] of Object.entries(rows)){ const n=DRUM_WORD[String(name).toLowerCase()]||parsePitch(name)||(+name||null); if(n&&typeof str==='string') spec[n]=str.replace(/[^xo.|X-]/g,'').replace(/X/g,'x').replace(/-/g,'.'); }
-    if(!Object.keys(spec).length) return; const s=pickStyle(a.style), kit=resolveInst(a.kit,'drums')||(findTrack('drums')||{}).inst||STYLES[s].kit;
+    if(!Object.keys(spec).length) return; const s=pickStyle(a.style)||PROJ.style||'house', kit=resolveInst(a.kit,'drums')||(findTrack('drums')||{}).inst||STYLES[s].kit;
     addTrack({role:'drums',inst:kit,zone:'pads',gen:true,name:'Drums',events:patternEvents(spec,L_(),{seed:9})},{replaceRole:'drums'}); return 'Custom drum pattern'; },
-  add_bass(a){ const s=pickStyle(a.style); const id=resolveInst(a.instrument,'bass')||STYLES[s].bass; const I=INST.get(id); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{});
-    addTrack({role:'bass',inst:id,gen:true,name:'Bassline',events:genBass(s,L_())},{replaceRole:'bass'}); return `Bassline on ${I.name} in ${keyName(projectKey())}`; },
-  add_chords(a){ const s=pickStyle(a.style); const id=resolveInst(a.instrument,'keys')||STYLES[s].chords; const I=INST.get(id); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{});
-    addTrack({role:'chords',inst:id,gen:true,name:'Chords',events:genChords(s,L_())},{replaceRole:'chords'}); return `Chords on ${I.name} in ${keyName(projectKey())}`; },
-  add_melody(a){ const id=resolveInst(a.instrument,'keys')||'lead'; const I=INST.get(id); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{});
-    addTrack({role:'melody',inst:id,gen:true,name:'Melody',events:genMelody(L_(),Date.now()%997)},{replaceRole:'melody'}); return `A melody on ${I.name}`; },
   notes(a){ const list=(a.notes||[]).map(n=>({b:Math.max(0,+n.beat||+n.b||0),d:Math.max(0.1,+n.len||+n.length||+n.d||0.5),n:parsePitch(n.pitch!=null?n.pitch:n.note),v:clamp((+n.vel||+n.velocity||96)/127,0.1,1)})).filter(e=>e.n!=null&&e.b<L_());
     if(!list.length) return; let t=a.replace===false?null:findTrack(a.track);
     const role=a.role||(t&&t.role)||(/bass/i.test(a.track||'')?'bass':/chord|pad/i.test(a.track||'')?'chords':'melody');
@@ -89,13 +139,18 @@ const ACT={
   quantize(a){ const t=findTrack(a.track); if(!t) return; const q=+a.grid||0.25; t.events.forEach(e=>{ e.b=Math.round(e.b/q)*q; e.d=Math.max(q,Math.round(e.d/q)*q); }); return `Quantized ${t.name}`; },
   transpose(a){ const t=findTrack(a.track); if(!t||(INST.get(t.inst)||{}).percussive) return; const s=Math.round(+a.semitones||0); t.events.forEach(e=>e.n+=s); return `${t.name} ${s>0?'up':'down'} ${Math.abs(s)}`; },
   transport(a){ const d=String(a.do||a.value||'').toLowerCase(); if(/stop|pause/.test(d)){ loopStop(); return 'Stopped'; } if(/rec/.test(d)){ recordPress(); return 'Recording'; } if(PROJ.tracks.length && !TR.running){ loopPlay(); return 'Playing'; } },
-  sing(){ TAKE.start(); return 'Sing after the count-in'; },
+  sing(a){ const raw=String(a.part||a.role||a.track||'melody').toLowerCase(); const part=/voice|audio|note/.test(raw)&&!/melody/.test(raw)?'voice':/bass/.test(raw)?'bass':/chord|pad|harmon/.test(raw)?'chords':'melody';
+    BATCH.take=part; return part==='voice'?`Recording a voice note after the count-in: ${PROJ.bars} bars`:`Sing the ${part==='bass'?'bassline':part==='chords'?'chord roots (one note per chord)':'melody'} after the count-in: ${PROJ.bars} bars`; },
+  convert(a){ const t=findTrack(a.track||'melody'); if(!t||t.kind!=='notes'||(INST.get(t.inst)||{}).percussive) return; const to=/bass/.test(a.to||'')?'bass':/chord|pad/.test(a.to||'')?'chords':'melody';
+    t.events=shapePart(t.events,to,projectKey()); t.role=to; t.inst=partInst(to); loadI(t.inst); t.gen=false; t.name=(to==='bass'?'Bassline':to==='chords'?'Chords':'Melody')+' (from '+t.name.replace(/^(Sung|Hummed) /,'').toLowerCase()+')';
+    return `${t.name} on ${INST.get(t.inst).name}`; },
+  again(a){ const p=LAST_TAKE.part; if(!p) return; BATCH.take=p; return `Again: sing the ${p} after the count-in`; },
   save(a){ if(a.name) PROJ.name=String(a.name).slice(0,60); saveNamed(); return `Saved “${PROJ.name}”`; },
   new_project(a){ newSong(a.name); return 'New song'; },
   rename(a){ if(!a.name) return; PROJ.name=String(a.name).slice(0,60); saveProject(); return `Song renamed to “${PROJ.name}”`; }
 };
 function runActions(list){
-  const done=[]; let changed=false;
+  const done=[]; let changed=false; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
   for(const raw of list||[]){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; try{ const r=ACT[a.type](a); if(r){ done.push(r); changed=true; } }catch(e){ console.warn('action failed',a,e); } }
   if(changed){ saveProject(); renderTracks(); uiLoop(); }
   return done;

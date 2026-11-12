@@ -13,11 +13,12 @@ function makeTrack(o){
   return Object.assign({id:'t'+Date.now().toString(36)+Math.floor(Math.random()*1e4),kind:'notes',role,inst:o.inst,zone:o.zone||'keys',name:o.name||(I?I.name:ROLE_NAME[role]),
     color:TRACK_COLORS[PROJ.tracks.length%TRACK_COLORS.length],events:[],vol:mix.vol,lo:mix.lo,mid:mix.mid,hi:mix.hi,mute:false,solo:false},o);
 }
+const pickGen=o=>{ const g={}; ['recipe','seed','style','ref','desc'].forEach(k=>{ if(o[k]!==undefined) g[k]=o[k]; }); return g; };
 function addTrack(o,{replaceRole}={}){
-  if(replaceRole){ const old=PROJ.tracks.find(t=>t.role===replaceRole&&t.kind==='notes'&&t.gen); if(old){ Object.assign(old,{events:o.events,inst:o.inst||old.inst,name:o.name||old.name}); saveProject(); renderTracks(); return old; } }
+  if(replaceRole){ const old=PROJ.tracks.find(t=>t.role===replaceRole&&t.kind==='notes'&&t.gen); if(old){ Object.assign(old,{events:o.events,inst:o.inst||old.inst,name:o.name||old.name},pickGen(o)); saveProject(); renderTracks(); return old; } }
   const t=makeTrack(o); PROJ.tracks.push(t); saveProject(); renderTracks(); uiLoop(); return t;
 }
-function removeTrack(id){ const i=PROJ.tracks.findIndex(t=>t.id===id); if(i<0) return; const t=PROJ.tracks.splice(i,1)[0]; const st=A.ts&&A.ts.get(id); if(st){ try{ st.out.disconnect(); }catch(e){} A.ts.delete(id); } if(t.kind==='audio'){ AUD.delete(id); } if(!PROJ.tracks.length) loopClear(); saveProject(); renderTracks(); uiLoop(); return t; }
+function removeTrack(id){ const i=PROJ.tracks.findIndex(t=>t.id===id); if(i<0) return; const t=PROJ.tracks.splice(i,1)[0]; const st=A.ts&&A.ts.get(id); if(st){ try{ st.out.disconnect(); }catch(e){} A.ts.delete(id); }  if(!PROJ.tracks.length) loopClear(); saveProject(); renderTracks(); uiLoop(); return t; }
 function setBars(n){
   n=[1,2,4,8,16].reduce((a,b)=>Math.abs(b-n)<Math.abs(a-n)?b:a,4); const oldL=PROJ.bars*4, L=n*4; if(L===oldL) return;
   PROJ.tracks.forEach(t=>{ if(t.kind!=='notes') return; if(L>oldL){ const add=[]; for(let off=oldL;off<L;off+=oldL) t.events.forEach(e=>{ if(e.b+off<L) add.push(Object.assign({},e,{b:e.b+off,cyc:undefined})); }); t.events.push(...add); } else t.events=t.events.filter(e=>e.b<L); });
@@ -124,7 +125,8 @@ function scheduleEvent(tr,e,t,dur){
   if(!inst.percussive){ const now=A.ctx.currentTime, n=e.n; setTimeout(()=>{ if(TR.running) litPl(n,1); setTimeout(()=>litPl(n,-1),Math.max(60,dur*1000)); },Math.max(0,(t-now)*1000)); }
 }
 function scheduleAudio(tr,t,L){
-  const buf=AUD.get(tr.id); if(!buf) return; const c=A.ctx, s=c.createBufferSource(); s.buffer=buf; s.connect(trackStrip(tr).inp); s.start(t,0,Math.min(buf.duration,L*spb()));
+  const buf=AUD.get(tr.id); if(!buf) return; const c=A.ctx, st=(tr.start||0)*spb(), off=Math.min(tr.trim||0,buf.duration), dur=Math.min(buf.duration-off,L*spb()-st); if(dur<=0.01) return;
+  const s=c.createBufferSource(); s.buffer=buf; s.connect(trackStrip(tr).inp); s.start(t+st,off,dur);
   const h={kill(x){ try{ s.stop(x); }catch(e){} }}; LOOP.voices.add(h); s.onended=()=>LOOP.voices.delete(h);
 }
 const PLAYING=new Set(['playing','overdub','take']);
@@ -152,8 +154,24 @@ function tick(){
 setInterval(tick,25);
 
 /* ---------- sung takes: notes + raw voice, recorded for one pass of the song ---------- */
-const TAKE={chunks:[],notes:[],open:null,proc:null,
-  async start(){
+/* turn sung notes into a part: bass drops into the bass register and holds to the next note, chords build a
+   diatonic chord on each sung note, melody stays as sung */
+const PART_NAME={bass:'Sung bassline',chords:'Sung chords',melody:'Sung melody'};
+function partInst(part){ const {s,artist}=resolveVibe({}), S=STYLES[s]||STYLES.house, snd=artist?artist.sounds:{};
+  if(part==='bass') return snd.bass||S.bass||'subbass'; if(part==='chords') return snd.chords||S.chords||'pad';
+  const z=zoneInst('keys'); return PROJ.style?(snd.lead||S.lead||'lead'):(z.percussive?'piano':z.id); }
+function shapePart(notes,part,key){
+  let ev=notes.map(e=>Object.assign({},e)).sort((a,b)=>a.b-b.b); const L=PROJ.bars*4; if(!ev.length) return ev;
+  if(key) ev.forEach(e=>e.n=snapToKey(e.n,key));
+  const legato=max=>{ for(let i=0;i<ev.length;i++){ const nx=i+1<ev.length?ev[i+1].b:L; ev[i].d=Math.max(ev[i].d,Math.min(max,nx-ev[i].b-0.02)); } };
+  if(part==='bass'){ const med=ev.map(e=>e.n).sort((a,b)=>a-b)[ev.length>>1], sh=Math.round((40-med)/12)*12; ev.forEach(e=>{ e.n+=sh; e.v=Math.max(e.v,0.8); }); legato(2); }
+  else if(part==='chords'){ const k=key||{tonic:0,mode:'major'}, sc=SCALES[k.mode], out=[]; legato(4);
+    ev.forEach(e=>{ const pc=mod(e.n-k.tonic,12); let deg=sc.indexOf(pc); if(deg<0) deg=sc.reduce((bi,x,i)=>Math.abs(x-pc)<Math.abs(sc[bi]-pc)?i:bi,0);
+      voice(triad(k,deg),55).forEach(n=>out.push({b:e.b,d:e.d,n,v:0.7})); }); ev=out; }
+  return ev;
+}
+const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
+  async start(part){ this.part=PART_NAME[part]||part==='voice'?part:'melody';
     const c=ensureAudio(); if(!c) return;
     if(!MIC.on){ await micStart(); if(!MIC.on) return; }
     if(TR.running) loopStop();
@@ -163,7 +181,7 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,
     if(!this.proc){ this.proc=c.createScriptProcessor(1024,1,1); const z=gainN(c,0); this.proc.connect(z).connect(c.destination);
       this.proc.onaudioprocess=e=>{ if(LOOP.state!=='take') return; const d=e.inputBuffer.getChannelData(0); this.chunks.push({t:c.currentTime-d.length/c.sampleRate-0.02,d:new Float32Array(d)}); }; }
     try{ MIC.src.disconnect(this.proc); }catch(_){} MIC.src.connect(this.proc);
-    $('#micStatus').textContent=`Recording a take: ${PROJ.bars} bars after the count-in. Sing now.`;
+    $('#micStatus').textContent=`Recording a take (${this.part}): ${PROJ.bars} bars after the count-in. Sing now.`;
     countInto('take');
   },
   begin(){ this.chunks=[]; lcd('TAKE · SING NOW'); },
@@ -175,17 +193,22 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,
     this.chunks.forEach(ch=>{ const off=Math.round((ch.t-TR.t0)*sr); for(let i=0;i<ch.d.length;i++){ const j=off+i; if(j>=0&&j<pcm.length) pcm[j]=ch.d[i]; } });
     let pk=0; for(let i=0;i<pcm.length;i++) pk=Math.max(pk,Math.abs(pcm[i])); if(pk>0.001){ const g=0.85/pk; for(let i=0;i<pcm.length;i++) pcm[i]*=g; }
     const q=0.25; let notes=this.notes.map(e=>({b:Math.round(e.b/q)*q,d:Math.max(q,Math.round(e.d/q)*q),n:e.n,v:clamp(e.v/127,0.4,1)})).filter(e=>e.b<L);
-    const key=PROJ.key||detectKey(notes); if(!PROJ.key && key && notes.length>=3) setKey(key);
-    if($('#micSnap').checked && key) notes=notes.map(e=>Object.assign(e,{n:snapToKey(e.n,key)}));
+    const part=this.part;
+    if(part==='voice'){ const n=PROJ.tracks.filter(t=>/^Voice note/.test(t.name)).length+1; const at=makeTrack({kind:'audio',role:'voice',inst:null,name:'Voice note '+n,events:[],cyc:0,start:0,trim:0}); PROJ.tracks.push(at); AUD.set(at.id,makeBuf(pcm,sr)); IDB.put('aud:'+at.id,{sr,data:pcm},'audio').catch(()=>{});
+      this.chunks=[]; this.notes=[]; LOOP.state='playing'; saveProject(); renderTracks(); uiLoop(); $('#micStatus').textContent=`Saved “${at.name}”.`;
+      ASSIST.say(`Saved “${at.name}”. It plays with the loop. Say “${ASSIST.name}, turn the voice note into a bassline” to play it on an instrument.`,{chips:[at.name]}); return; }
+    const key=PROJ.key||(part==='melody'?detectKey(notes):null); if(!PROJ.key && key && notes.length>=3) setKey(key);
+    if($('#micSnap').checked||part!=='melody') notes=shapePart(notes,part,PROJ.key||key);
     notes.forEach(e=>e.cyc=0);
-    const zoneI=zoneInst('keys'), inst=zoneI.percussive?'lead':zoneI.id;
-    const added=[];
-    if(notes.length) added.push(addTrack({role:'melody',inst,name:'Sung melody',events:notes,cyc:0}));
-    const at=makeTrack({kind:'audio',role:'voice',inst:null,name:'Voice take',events:[],cyc:0}); PROJ.tracks.push(at); AUD.set(at.id,makeBuf(pcm,sr)); IDB.put('aud:'+at.id,{sr,data:pcm},'audio').catch(()=>{}); added.push(at);
+    PROJ.tracks.filter(t=>t.take===part||t.take===part+'-voice').forEach(t=>removeTrack(t.id)); /* a new take of the same part replaces the last one */
+    const inst=partInst(part); { const I=INST.get(inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); }
+    let mt=null; if(notes.length) mt=addTrack({role:part,inst,name:PART_NAME[part],events:notes,cyc:0,take:part});
+    const at=makeTrack({kind:'audio',role:'voice',inst:null,name:part==='melody'?'Voice take':`Voice (${part} guide)`,events:[],cyc:0,take:part+'-voice',mute:part!=='melody'}); PROJ.tracks.push(at); AUD.set(at.id,makeBuf(pcm,sr)); IDB.put('aud:'+at.id,{sr,data:pcm},'audio').catch(()=>{});
     this.chunks=[]; this.notes=[];
-    LOOP.state='playing'; saveProject(); renderTracks(); uiLoop();
-    $('#micStatus').textContent=`Take saved: ${notes.length} notes on “Sung melody” and your voice on “Voice take”. It’s playing back now.`;
-    ASSIST.say(`Saved your take: ${notes.length} notes${key?' in '+keyName(key):''} on “Sung melody”, plus your recorded voice on “Voice take”.`);
+    LOOP.state='playing'; refreshTrackGains(); saveProject(); renderTracks(); uiLoop();
+    const what=part==='chords'?`${Math.round(notes.length/3)} chords built on the notes you sang`:`${notes.length} notes`;
+    $('#micStatus').textContent=`Take saved: ${what} on “${PART_NAME[part]}”. It’s playing back now.`;
+    ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Your voice is kept on its own track${part==='melody'?'':' (muted)'}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
   }
 };
 function makeBuf(pcm,sr){ const b=new AudioBuffer({length:Math.max(1,pcm.length),numberOfChannels:1,sampleRate:sr}); b.copyToChannel(pcm,0); return b; }

@@ -25,9 +25,12 @@ function speak(msg){
     clearTimeout(ASSIST.speakT); ASSIST.speakT=setTimeout(done,1500+msg.split(/\s+/).length*420); /* some browsers never report the end of speech */
     speechSynthesis.speak(u); }catch(e){ ASSIST.speaking=false; }
 }
+function afterSpeak(fn){ const t0=performance.now(); const w=()=>{ if(ASSIST.speaking&&performance.now()-t0<9000) return setTimeout(w,150); setTimeout(fn,250); }; w(); }
 function projectState(){
   return {name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:PROJ.key?keyName(PROJ.key):`auto (${keyName(projectKey())})`,style:PROJ.style||null,playing:TR.running,
     tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute})),
+    taste:TASTE.profile?{artists:(TASTE.profile.artists||[]).slice(0,12),styles:(TASTE.profile.styles||[]).map(s=>s.style),playlists:(TASTE.profile.playlists||[]).map(p=>p.name+(p.style?' ('+p.style+')':'')).slice(0,8)}:null,
+    vibe:PROJ.ref||null,
     keysSound:zoneInst('keys').name,padsSound:zoneInst('pads').name,effects:FX.slots.map(s=>`${FX_LIB[s.type].name} ${Math.round(s.amount*100)}%`)};
 }
 async function detectEngine(){
@@ -52,6 +55,7 @@ async function handleRequest(text){
   if(!reply) reply=done.length?'Done: '+done.join(', ')+'.':`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
   ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false;
   ASSIST.say(reply,{chips:done}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());
+  if(BATCH.take){ const part=BATCH.take; LAST_TAKE.part=part; afterSpeak(()=>TAKE.start(part)); }
 }
 /* ---- speech recognition with a wake name ---- */
 function lev(a,b){ const m=a.length,n=b.length,d=Array.from({length:m+1},(_,i)=>[i]); for(let j=1;j<=n;j++) d[0][j]=j; for(let i=1;i<=m;i++) for(let j=1;j<=n;j++) d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1)); return d[m][n]; }
@@ -95,8 +99,8 @@ $('#asOrb').addEventListener('click',()=>{
 });
 /* ---- humming becomes a track: when the song is stopped, a hummed phrase (3+ notes, no words) lands on a new layer ---- */
 function humNote(n,on){
-  if(!ASSIST.listening||!ASSIST.hum||TR.running||ASSIST.speaking||LOOP.state==='take') return;
-  const t=performance.now()/1000;
+  if(!ASSIST.listening||!ASSIST.hum||ASSIST.speaking||ASSIST.busy||(TR.running&&LOOP.state!=='playing')||LOOP.state==='take'||LOOP.state==='counting') return;
+  const t=performance.now()/1000; if(on&&!ASSIST.humNotes.length) ASSIST.humAt={ctx:A.ctx?A.ctx.currentTime-0.07:0,perf:t,playing:TR.running};
   if(on) ASSIST.humNotes.push({n,t0:t,t1:null}); else { const last=ASSIST.humNotes[ASSIST.humNotes.length-1]; if(last&&last.t1==null) last.t1=t; }
   ASSIST.humLast=t; if(ASSIST.humNotes.length>=2) $('#asStatus').textContent=`Hearing a melody… ${ASSIST.humNotes.length} notes`;
 }
@@ -108,16 +112,21 @@ setInterval(()=>{
   const notes=H.filter(x=>x.t1-x.t0>=0.09), first=notes.length?notes[0].t0:0, last=notes.length?notes[notes.length-1].t1:0;
   const talked=ASSIST.speechAt>first-0.4 && ASSIST.speechAt<last+1.2;
   if(notes.length<3 || last-first<0.8 || talked){ if(ASSIST.listening) setOrb('listening',idleText()); return; }
-  const s=spb(), q=0.25; let ev=notes.map(x=>({b:Math.round((x.t0-first)/s/q)*q,d:Math.max(q,Math.round((x.t1-x.t0)/s/q)*q),n:x.n,v:0.85}));
+  const s=spb(), q=0.25, at=ASSIST.humAt||{}, playing=at.playing&&TR.running, Lp=PROJ.bars*4;
+  const startB=playing?mod(Math.round(((at.ctx+(first-at.perf))-TR.t0)/s/q)*q,Lp):0;
+  let ev=notes.map(x=>({b:startB+Math.round((x.t0-first)/s/q)*q,d:Math.max(q,Math.round((x.t1-x.t0)/s/q)*q),n:x.n,v:0.85}));
+  if(playing) ev.forEach(e=>e.b=mod(e.b,Lp));
   for(let i=0;i<ev.length-1;i++) if(ev[i].b+ev[i].d>ev[i+1].b) ev[i].d=Math.max(q,ev[i+1].b-ev[i].b);
   const endBeat=Math.max(...ev.map(e=>e.b+e.d));
-  if(!PROJ.tracks.length){ const bars=[1,2,4,8].find(b=>b*4>=endBeat)||8; PROJ.bars=bars; $('#barsSel').value=String(bars); }
+  if(!PROJ.tracks.length&&!playing){ const bars=[1,2,4,8].find(b=>b*4>=endBeat)||8; PROJ.bars=bars; $('#barsSel').value=String(bars); }
   const L=PROJ.bars*4; ev=ev.filter(e=>e.b<L).map(e=>Object.assign(e,{d:Math.min(e.d,L-e.b)}));
   const key=PROJ.key||(ev.length>=4?detectKey(ev):null); if(!PROJ.key&&key) setKey(key);
   if(key) ev.forEach(e=>e.n=snapToKey(e.n,key));
-  const count=PROJ.tracks.filter(t=>/^Hummed melody/.test(t.name)).length, inst=zoneInst('keys').percussive?'piano':ZONES.keys;
+  ev.sort((a,b)=>a.b-b.b);
+  const count=PROJ.tracks.filter(t=>/^Hummed melody/.test(t.name)).length, inst=partInst('melody');
   const t=addTrack({role:'melody',inst,name:'Hummed melody'+(count?' '+(count+1):''),events:ev});
-  ASSIST.say(`Got your hum: ${ev.length} notes${key?' in '+keyName(key):''}, on a new layer called “${t.name}” with ${INST.get(inst).name}. Say “${ASSIST.name}, play” to hear it with the band.`,{chips:[`${ev.length} notes`,INST.get(inst).name]});
+  ASSIST.say(`Got your hum: ${ev.length} notes${key?' in '+keyName(key):''} on “${t.name}”${playing?', lined up with the loop':''}. Want it as a bassline or chords instead? Just say “${ASSIST.name}, make it the bass”.`,{chips:[`${ev.length} notes`,INST.get(inst).name]});
+  ASSIST.lastHum=t.id;
 },400);
 /* ---- controls ---- */
 $('#asForm').addEventListener('submit',e=>{ e.preventDefault(); const v=$('#asIn').value.trim(); if(v){ $('#asIn').value=''; handleRequest(v); } });

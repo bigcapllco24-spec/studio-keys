@@ -95,14 +95,33 @@
           <label for="asVoice"><input type="checkbox" id="asVoice"> Speak replies</label>
         </div>
         <div class="chips-row">
-          <button class="sc" type="button" data-say="make a house beat at 124">House beat</button>
-          <button class="sc" type="button" data-say="make a trap beat at 140 with an 808 bassline">Trap + 808</button>
-          <button class="sc" type="button" data-say="make a lofi beat with rhodes chords">Lo-fi</button>
-          <button class="sc" type="button" data-say="make a bhangra beat with sitar melody">Bhangra</button>
-          <button class="sc" type="button" data-say="hi-hats on 16ths">Hats 16ths</button>
-          <button class="sc" type="button" data-say="add a bassline">Bassline</button>
-          <button class="sc" type="button" data-say="add chords">Chords</button>
+          <button class="sc" type="button" data-say="124 bpm drums with hihats and claps like Ben Böhmer">Drums like Ben Böhmer</button>
+          <button class="sc" type="button" data-say="make a track like Stephan Bodzin: drums, rolling bass, pads and an arp">Like Stephan Bodzin</button>
+          <button class="sc" type="button" data-say="give me another one">Another one</button>
+          <button class="sc" type="button" data-say="more energy">More energy</button>
+          <button class="sc" type="button" data-say="let me sing the bassline">🎤 Sing the bassline</button>
+          <button class="sc" type="button" data-say="let me sing the chords">🎤 Sing chords</button>
+          <button class="sc" type="button" data-say="add chords and a bassline">Chords + bass</button>
           <button class="sc" type="button" data-say="mix it: drums up a little, bass a bit more low end, chords softer">Mix it</button>
+          <button class="sc" type="button" data-say="undo">Undo</button>
+        </div>
+        <div class="taste" id="taste">
+          <div class="taste-head"><b>Your sound</b><span class="hint" id="tasteStatus">Connect Spotify or name a few artists, and requests like “make a beat” will lean your way.</span></div>
+          <div class="row taste-row">
+            <button class="btn small spot" type="button" id="spConnect">Connect Spotify</button>
+            <button class="btn small ghost" type="button" id="spRefresh" hidden>Refresh</button>
+            <button class="btn small ghost" type="button" id="spOff" hidden>Disconnect</button>
+            <form class="row" id="tasteForm" style="gap:6px;flex:1;min-width:260px"><input class="input inline" id="tasteArtists" type="text" placeholder="Or type artists you love: Ben Böhmer, Lane 8, Bicep" style="flex:1"><button class="btn small" type="submit">Save</button></form>
+          </div>
+          <div class="taste-chips" id="tasteChips"></div>
+          <details class="taste-setup" id="spSetup"><summary>Spotify setup (one time, about 3 minutes)</summary>
+            <ol>
+              <li>Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> and log in with your Spotify account (it needs Premium for this).</li>
+              <li>Click <b>Create app</b>. Any name, e.g. “Studio Keys”. Redirect URI: <code id="spRedirect"></code>. Tick <b>Web API</b> and save.</li>
+              <li>Copy the <b>Client ID</b> and paste it here. Studio Keys only reads your top artists, top tracks and your own playlists.</li>
+            </ol>
+            <form class="row" id="spIdForm" style="gap:6px"><input class="input inline" id="spClientId" type="text" placeholder="Spotify Client ID" style="flex:1;min-width:240px"><button class="btn small" type="submit">Save Client ID</button></form>
+          </details>
         </div>
       </div>
     </div>
@@ -126,22 +145,30 @@
     <div class="view-tabs" role="tablist" aria-label="Studio view">
       <button class="tab" type="button" role="tab" data-view="playlist" aria-selected="true">Tracks</button>
       <button class="tab" type="button" role="tab" data-view="mixer" aria-selected="false">Mixer</button>
+      <button class="btn small ghost" type="button" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+      <button class="btn small ghost" type="button" id="redoBtn" title="Redo (Ctrl+Shift+Z)" disabled>↷ Redo</button>
       <span class="spacer"></span>
       <button class="btn small" type="button" data-add="empty">+ Empty instrument track</button>
       <button class="btn small" type="button" data-add="beat">+ Empty beat</button>
-      <button class="btn small" type="button" data-add="sing">● Record a sung take</button>
+      <button class="btn small" type="button" data-add="voice">🎤 Voice note</button>
+      <button class="btn small" type="button" data-add="sing">● Sing a melody</button>
+      <button class="btn small" type="button" id="importBtn" title="Or drag audio / MIDI files onto the tracks">⬆ Import audio / MIDI</button>
+      <input type="file" id="importFile" accept="audio/*,.mid,.midi,.m4a,.webm,.ogg,.opus" multiple hidden>
     </div>
 
     <div class="playlist" id="playlist">
       <div class="pl-head"><span class="pl-corner">Tracks</span><canvas id="ruler" aria-hidden="true"></canvas></div>
       <div class="tracks" id="tracks"></div>
+      <div class="drop-hint">Drop audio or MIDI files to add them as tracks</div>
       <div class="playhead" id="playhead"></div>
     </div>
     <div id="mixerView" hidden></div>
 
     <div class="editor" id="editor" hidden>
       <div class="ed-head">
-        <b id="edTitle">Track</b><span class="hint" id="edHint"></span><span class="spacer"></span>
+        <b id="edTitle">Track</b>
+        <span class="seg" id="edMode" role="group" aria-label="Editing tool"><button type="button" data-mode="draw" aria-pressed="true" title="Draw (B)">✏ Draw</button><button type="button" data-mode="select" aria-pressed="false" title="Select (B)">⬚ Select</button></span>
+        <span class="hint" id="edHint"></span><span class="spacer"></span>
         <label class="hint" for="edGrid">Grid <select class="select inline" id="edGrid"><option value="1">1/4</option><option value="0.5">1/8</option><option value="0.25" selected>1/16</option><option value="0.125">1/32</option></select></label>
         <button class="btn small" type="button" id="edQuant">Quantize</button>
         <button class="btn small" type="button" id="edDown" title="Transpose down a semitone">−1</button>

@@ -432,5 +432,31 @@ details.dev code{font:12px var(--mono);color:var(--ink);background:#0f1114;paddi
 .credits p{margin:0;max-width:110ch}
 .toast{position:fixed;right:18px;bottom:18px;max-width:min(420px,calc(100vw - 36px));background:#0f1114;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:11px 14px;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.45);opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;pointer-events:none;z-index:50}
 .toast.show{opacity:1;transform:none}
+
+/* editing */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:10px}
+.seg button{background:transparent;color:var(--muted);border:0;padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#1d1307;font-weight:600}
+.playlist{position:relative}
+.drop-hint{display:none}
+.playlist.drop{outline:2px dashed var(--accent);outline-offset:4px}
+.playlist.drop .drop-hint{display:flex;position:absolute;inset:0;align-items:center;justify-content:center;background:rgba(14,15,18,.82);color:var(--accent);font-weight:600;font-size:16px;border-radius:10px;z-index:5;pointer-events:none}
+.lk.ed-l{color:var(--accent);font-weight:600}
+.trk .troll[data-roll]{touch-action:none}
+#edCanvas{outline:none}
+.taste{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:rgba(255,255,255,.02)}
+.taste-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}
+.taste-row{gap:8px;flex-wrap:wrap}
+.btn.spot{background:#1db954;color:#06210f;border-color:#1db954;font-weight:600}
+.taste-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.taste-chips .tc{font-size:12px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink)}
+.taste-chips .tc.st{border-color:var(--accent);color:var(--accent)}
+.taste-setup{margin-top:8px;font-size:13px;color:var(--muted)}
+.taste-setup summary{cursor:pointer;color:var(--ink)}
+.taste-setup ol{margin:8px 0 8px 18px;padding:0;line-height:1.6}
+.taste-setup code{background:#0f1114;padding:1px 5px;border-radius:4px;color:var(--ink)}
+.th3{display:flex;align-items:center;gap:6px;min-width:0}
+.th3 .trole{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.th3 .row{flex:none;white-space:nowrap}
 </style>
 </head>
