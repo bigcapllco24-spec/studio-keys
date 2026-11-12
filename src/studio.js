@@ -2,10 +2,12 @@
 /* ---------- song project: tracks, transport, recording, takes, saving, export ---------- */
 const TRACK_COLORS=['#2fd39a','#9fe3c8','#7fb8e6','#f0a3b1','#e6d29a','#b9a3e3','#5cc8d0','#c6e07a','#ef8f8f','#e8ece4'];
 const newProject=()=>({id:'p'+Date.now().toString(36),name:'Untitled song',bars:4,key:null,style:null,tracks:[]});
-let PROJ=Object.assign(newProject(),store.get('project',{}));
+/* owner, 13 Nov: the app opens on a new empty song; the last one is saved into the songs list by boot.js */
+const LAST_PROJ=(()=>{ const p=store.get('project',null); return p&&typeof p==='object'?Object.assign(newProject(),p):null; })();
+let PROJ=LAST_PROJ&&!(LAST_PROJ.tracks||[]).length&&!LAST_PROJ.sections?LAST_PROJ:newProject();
 /* older versions saved the raw voice of every sung take as its own track; drop those (voice notes stay) */
 function dropTakeVoices(p){ if(p&&p.tracks) p.tracks=p.tracks.filter(t=>!(t.kind==='audio'&&/-voice$/.test(t.take||''))); return p; }
-dropTakeVoices(PROJ);
+dropTakeVoices(PROJ); if(LAST_PROJ) dropTakeVoices(LAST_PROJ);
 const AUD=new Map();
 let projSaveT=0;
 function serialize(p){ return JSON.parse(JSON.stringify(p)); }
@@ -24,12 +26,13 @@ function addTrack(o,{replaceRole}={}){
 function removeTrack(id){ const i=PROJ.tracks.findIndex(t=>t.id===id); if(i<0) return; const t=PROJ.tracks.splice(i,1)[0]; const st=A.ts&&A.ts.get(id); if(st){ try{ st.out.disconnect(); }catch(e){} A.ts.delete(id); }  if(!PROJ.tracks.length) loopClear(); saveProject(); renderTracks(); uiLoop(); return t; }
 function setBars(n){
   n=[1,2,4,8,16].reduce((a,b)=>Math.abs(b-n)<Math.abs(a-n)?b:a,4); const oldL=PROJ.bars*4, L=n*4; if(L===oldL) return;
-  PROJ.tracks.forEach(t=>{ if(t.kind!=='notes') return; if(L>oldL){ const add=[]; for(let off=oldL;off<L;off+=oldL) t.events.forEach(e=>{ if(e.b+off<L) add.push(Object.assign({},e,{b:e.b+off,cyc:undefined})); }); t.events.push(...add); } else t.events=t.events.filter(e=>e.b<L); });
+  const fit=ev=>{ if(L>oldL){ const add=[]; for(let off=oldL;off<L;off+=oldL) ev.forEach(e=>{ if(e.b+off<L) add.push(Object.assign({},e,{b:e.b+off,cyc:undefined})); }); return ev.concat(add); } return ev.filter(e=>e.b<L); };
+  PROJ.tracks.forEach(t=>{ if(t.kind!=='notes') return; t.events=fit(t.events); Object.values(t.patterns||{}).forEach(p=>{ p.events=fit(p.events||[]); }); });
   PROJ.bars=n; $('#barsSel').value=String(n); saveProject(); renderTracks(); uiLoop();
 }
 function setKey(k){
   const old=PROJ.key; PROJ.key=k;
-  if(old && k && old.tonic!==k.tonic){ let d=mod(k.tonic-old.tonic,12); if(d>6) d-=12; PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && !(INST.get(t.inst)||{}).percussive) t.events.forEach(e=>e.n+=d); }); }
+  if(old && k && old.tonic!==k.tonic){ let d=mod(k.tonic-old.tonic,12); if(d>6) d-=12; PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && !(INST.get(t.inst)||{}).percussive) [t.events,...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(ev=>ev.forEach(e=>e.n+=d)); }); }
   $('#keySel').value=k?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks();
 }
 $('#keySel').innerHTML='<option value="">Key: auto</option>'+['major','minor'].map(m=>PC_NAMES.map((n,i)=>`<option value="${i}:${m}">${n} ${m}</option>`).join('')).join('');
@@ -41,7 +44,7 @@ $('#addBars').onclick=()=>setBars(PROJ.bars*2);
 /* ---------- tempo ---------- */
 function setTempo(b){
   b=clamp(Math.round(b*10)/10,40,240); if(!b) return;
-  if(TR.running && A.ctx){ const now=A.ctx.currentTime, beat=(now-TR.t0)*CTRL.bpm/60; TR.t0=now-beat*60/b; TR.schedT=now; }
+  if(TR.running && A.ctx){ const now=A.ctx.currentTime, beat=(now-TR.t0)*CTRL.bpm/60; if(songOn()) songRetempo(now); TR.t0=now-beat*60/b; TR.schedT=now; }
   CTRL.bpm=b; saveCtrl(); $('#bpm').value=b; $('#lcdTempo').textContent=b+' BPM'; FX.tempo(b); if(A.sends) A.sends.setTempo(b);
 }
 $('#bpm').addEventListener('change',e=>setTempo(+e.target.value));
@@ -73,8 +76,11 @@ function trStart(t0){ TR.running=true; TR.t0=t0; TR.schedT=A.ctx.currentTime; }
 function trStop(){ TR.running=false; if(A.ctx){ const t=A.ctx.currentTime; LOOP.voices.forEach(v=>v.kill(t)); } LOOP.voices.clear(); KB.pl.clear(); KB.els.forEach(el=>el.classList.remove('pl')); }
 function countInto(after){ const c=A.ctx; LOOP.after=after; if(CTRL.countIn){ trStart(c.currentTime+0.08+4*spb()); LOOP.state='counting'; } else { trStart(c.currentTime+0.05); beginAfterCount(); } uiLoop(); }
 function beginAfterCount(){ const a=LOOP.after; LOOP.state=a==='take'?'take':a==='overdub'?'overdub':'recording'; if(a==='take') TAKE.begin(); uiLoop(); }
+/* recording, overdubs and sung takes go into the loop (pattern A), so Song mode hands over to Loop first */
+function songToLoopForRec(){ if(!songOn()) return false; loopStop(); songMode('loop'); toast('Recording in Loop mode: what you play goes into the loop. Switch back to Song to hear the whole song.'); return true; }
 function loopPress(){
   const c=ensureAudio(); if(!c) return;
+  if(songOn()&&LOOP.state==='playing'){ songToLoopForRec(); recordPress(); return; }
   const now=performance.now();
   if(now-LOOP.lastPress<350 && LOOP.state!=='empty'){ LOOP.lastPress=0; loopStop(); return; }
   LOOP.lastPress=now;
@@ -88,7 +94,7 @@ function loopPress(){
     case 'take': break;
   }
 }
-function recordPress(){ const c=ensureAudio(); if(!c) return; if(LOOP.state==='empty') startFirstRecording(); else if(LOOP.state==='stopped'){ LOOP.pass=null; PROJ.tracks.forEach(t=>{ t.cyc=-1; t.events.forEach(e=>{ e.cyc=-1; }); }); countInto('overdub'); } else if(LOOP.state==='playing'){ LOOP.state='overdub'; LOOP.pass=null; uiLoop(); } else if(LOOP.state==='overdub') endOverdub(); else if(LOOP.state==='recording') finalizeFirst(); }
+function recordPress(){ const c=ensureAudio(); if(!c) return; if(songOn()&&PROJ.tracks.length) songToLoopForRec(); if(LOOP.state==='empty') startFirstRecording(); else if(LOOP.state==='stopped'){ LOOP.pass=null; PROJ.tracks.forEach(t=>{ t.cyc=-1; t.events.forEach(e=>{ e.cyc=-1; }); }); countInto('overdub'); } else if(LOOP.state==='playing'){ LOOP.state='overdub'; LOOP.pass=null; uiLoop(); } else if(LOOP.state==='overdub') endOverdub(); else if(LOOP.state==='recording') finalizeFirst(); }
 function startFirstRecording(){ LOOP.pass=null; LOOP.open.clear(); LOOP.fixed=CTRL.loopLen*4; countInto('recording'); }
 function finalizeFirst(){
   LOOP.closeAll();
@@ -107,11 +113,12 @@ function loopStop(){
   if(LOOP.state==='recording') finalizeFirst();
   if(LOOP.state==='overdub') endOverdub();
   if(LOOP.state==='take') TAKE.cancel();
-  trStop(); LOOP.state=PROJ.tracks.length?'stopped':'empty'; uiLoop();
+  trStop(); SONG.segs=[]; SONG.endT=0; LOOP.state=PROJ.tracks.length?'stopped':'empty'; uiLoop();
 }
 function loopPlay(){
   const c=ensureAudio(); if(!c||!PROJ.tracks.length) return;
   PROJ.tracks.forEach(t=>{ t.cyc=-1; t.events.forEach(e=>{ e.cyc=-1; }); });
+  if(songOn()){ songStartAt(c.currentTime+0.06,SONG.cursor); LOOP.state='playing'; uiLoop(); return; }
   trStart(c.currentTime+0.06); LOOP.state='playing'; uiLoop();
 }
 function loopClear(){ trStop(); LOOP.pass=null; LOOP.open.clear(); LOOP.state='empty'; uiLoop(); }
@@ -128,6 +135,11 @@ function scheduleEvent(tr,e,t,dur){
   if(!v.oneShot) v.release(t+dur);
   if(!inst.percussive){ const now=A.ctx.currentTime, n=e.n; setTimeout(()=>{ if(TR.running) litPl(n,1); setTimeout(()=>litPl(n,-1),Math.max(60,dur*1000)); },Math.max(0,(t-now)*1000)); }
 }
+function scheduleAudioAt(tr,t,maxSec){
+  const buf=AUD.get(tr.id); if(!buf) return; const c=A.ctx, off=Math.min(tr.trim||0,buf.duration), dur=Math.min(buf.duration-off,maxSec); if(dur<=0.01) return;
+  const s=c.createBufferSource(); s.buffer=buf; s.connect(trackStrip(tr).inp); s.start(t,off,dur);
+  const h={kill(x){ try{ s.stop(x); }catch(e){} }}; LOOP.voices.add(h); s.onended=()=>LOOP.voices.delete(h);
+}
 function scheduleAudio(tr,t,L){
   const buf=AUD.get(tr.id); if(!buf) return; const c=A.ctx, st=(tr.start||0)*spb(), off=Math.min(tr.trim||0,buf.duration), dur=Math.min(buf.duration-off,L*spb()-st); if(dur<=0.01) return;
   const s=c.createBufferSource(); s.buffer=buf; s.connect(trackStrip(tr).inp); s.start(t+st,off,dur);
@@ -140,6 +152,7 @@ function tick(){
   if(LOOP.state==='counting' && now>=TR.t0-0.004) beginAfterCount();
   if(LOOP.state==='recording' && LOOP.fixed && now>=TR.t0+LOOP.fixed*s) finalizeFirst();
   if(LOOP.state==='take' && now>=TR.t0+PROJ.bars*4*s) TAKE.finish();
+  if(songOn() && LOOP.state==='playing'){ songTick(now,ahead); TR.schedT=ahead; return; }
   const b0=(TR.schedT-TR.t0)/s, b1=(ahead-TR.t0)/s;
   if(b1>b0){
     for(let k=Math.ceil(b0-1e-9);k<b1;k++){ const counting=LOOP.state==='counting'&&k<0; if(counting||(CTRL.metro&&k>=0&&LOOP.state!=='stopped')) click(TR.t0+k*s,mod(k,4)===0); }
@@ -179,6 +192,7 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     const c=ensureAudio(); if(!c) return;
     this.micByTake=!MIC.on; if(!MIC.on){ await micStart(); if(!MIC.on) return; }
     if(TR.running) loopStop();
+    this.backToSong=songOn(); if(this.backToSong) songMode('loop',{force:true});
     if(!PROJ.tracks.length){ PROJ.bars=PROJ.bars||4; }
     PROJ.tracks.forEach(t=>{ t.cyc=-1; t.events.forEach(e=>e.cyc=-1); });
     this.chunks=[]; this.notes=[]; this.open=null;
@@ -195,7 +209,8 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
   noteOn(n,v){ if(LOOP.state!=='take') return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60; this.noteOff(); this.open={n,v,b:Math.max(0,b)}; },
   noteOff(){ if(!this.open) return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60, o=this.open; this.open=null; if(b-o.b>0.12) this.notes.push({b:o.b,d:b-o.b,n:o.n,v:o.v}); },
   releaseMic(){ if(this.micByTake&&!(ASSIST.listening&&ASSIST.hum)){ this.micByTake=false; try{ micStop(); }catch(e){} } },
-  cancel(){ this.releaseMic(); this.chunks=[]; this.notes=[]; this.open=null; TAKE_GUIDE=false; refreshTrackGains(); $('#micStatus').textContent='Take cancelled.'; setOrb(ASSIST.listening?'listening':'idle',idleText()); },
+  backSong(){ if(!this.backToSong) return; this.backToSong=false; songMode('song',{force:true}); },
+  cancel(){ setTimeout(()=>this.backSong(),0); this.releaseMic(); this.chunks=[]; this.notes=[]; this.open=null; TAKE_GUIDE=false; refreshTrackGains(); $('#micStatus').textContent='Take cancelled.'; setOrb(ASSIST.listening?'listening':'idle',idleText()); },
   finish(){
     this.noteOff(); const c=A.ctx, L=PROJ.bars*4, sec=L*spb(), sr=c.sampleRate, pcm=new Float32Array(Math.round(sec*sr));
     this.chunks.forEach(ch=>{ const off=Math.round((ch.t-TR.t0)*sr); for(let i=0;i<ch.d.length;i++){ const j=off+i; if(j>=0&&j<pcm.length) pcm[j]=ch.d[i]; } });
@@ -209,17 +224,20 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     notes.forEach(e=>e.d=Math.min(e.d,L-e.b));
     const part=this.part; this.releaseMic(); TAKE_GUIDE=false; refreshTrackGains(); setOrb(ASSIST.listening?'listening':'idle',idleText());
     if(part==='voice'){ const n=PROJ.tracks.filter(t=>/^Voice note/.test(t.name)).length+1; const at=makeTrack({kind:'audio',role:'voice',inst:null,name:'Voice note '+n,events:[],cyc:0,start:0,trim:0}); PROJ.tracks.push(at); AUD.set(at.id,makeBuf(pcm,sr)); IDB.put('aud:'+at.id,{sr,data:pcm},'audio').catch(()=>{});
-      this.chunks=[]; this.notes=[]; LOOP.state='playing'; saveProject(); renderTracks(); uiLoop(); $('#micStatus').textContent=`Saved “${at.name}”.`;
+      this.chunks=[]; this.notes=[]; LOOP.state='playing'; saveProject(); renderTracks(); uiLoop(); $('#micStatus').textContent=`Saved “${at.name}”.`; this.backSong();
       ASSIST.say(`Saved “${at.name}”. It plays with the loop. Say “${ASSIST.name}, turn the voice note into a bassline” to play it on an instrument.`,{chips:[at.name]}); return; }
     const key=PROJ.key||(part==='melody'?detectKey(notes):null); if(!PROJ.key && key && notes.length>=3) setKey(key);
     if($('#micSnap').checked||part!=='melody') notes=shapePart(notes,part,PROJ.key||key);
     notes.forEach(e=>e.cyc=0);
+    const prevTake=PROJ.tracks.find(t=>t.take===part), prevParts=prevTake?JSON.stringify(songSections().map(s=>[s.id,s.parts[prevTake.id]])):null;
     PROJ.tracks.filter(t=>t.take===part||t.take===part+'-voice').forEach(t=>removeTrack(t.id)); /* a new take of the same part replaces the last one */
     const inst=partInst(part); { const I=INST.get(inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); }
     let mt=null; if(notes.length) mt=addTrack({role:part,inst,name:PART_NAME[part],events:notes,cyc:0,take:part});
+    if(mt&&prevParts){ JSON.parse(prevParts).forEach(([sid,p])=>{ const s=songSections().find(x=>x.id===sid); if(s&&p) s.parts[mt.id]=p; }); } /* the new take plays where the old one did */
     /* the raw recording is only used to find the notes; it isn't added as a track (owner, 13 Nov) */
     this.chunks=[]; this.notes=[];
     LOOP.state='playing'; refreshTrackGains(); saveProject(); renderTracks(); uiLoop();
+    this.backSong();
     const what=part==='chords'?`${Math.round(notes.length/3)} chords built on the notes you sang`:`${notes.length} notes`;
     $('#micStatus').textContent=`Take saved: ${what} on “${PART_NAME[part]}”. It’s playing back now.`;
     ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
@@ -233,10 +251,10 @@ function uiLoop(){
   const st=LOOP.state, btn=$('#loopBtn');
   btn.dataset.state=st;
   const lbl={empty:'Record loop',counting:'Count-in…',recording:LOOP.fixed?'Recording…':'Recording · press to close',playing:'Overdub',overdub:'Overdubbing · press to keep',stopped:'Play loop',take:'Recording take…'}[st];
-  $('#loopLbl').textContent=lbl;
+  $('#loopLbl').textContent=songOn()&&(st==='playing'||st==='stopped')?(st==='playing'?'Record in the loop':'Play song'):lbl;
   const ledCls='led'+(st==='recording'||st==='overdub'||st==='take'?' rec':st==='playing'?' on':st==='counting'?' warn':'');
   $('#loopLed').className=ledCls;
-  const bars=PROJ.bars+' bar'+(PROJ.bars>1?'s':'');
+  const bars=songOn()?'song · '+songLenText():PROJ.bars+' bar'+(PROJ.bars>1?'s':'');
   const pill={empty:'Studio empty',counting:'Count-in',recording:'Recording',playing:`Playing · ${bars}`,overdub:'Overdubbing',stopped:`Song ready · ${bars}`,take:'Recording take'}[st];
   $('#loopPill').innerHTML=`<span class="${ledCls}"></span><span>${pill}</span>`;
   lcd({counting:'COUNT-IN',recording:'REC',playing:'PLAY',overdub:'OVERDUB',stopped:'STOP',empty:'READY',take:'TAKE'}[st]);
@@ -244,6 +262,7 @@ function uiLoop(){
   $('#exportZip').disabled=!has; $('#exportMid').disabled=!has; $('#exportMp3').disabled=!has; $('#playBtn').disabled=!has||PLAYING.has(st);
   $('#recBtn').classList.toggle('on',st==='recording'||st==='overdub'); $('#playBtn').classList.toggle('on',PLAYING.has(st));
   document.querySelectorAll('.tp').forEach(b=>b.classList.toggle('on',(b.dataset.tp==='play'&&PLAYING.has(st))||(b.dataset.tp==='rec'&&(st==='recording'||st==='overdub'||st==='take'))||(b.dataset.tp==='loop'&&st!=='empty'&&st!=='stopped')));
+  songUI();
 }
 /* ---------- export: MIDI, WAV, zip ---------- */
 function vlq(n){ const b=[n&0x7F]; while(n>>=7) b.unshift((n&0x7F)|0x80); return b; }
@@ -260,8 +279,7 @@ function buildMidi(tracks,bpm,L,title){
   const head=[0x4D,0x54,0x68,0x64,0,0,0,6,0,1,(out.length>>8)&255,out.length&255,(PPQ>>8)&255,PPQ&255];
   return new Uint8Array([...head,...out.flat()]);
 }
-async function renderAudio(tracks,bpm,L,opts={}){
-  const sr=44100, s=60/bpm, len=L*s, OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext, oc=new OAC(2,Math.ceil(sr*len*2),sr);
+async function renderGraph(oc,bpm,all){
   await FX.loadIR(oc);
   const bus=oc.createGain(), out=oc.createGain();
   const glue=oc.createDynamicsCompressor(); glue.threshold.value=-16; glue.knee.value=10; glue.ratio.value=2; glue.attack.value=0.02; glue.release.value=0.25;
@@ -271,9 +289,14 @@ async function renderAudio(tracks,bpm,L,opts={}){
   FX.build(oc,bus,ms.inp,FX.slots,{noRepeat:true,bpm});
   const sends=makeSends(oc,ms.inp,bpm);
   /* every audible track gets its strip (so sidechain works even when exporting one stem), only the requested ones make sound */
-  const all=opts.context||tracks, strips=new Map();
+  const strips=new Map();
   for(const tr of all){ const st=makeStrip(oc,bus,sends); applyStrip(st,tr,oc,true,true); strips.set(tr.id,st); }
   const ducks=all.filter(x=>x.fx&&x.fx.duck>0).map(x=>[strips.get(x.id),x.fx.duck]);
+  return {bus,sends,strips,ducks};
+}
+async function renderAudio(tracks,bpm,L,opts={}){
+  const sr=44100, s=60/bpm, len=L*s, OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext, oc=new OAC(2,Math.ceil(sr*len*2),sr);
+  const all=opts.context||tracks, {bus,sends,strips,ducks}=await renderGraph(oc,bpm,all);
   const kicks=[]; all.forEach(tr=>{ if(tr.kind==='notes') tr.events.forEach(e=>{ if(isKick(tr,e.n)) kicks.push(e.b); }); });
   for(let cyc=0;cyc<2;cyc++) kicks.forEach(b=>{ const t=(cyc*L+b)*s; if(t<2*len&&ducks.length) duckAt(oc,ducks,t,bpm); });
   for(const tr of tracks){ const st=strips.get(tr.id)||makeStrip(oc,bus,sends);
@@ -284,6 +307,47 @@ async function renderAudio(tracks,bpm,L,opts={}){
   const buf=await oc.startRendering(), a=Math.round(len*sr), n=Math.round(len*sr);
   return [buf.getChannelData(0).slice(a,a+n),buf.getChannelData(1).slice(a,a+n)];
 }
+/* one stretch [from,to) of the song in beats, with a run-up so reverb, echo and held notes carry over the joins */
+const yieldMain=()=>new Promise(r=>setTimeout(r,0));
+async function renderSongSpan(tracks,bpm,from,to,o={}){
+  const sr=44100, s=60/bpm, all=o.context||tracks;
+  let preB=from>0?4/s:0; /* at least 4 s, longer when a note still sounding at `from` started earlier (up to 16 s) */
+  if(from>0) for(const tr of tracks) if(tr.kind==='notes'){ const fl=songFlat(tr); for(let i=songLB(fl,from-16/s);i<fl.length&&fl[i].B<from;i++){ const e=fl[i]; if(e.B+e.d>from) preB=Math.max(preB,from-e.B); } }
+  preB=Math.min(preB,from,16/s); const pre=preB*s, span=(to-from)*s, tail=o.tail||0, b0=from-preB, at=B=>(B-b0)*s;
+  const OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext, oc=new OAC(2,Math.ceil(sr*(pre+span+tail))+2,sr), G=await renderGraph(oc,bpm,all);
+  if(G.ducks.length) for(const tr of all) if(tr.kind==='notes'){ const fl=songFlat(tr); for(let i=songLB(fl,b0);i<fl.length&&fl[i].B<to;i++) if(isKick(tr,fl[i].n)) duckAt(oc,G.ducks,at(fl[i].B),bpm); }
+  let tk=performance.now();
+  for(const tr of tracks){ const st=G.strips.get(tr.id)||makeStrip(oc,G.bus,G.sends);
+    if(tr.kind==='audio'){ const buf=AUD.get(tr.id); if(!buf) continue; const off=Math.min(tr.trim||0,buf.duration);
+      for(const a of songAudioSegs(tr)){ if(a.B+a.len<=b0||a.B>=to) continue; let t0=at(a.B), o2=off, dur=Math.min(buf.duration-off,a.len*s); if(t0<0){ o2-=t0; dur+=t0; t0=0; }
+        if(dur<=0.01||o2>=buf.duration) continue; const src=oc.createBufferSource(); src.buffer=buf; src.connect(st.inp); src.start(t0,o2,dur); } continue; }
+    const I=INST.get(tr.inst); if(!I) continue; if(I.set) await loadSet(I.set,loadOpts(I.set)).catch(()=>{});
+    const fl=songFlat(tr); for(let i=songLB(fl,b0);i<fl.length&&fl[i].B<to;i++){ const e=fl[i], t=at(e.B), v=I.play(oc,st.inp,e.n,e.v,t); if(v&&!v.oneShot) v.release(t+e.d*s);
+      if(performance.now()-tk>20){ await yieldMain(); tk=performance.now(); } } }
+  const buf=await oc.startRendering(), a=Math.round(pre*sr), n=o.samples||Math.round((span+tail)*sr);
+  return [buf.getChannelData(0).slice(a,a+n),buf.getChannelData(1).slice(a,a+n)];
+}
+/* the whole song as laid out, rendered 16 bars at a time and kept as 16-bit audio (6 dB headroom) until it's encoded */
+async function makeSongMp3(tracks,onProgress,opts={}){
+  if(typeof lamejs==='undefined'||!lamejs.Mp3Encoder) throw new Error('the MP3 encoder didn’t load');
+  const bpm=CTRL.bpm, s=60/bpm, sr=44100, E=songBeats(), tail=2, CH=64, at=B=>Math.round(B*s*sr), total=at(E)+Math.round(tail*sr);
+  const L16=new Int16Array(total), R16=new Int16Array(total); let pk=0;
+  for(let from=0;from<E;from+=CH){ const to=Math.min(E,from+CH), last=to>=E, n=at(to)-at(from)+(last?Math.round(tail*sr):0), o=at(from);
+    if(onProgress) onProgress(from/E*0.85,`bar ${from/4+1} of ${E/4}`);
+    const [l,r]=await renderSongSpan(tracks,bpm,from,to,{tail:last?tail:0,samples:n,context:opts.context});
+    for(let i=0;i<n&&o+i<total;i++){ const a=l[i], b=r[i], m=a>b?(a>-b?a:-b):(b>-a?b:-a); if(m>pk) pk=m; L16[o+i]=clamp(Math.round(a*16384),-32768,32767); R16[o+i]=clamp(Math.round(b*16384),-32768,32767); }
+    await yieldMain(); }
+  const g=pk>0.97?0.97/pk:1, k=2*g/32768, fade=Math.round(sr*1.5);
+  const enc=new lamejs.Mp3Encoder(2,sr,192), out=[], B=1152, LB=new Int16Array(B), RB=new Int16Array(B); let sq=0, tk=performance.now();
+  for(let i=0;i<total;i+=B){ const m=Math.min(B,total-i);
+    for(let j=0;j<m;j++){ const p=i+j; let f=k; if(p>total-fade) f*=(total-p)/fade; const a=clamp(L16[p]*f,-1,1), b=clamp(R16[p]*f,-1,1); sq+=a*a+b*b; LB[j]=a<0?a*0x8000:a*0x7FFF; RB[j]=b<0?b*0x8000:b*0x7FFF; }
+    const buf=enc.encodeBuffer(m<B?LB.subarray(0,m):LB,m<B?RB.subarray(0,m):RB); if(buf.length) out.push(new Uint8Array(buf));
+    if(performance.now()-tk>20){ if(onProgress) onProgress(0.85+0.15*i/total,'encoding'); await yieldMain(); tk=performance.now(); } }
+  const end=enc.flush(); if(end.length) out.push(new Uint8Array(end));
+  return {blob:new Blob(out,{type:'audio/mpeg'}),seconds:total/sr,bars:E/4,peak:pk*g,rms:Math.sqrt(sq/(2*total))};
+}
+/* the song as plain tracks of notes in song time (for MIDI) */
+const songFlatTracks=tracks=>tracks.filter(t=>t.kind==='notes').map(t=>Object.assign({},t,{events:songFlat(t).map(e=>({b:e.B,d:e.d,n:e.n,v:e.v}))}));
 function wavBytes(chs,sr){
   const n=chs[0].length, nc=chs.length, bytes=44+n*nc*2, b=new ArrayBuffer(bytes), v=new DataView(b); let o=0;
   const w4=s=>{ for(let i=0;i<4;i++) v.setUint8(o++,s.charCodeAt(i)); }, u32=x=>{ v.setUint32(o,x,true); o+=4; }, u16=x=>{ v.setUint16(o,x,true); o+=2; };
@@ -335,8 +399,9 @@ async function exportZip(){
   btn.disabled=false;
 }
 async function exportMidiOnly(){
-  if(!PROJ.tracks.length) return; const bpm=CTRL.bpm, L=PROJ.bars*4, base=`${safeName(PROJ.name)} ${bpm}bpm ${PROJ.bars}bars`, st=$('#exportStatus');
-  try{ const r=await saveFile(`${base}.mid`,new Blob([buildMidi(PROJ.tracks.filter(trackAudible),bpm,L,base)],{type:'audio/midi'})); st.textContent=r==='declined'?'Download cancelled.':'MIDI downloaded.'; }catch(e){ st.textContent='Export failed: '+e.message; }
+  if(!PROJ.tracks.length) return; const song=songOn(), bpm=CTRL.bpm, L=song?songBeats():PROJ.bars*4, base=`${safeName(PROJ.name)} ${bpm}bpm ${song?'song '+songBars():PROJ.bars}bars`, st=$('#exportStatus');
+  const tr=PROJ.tracks.filter(trackAudible);
+  try{ const r=await saveFile(`${base}.mid`,new Blob([buildMidi(song?songFlatTracks(tr):tr,bpm,L,base)],{type:'audio/midi'})); st.textContent=r==='declined'?'Download cancelled.':'MIDI downloaded.'; }catch(e){ st.textContent='Export failed: '+e.message; }
 }
 /* ---------- MP3: the mix, looped to the chosen length, encoded with LAME (lamejs, LGPL; its own script block) ---------- */
 async function makeMp3(tracks,loopsOrSeconds,onProgress){
@@ -361,10 +426,11 @@ async function exportMp3(lenOverride){
   if(!PROJ.tracks.length){ toast('Make something first, then download it as an MP3.'); return null; }
   const tracks=PROJ.tracks.filter(trackAudible), st=$('#exportStatus'), btn=$('#exportMp3');
   if(!tracks.length){ st.textContent='All tracks are muted.'; return null; }
-  btn.disabled=true; st.textContent='Rendering your song…';
+  btn.disabled=true; st.textContent='Rendering your song…'; const song=songOn();
   try{
-    const r=await makeMp3(tracks,lenOverride||$('#mp3Len').value,p=>{ st.textContent=`Making the MP3… ${Math.round(p*100)}%`; });
-    const name=`${safeName(PROJ.name)} ${CTRL.bpm}bpm.mp3`, res=await saveFile(name,r.blob);
+    const r=song?await makeSongMp3(tracks,(p,what)=>{ st.textContent=what==='encoding'?`Making the MP3… encoding ${Math.round(p*100)}%`:`Making the MP3… ${what}`; },{context:tracks})
+      :await makeMp3(tracks,lenOverride||$('#mp3Len').value,p=>{ st.textContent=`Making the MP3… ${Math.round(p*100)}%`; });
+    const name=`${safeName(PROJ.name)} ${CTRL.bpm}bpm${song?' song':''}.mp3`, res=await saveFile(name,r.blob);
     const mins=Math.floor(r.seconds/60), secs=Math.round(r.seconds%60);
     const zipped=!!(await getDownloads()); st.textContent=res==='declined'?'Download cancelled.':`Downloaded ${name} (${mins?mins+' min ':''}${secs} s, ${(r.blob.size/1048576).toFixed(1)} MB)${zipped?'. This view can only save it inside a zip; on the live site you get the plain MP3.':''}`;
     btn.disabled=false; return r;
