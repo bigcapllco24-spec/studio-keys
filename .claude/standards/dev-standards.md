@@ -18,6 +18,10 @@ Owned by the lead. Every developer reads this before every job. Last updated: 13
 - The bar is professional, club-ready sound that matches the owner's Spotify artists, never amateur or "AI-generated". Measure against reference tracks.
 - Singing is part of talking to the assistant: while a part is sung, only the drums play (`TAKE_GUIDE`), humming is never thrown away as speech (`isSpeechy`), the singer's notes are NEVER played back live (the owner found the delayed copy confusing), and the part is only heard once it's analysed from the recording (`audioToNotes`), quantized and mixed. The mic turns off after a take it started. The raw recording of a sung part is NOT added as a track (owner, 13 Nov: no default vocal part); only explicit voice notes are audio tracks.
 - "Add a choir / melody / flute" always adds a NEW track; replacing a part only when the user says replace or change.
+- (owner, 13 Nov, UX-1 approval) A song does NOT have to be 3 minutes or a whole track: it can be just a few elements (influencers making music for reels, musicians sketching an idea). Song layouts offer short ones too, and nothing forces a full arrangement.
+- (owner, 13 Nov) Opening the app starts a NEW empty project by default; old songs open from a past-projects list.
+- (owner, 13 Nov) The assistant talks with the user to understand the music they want: it learns from their Spotify taste, asks questions, suggests additions when that helps (and only if suggestions are on), and lets them sing parts.
+- (owner, 13 Nov, SE-3 approval) Feel settings like swing must stay adjustable by the user ("less swing", a control) when a default feels too heavy.
 
 ## How we build
 - Source in `src/`, one file per area (see `.claude/CLAUDE.md` for owners). `python3 tools/build.py` writes `index.html`; never edit `index.html` by hand.
@@ -44,4 +48,5 @@ Owned by the lead. Every developer reads this before every job. Last updated: 13
 - 13 Nov 2026: wanted friendlier, more attractive colours, not orange (a little warm peach is fine). First tried a violet/pink theme; the owner said it looked like Gemini or playcapcade and asked for matte, neutral, classy colours. Then tried matte charcoal with brass; the owner said the orange-ish accent looked AI-generated and disliked the background, and asked for colours of passion, creativity and emotion. Shipped three themes; the owner loved Velvet (wine red) and asked for two other shades, so the set is Velvet, Sapphire and Emerald. Users can flip between them.
 - 13 Nov 2026 (later): wants per-track FX, Ctrl/Cmd multi-select, singing inside the assistant, one element at a time, professional sound that matches his Spotify artists, and the green theme as default.
 - 13 Nov 2026: users must be able to download what they make as an MP3 (shipped: Download MP3 button and the assistant's export action).
+- 13 Nov 2026 (SE-3/UX-1 approvals): the team keeps learning from the owner's uploaded packs (Drum Essentials, PML), his linked Spotify artists and songs and his stated preferences, and uses them to keep improving sounds, instruments, mixing and production. Derived numbers only, never copied samples or patterns.
 - 13 Nov 2026: wants a dev team like the games team that uses the app, fixes bugs, looks for upgrades, suggests them and asks for final approval.
