@@ -13,7 +13,7 @@ Before every job, read `.claude/standards/dev-standards.md`. Its rules apply to 
 **Design mode (no code changes).** The owner approves designs before anything is built. Study the code and the brief, then write a proposal to `/tmp/proposals/<item-id>/proposal.md` with:
 1. **What and why** in 2-3 plain sentences a musician who isn't a programmer understands.
 2. **User flow:** numbered steps of what the user says, sings, clicks or plays, and what they see and hear.
-3. **Screens** (when anything visible changes): small HTML mockups styled like the studio (dark panels, orange accent), rendered with headless Chrome to PNG (desktop 1400x900, and a phone 390x844 where relevant), saved as `/tmp/proposals/<item-id>/*.png`. Look at them. Real screenshots of the studio help (build it and capture it).
+3. **Screens** (when anything visible changes): small HTML mockups styled like the studio (dark panels, the accent colour of the current theme (Velvet by default; see dev-standards)), rendered with headless Chrome to PNG (desktop 1400x900, and a phone 390x844 where relevant), saved as `/tmp/proposals/<item-id>/*.png`. Look at them. Real screenshots of the studio help (build it and capture it).
 4. **How it will be built:** files that change, approach, new assistant actions (prompt + `actions.js` + `maker.js`), anything another developer must do.
 5. **Effort** (S/M/L), **risks**, and **decisions for the owner** (at most 3, each with your recommendation).
 6. **Research questions** (optional) for the researcher; the lead relays them. If the brief includes a research report, say which recommendations you used.

@@ -1,0 +1,7 @@
+# UX-1 design report (studio-ux-dev) · 13 Nov 2026
+Proposal: `.claude/work/proposals/UX-1.md` (+ .json). Mockups `.claude/work/mockups/UX-1-{1,2,3}.png` (not committed; uploaded to HQ as WebP). No product code changed.
+1. Loop | Song switch on the Tracks screen turns lanes into the timeline: section strip (move, resize, Alt-drag / Ctrl+D duplicate, ⋯ on tablets), ruler with loop brace and following playhead, one on/off part per track per section with a note thumbnail; linked patterns (A / B / + New, "plays in", Make unique); "Make it a song" builds the 96-bar 3:06 template; Keys' edits flash with an Undo chip.
+2. Model changes vs the draft (⚑): `variant` is a per-track letter, 'A' = `track.events`; missing part = off, new track on only in the selected section; view state outside undo; adopted AI-1's `section.kind`, `section.end={to,bars}`, `parts[].without`.
+3. Build: new `src/song.js` (shared API) — add to `tools/build.py` PARTS after `studio.js` and give studio-ux-dev ownership (lead). Scheduler + chunked MP3 render (16-bar chunks, 16-bit, ~33 MB for 3 min) in `studio.js`; screen in `daw.js`, `body.html`, `head.html`. Shortcuts only while the song area has focus. Leftover `src/looper.js` is not in the build and can be deleted.
+4. Effort L: slice 1 ~26 h (done-when); slice 2 ~8 h.
+5. Owner decisions: place (rec Tracks screen switch), start (rec "Make it a song"), parts (rec one block per track per section).

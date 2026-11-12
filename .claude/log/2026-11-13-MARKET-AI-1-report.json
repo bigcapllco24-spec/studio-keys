@@ -1,0 +1,24 @@
+{
+  "id": "AI-1",
+  "item": "AI-1 Song sections by voice",
+  "verdict": "great",
+  "score": 5,
+  "why": "Turning a loop into a full track by saying 'build up and drop, make the break longer' is the core of our north star, and the design keeps the edits small, named and one-undo, which is exactly what chat-DAW users ask for.",
+  "notes": [
+    "Competitors now do this too, so it's expected, not unique: Veena's CoProducer (Sep 2026) plans sections and parts in a browser DAW, VIXSOUND arranges 'intro 8, build 16, drop' inside Ableton, and Suno Studio 2.0 (Aug 2026) arranges from its chat bar. Our edge is voice and Hinglish, artist-shaped layouts (Bodzin, Böhmer, Afterlife) and Keys saying what changed in musical words. Lead with those in the demo and the reply text.",
+    "Watch speed and trust. The prompt grows 40% and one run took 9.5 s (over the 8 s bar). The DAWZY study found people rate 'control' lowest, so keep the executor's own line ('Break 2 is now 24 bars') and the mini song map. Re-measure the timing at build and trim the prompt before adding more examples.",
+    "Mismatches with UX-1 that AI-1 should settle with song.js: (1) the template's parts differ (Outro drums+pad here vs drums+chords in UX-1; Break here drops kick and bass, UX-1 drops all drums; UX-1's template sets no transitions). Keep one table in songTemplate. (2) 'vary' per section needs a way to generate into pattern B, but UX-1 says generators only write pattern A; ask for a helper (for example songMakeUnique, then write to the variant). (3) Use only the song.js names (songMode, songLoop, songMakeUnique, songFlash), not both spellings."
+  ],
+  "improve": [
+    "Agree one 'the break' rule with UX-1: the playing one, else the last touched, else the first (UX-1's songFind uses the last break).",
+    "Put transitionEvents in song.js (or groove.js), not actions.js, so playback and export don't depend on assistant code.",
+    "Drop the bubble's Undo; UX-1's toolbar chip already gives it."
+  ],
+  "similar": [
+    {"title": "Veena: arrange a song with sections and CoProducer (Sep 2026)", "url": "https://www.veena.studio/help/arrangement"},
+    {"title": "VIXSOUND AI arrangement for Ableton Live (Jul 2026)", "url": "https://vixsound.com/ableton-ai-assistant/arrangement"},
+    {"title": "Suno Studio 2.0 with chat bar (Aug 2026)", "url": "https://suno.com/blog/studio-2"},
+    {"title": "DAWZY paper: chat and voice edits in REAPER (Dec 2025)", "url": "https://arxiv.org/html/2512.03289v1"}
+  ],
+  "at": "2026-11-13"
+}

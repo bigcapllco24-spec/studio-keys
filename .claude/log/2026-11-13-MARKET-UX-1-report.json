@@ -1,0 +1,24 @@
+{
+  "id": "UX-1",
+  "item": "UX-1 Arrangement view like Ableton (Song view)",
+  "verdict": "good",
+  "score": 4,
+  "why": "Producers need to see and shape the whole track, and sections with linked patterns is a model they already know from Logic's Arrangement track and FL Studio's patterns. It's a big desktop-first build, though, and the first version gives phone users almost nothing.",
+  "notes": [
+    "The design is right for now. Section blocks plus linked patterns with 'Make unique' match Logic, FL Studio and Veena's sections. Free Ableton-style clips (decision 3B) can wait. The A/B badges and the 'plays in' line answer the classic 'I edited the drop and the build changed' complaint.",
+    "Scope: slice 1 is about 26 h and mostly desktop. The owner tries test links on his phone and our pitch is voice-first, so move the phone song map (tap a section to loop it) into slice 1. To make room, move Loop-mode section jamming and the long shortcut list to slice 2.",
+    "Mismatches with AI-1 to fix in song.js: (1) songFind 'the break' = last break here, but AI-1 uses the playing one, else the last touched, else the first; use AI-1's rule. (2) songSummary uses '+bass' delta lists, but AI-1's context line is numbered with full part lists, '-kick', '>snareroll 4', total length, mode and what's playing; make songSummary output AI-1's format. (3) Template parts and transitions differ (Outro, Break; no transitions here); singing in Song mode goes back to Song after the take in AI-1 but stays in Loop here. Agree both before build."
+  ],
+  "improve": [
+    "Add a songWriteVariant(sid, tid, events) helper (or let generators target a variant) so AI-1's 'make the second drop different' works.",
+    "Export one set of helper names only (the song.js ones), not both spellings.",
+    "Own transitionEvents in song.js since songFlat and export call it."
+  ],
+  "similar": [
+    {"title": "Logic Pro Arrangement track (MusicRadar)", "url": "https://www.musicradar.com/how-to/how-to-use-logic-pro-xs-arrangement-track-to-try-out-ideas"},
+    {"title": "FL Studio Playlist patterns", "url": "https://www.image-line.com/fl-studio-learning/fl-studio-online-manual/html/playlist_patterns.htm"},
+    {"title": "Ableton Live 12 Arrangement View", "url": "https://www.ableton.com/de/live-manual/12/arrangement-view/"},
+    {"title": "Veena: sections on a browser timeline (Sep 2026)", "url": "https://www.veena.studio/help/arrangement"}
+  ],
+  "at": "2026-11-13"
+}
