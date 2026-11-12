@@ -8,8 +8,14 @@ const ASSIST={
   engine:null, rec:null, awakeUntil:0, speaking:false, busy:false, history:[], humNotes:[], humLast:0, speechAt:0,
   say(msg,opts={}){ addBubble('as',msg,opts.chips); if(this.voice && opts.speak!==false) speak(msg); },
   run(text){ return handleRequest(text); },
-  onMicNote(n,on){ humNote(n,on); }
+  onMicNote(n,on){ if(ASSIST.listening||LOOP.state==='take') showSung(n,on); humNote(n,on); }
 };
+/* singing vs talking: speech recognition also "hears" humming (la, da, hmm). Only real words count as talking. */
+const FILLER=/^(la+|da+|na+|ba+|doo+|du+|dum+|dun|bum+|bam|ta+|ti|di|do+|re|mi|fa|so|sol|si|hmm+|mm+|m+|uh+|ah+|oh+|ooh+|ha+|hey|yeah|ya|yo|woo+|hu+m*|ding|dong|pa+|pum)$/;
+function isSpeechy(text){ const w=(String(text).toLowerCase().match(/[a-z']+/g)||[]); if(findWake(text)!==null) return true; return w.filter(x=>x.length>=3&&!FILLER.test(x)).length>=2; }
+function showSung(n,on){ const box=$('#asNotes'); if(!box) return; if(on){ ASSIST.sung=(ASSIST.sung||[]).concat(n).slice(-14); }
+  box.hidden=false; box.innerHTML=`<span class="as-mic${on?' live':''}">🎤 ${on?noteName(n):'listening'}</span>`+(ASSIST.sung||[]).map((x,i,a)=>`<i${i===a.length-1&&on?' class="now"':''}>${noteName(x)}</i>`).join('');
+  clearTimeout(ASSIST.sungT); ASSIST.sungT=setTimeout(()=>{ if(!MIC.active&&LOOP.state!=='take'){ box.hidden=true; ASSIST.sung=[]; } },6000); }
 function addBubble(who,text,chips){
   const box=$('#asChat'); const d=document.createElement('div'); d.className='bub '+who;
   d.innerHTML=`<span class="who">${who==='me'?'You':esc(ASSIST.name)}</span><span>${esc(text)}</span>${chips&&chips.length?`<span class="done">${chips.map(c=>`<i>${esc(c)}</i>`).join('')}</span>`:''}`;
@@ -26,6 +32,14 @@ function speak(msg){
     speechSynthesis.speak(u); }catch(e){ ASSIST.speaking=false; }
 }
 function afterSpeak(fn){ const t0=performance.now(); const w=()=>{ if(ASSIST.speaking&&performance.now()-t0<9000) return setTimeout(w,150); setTimeout(fn,250); }; w(); }
+/* what to suggest next, one element at a time */
+function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
+  if(!PROJ.tracks.length) return `Start with “drums”, name an artist, or hum an idea.`;
+  if(!has('drums')) return `Want drums under it? Say “drums like …” with an artist.`;
+  if(!has('bass')) return `Bassline next? Say “add a bassline”, or sing it: “let me sing the bassline”.`;
+  if(!has('chords')) return `Chords next? Say “add chords”, or “let me sing the chords”.`;
+  if(!has('melody')) return `A melody or hook next? Add one, or hum it while it plays.`;
+  return `Shape it with effects (“more reverb on the chords”), mix it, or download the MP3.`; }
 function projectState(){
   return {name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:PROJ.key?keyName(PROJ.key):`auto (${keyName(projectKey())})`,style:PROJ.style||null,playing:TR.running,
     tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute})),
@@ -41,7 +55,7 @@ async function detectEngine(){
 function showEngine(){ $('#asEngine').innerHTML=ASSIST.engine?`<span class="led on"></span>AI: ${ASSIST.engine==='claude'?'Claude':'Llama 3.3 on Cloudflare'}`:`<span class="led warn"></span>Basic mode (AI works on the live site)`; }
 async function handleRequest(text){
   text=String(text||'').trim(); if(!text) return; ensureAudio();
-  addBubble('me',text); ASSIST.history.push({role:'user',content:text});
+  addBubble('me',text); ASSIST.history.push({role:'user',content:text}); LAST_TEXT.text=text;
   ASSIST.busy=true; setOrb('thinking','Working on it…');
   let reply='', done=[];
   if(ASSIST.engine){
@@ -52,8 +66,8 @@ async function handleRequest(text){
       done=runActions(j.actions||[]); reply=j.reply||'';
     }catch(e){ console.warn('assistant AI failed, using offline brain',e); const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
   } else { const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
-  if(!reply) reply=done.length?'Done: '+done.join(', ')+'.':`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
-  ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false;
+  if(!reply) reply=done.length?'Done: '+done.join(', ')+'. '+nextStep():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
+  ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false; LAST_TEXT.text='';
   ASSIST.say(reply,{chips:done}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());
   if(BATCH.take){ const part=BATCH.take; LAST_TAKE.part=part; afterSpeak(()=>TAKE.start(part)); }
 }
@@ -68,9 +82,10 @@ function startListening(){
   if(!SRc){ ASSIST.say('Talking needs Chrome or Edge. You can still type here.',{speak:false}); return; }
   ensureAudio(); ASSIST.listening=true; $('#asListen').checked=true;
   const rec=new SRc(); ASSIST.rec=rec; rec.continuous=true; rec.interimResults=true; rec.lang=navigator.language||'en-IN';
-  rec.onresult=e=>{ ASSIST.speechAt=performance.now()/1000; let interim='';
-    for(let i=e.resultIndex;i<e.results.length;i++){ const r=e.results[i], txt=r[0].transcript; if(r.isFinal) onFinal(txt); else interim+=txt; }
-    if(interim && !ASSIST.speaking && !ASSIST.busy) $('#asStatus').textContent='Hearing: '+interim; };
+  rec.onresult=e=>{ let interim='', heard='';
+    for(let i=e.resultIndex;i<e.results.length;i++){ const r=e.results[i], txt=r[0].transcript; heard+=txt+' '; if(r.isFinal){ if(LOOP.state!=='take'||findWake(txt)!==null) onFinal(txt); } else interim+=txt; }
+    if(isSpeechy(heard)) ASSIST.speechAt=performance.now()/1000;
+    if(interim && isSpeechy(interim) && !ASSIST.speaking && !ASSIST.busy && LOOP.state!=='take') $('#asStatus').textContent='Hearing: '+interim; };
   rec.onerror=e=>{ if(e.error==='not-allowed'||e.error==='service-not-allowed'){ stopListening(); ASSIST.say('I need microphone permission to listen. Allow it from the icon left of the address bar.',{speak:false}); }
     else if(e.error==='network'){ stopListening(); ASSIST.say('Voice recognition needs an internet connection. You can type instead.',{speak:false}); } };
   rec.onend=()=>{ if(ASSIST.listening) setTimeout(()=>{ try{ rec.start(); }catch(_){} },250); };
@@ -80,7 +95,7 @@ function startListening(){
 }
 function stopListening(){ ASSIST.listening=false; $('#asListen').checked=false; try{ ASSIST.rec&&ASSIST.rec.stop(); }catch(e){} ASSIST.rec=null; setOrb('idle',idleText()); store.set('asListen',false); }
 function onFinal(txt){
-  if(ASSIST.speaking) return; const now=performance.now();
+  if(ASSIST.speaking||!isSpeechy(txt)&&findWake(txt)===null&&performance.now()>ASSIST.awakeUntil) return; const now=performance.now();
   const cmd=findWake(txt);
   if(cmd!==null){ if(cmd.replace(/\b(hey|ok|okay|hi|please)\b/g,'').trim().length<2){ ASSIST.awakeUntil=now+9000; ASSIST.say('Yes?'); return; } handleRequest(cmd); return; }
   if(now<ASSIST.awakeUntil){ ASSIST.awakeUntil=0; handleRequest(txt); return; }

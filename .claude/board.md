@@ -5,8 +5,12 @@ Last updated: 13 Nov 2026, 03:00 IST
 - AI-1 · assistant-dev · L · Song sections by voice. Round 1. Market: great 5/5. Proposal `.claude/work/proposals/AI-1.md`. Builds together with UX-1.
 - UX-1 · studio-ux-dev · L · Arrangement / Song view. Round 1. Market: good 4/5. Proposal `.claude/work/proposals/UX-1.md`.
 
+## Top priority (owner feedback, 13 Nov)
+- SE-1 · sound-engine-dev · M · Club-ready melodic house/techno sound, professional mix (first pass shipped: per-track FX, sidechain, sends, master chain).
+- SE-2 · sound-engine-dev + music-researcher · L · Sound recipes from the owner's Spotify artists.
+- AI-3 · assistant-dev · L · Reference track: drop a song you love; the assistant matches tempo, key, groove and tonal balance.
+
 ## Up next (the team designs these first; the owner approves in HQ)
-- SE-1 · sound-engine-dev · M · Club-ready melodic house/techno sound: sidechained bass, better claps and rides, richer pads and plucks, master glue. Done when: the Böhmer/Bodzin beats hold up next to reference tracks.
 - AI-2 · assistant-dev · M · The assistant remembers what you like ("softer claps", "always Rolling Bass") and uses it next time. Done when: preferences said once are applied in later songs.
 - RES-1 · music-researcher · S · How AI music tools and DAWs turn voice and humming into parts; ideas for Studio Keys.
 

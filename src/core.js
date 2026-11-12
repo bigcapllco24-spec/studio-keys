@@ -19,14 +19,14 @@ const store={
 let toastTimer=0;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),3200); }
 function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
-/* colour theme: velvet (default), sapphire, emerald. TC caches the colours canvases need. */
+/* colour theme: emerald (default), velvet, sapphire. TC caches the colours canvases need. */
 const TC={};
 function themeColors(){ ['--t0','--t1','--t2','--t3','--t4','--t5','--t6','--t7','--t8','--t9','--accent','--signal','--ink','--muted','--line','--panel','--raised','--bg'].forEach(k=>TC[k.slice(2)]=cssVar(k)); }
-function setTheme(t){ t=['velvet','sapphire','emerald'].includes(t)?t:'velvet'; if(t==='velvet') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t;
+function setTheme(t){ t=['velvet','sapphire','emerald'].includes(t)?t:'emerald'; document.documentElement.dataset.theme=t;
   try{ localStorage.setItem('studiokeys.theme',t); }catch(e){} themeColors();
   document.querySelectorAll('.themes [data-theme]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.theme===t)));
   if(typeof drawRolls==='function'){ try{ drawRolls(); drawRuler(); if(ED.tid) drawEditor(); }catch(e){} } }
-(function(){ let t='velvet'; try{ t=localStorage.getItem('studiokeys.theme')||'velvet'; }catch(e){} setTheme(t);
+(function(){ let t='emerald'; try{ if(localStorage.getItem('studiokeys.themeV')!=='2'){ localStorage.setItem('studiokeys.themeV','2'); localStorage.setItem('studiokeys.theme','emerald'); } t=localStorage.getItem('studiokeys.theme')||'emerald'; }catch(e){} setTheme(t);
   document.addEventListener('click',e=>{ const b=e.target.closest('.themes [data-theme]'); if(b) setTheme(b.dataset.theme); }); })();
 
 /* ---------- persisted controls ---------- */
@@ -47,10 +47,11 @@ function ensureAudio(){
     const c=new AC({latencyHint:'interactive'}); A.ctx=c;
     A.bus=c.createGain();
     A.master=c.createGain();
-    A.comp=c.createDynamicsCompressor(); A.comp.threshold.value=-10; A.comp.knee.value=8; A.comp.ratio.value=4; A.comp.attack.value=0.003; A.comp.release.value=0.2;
+    A.glue=c.createDynamicsCompressor(); A.glue.threshold.value=-16; A.glue.knee.value=10; A.glue.ratio.value=2; A.glue.attack.value=0.02; A.glue.release.value=0.25;
+    A.comp=c.createDynamicsCompressor(); A.comp.threshold.value=-3; A.comp.knee.value=0; A.comp.ratio.value=20; A.comp.attack.value=0.001; A.comp.release.value=0.08;
     A.analyser=c.createAnalyser(); A.analyser.fftSize=2048;
     A.click=c.createGain(); A.click.gain.value=0.35; A.click.connect(A.master);
-    A.master.connect(A.comp); A.comp.connect(A.analyser); A.analyser.connect(c.destination);
+    A.master.connect(A.glue).connect(A.comp); A.comp.connect(A.analyser); A.analyser.connect(c.destination);
     A.bend=c.createConstantSource(); A.bend.offset.value=0; A.bend.start();
     A.vibOsc=c.createOscillator(); A.vibOsc.frequency.value=5.6; A.vibGain=c.createGain(); A.vibGain.gain.value=0; A.vibOsc.connect(A.vibGain); A.vibOsc.start();
     c.onstatechange=updateAudioPill;

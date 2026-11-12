@@ -7,9 +7,9 @@
   <nav class="jump" aria-label="Sections"><a href="#studio">Studio</a><a href="#sounds">Sounds</a><a href="#effects">Effects</a><a href="#sing">Sing</a><a href="#lab">Sound Lab</a></nav>
   <div class="pills">
     <span class="themes" role="group" aria-label="Colour theme">
+      <button type="button" data-theme="emerald" title="Emerald: bottle green and jade" style="background:#1fbf83;--sw:#14261f"></button>
       <button type="button" data-theme="velvet" title="Velvet: wine red and crimson" style="background:#e5384f;--sw:#2a141d"><span style="background:#e5384f"></span></button>
       <button type="button" data-theme="sapphire" title="Sapphire: deep blue and azure" style="background:#2e9bff;--sw:#152038"><span style="background:#2e9bff"></span></button>
-      <button type="button" data-theme="emerald" title="Emerald: bottle green and jade" style="background:#1fbf83;--sw:#14261f"><span style="background:#1fbf83"></span></button>
     </span>
     <button class="pill" id="audioPill" type="button"><span class="led warn"></span><span>Sound off · click to start</span></button>
     <span class="pill" id="loopPill"><span class="led"></span><span>Studio empty</span></span>
@@ -92,6 +92,7 @@
       <button class="orb" type="button" id="asOrb" data-state="idle" aria-label="Talk to the assistant"><span class="orb-core"></span><span class="orb-name" id="asNameLbl">Keys</span></button>
       <div class="as-main">
         <div class="as-top"><span class="as-status" id="asStatus">Press the orb and speak, or type below.</span><span class="as-engine" id="asEngine"></span></div>
+        <div class="as-notes" id="asNotes" hidden aria-live="off"></div>
         <div class="as-chat" id="asChat" aria-live="polite"></div>
         <form class="as-form" id="asForm"><input class="input" id="asIn" type="text" autocomplete="off" placeholder="Talk or type, e.g. “give me a trap beat at 140 with an 808 bass”"><button class="btn primary" type="submit">Send</button></form>
         <div class="as-opts">
@@ -102,12 +103,13 @@
         </div>
         <div class="chips-row">
           <button class="sc" type="button" data-say="124 bpm drums with hihats and claps like Ben Böhmer">Drums like Ben Böhmer</button>
-          <button class="sc" type="button" data-say="make a track like Stephan Bodzin: drums, rolling bass, pads and an arp">Like Stephan Bodzin</button>
+          <button class="sc" type="button" data-say="drums like Stephan Bodzin">Drums like Stephan Bodzin</button>
           <button class="sc" type="button" data-say="give me another one">Another one</button>
           <button class="sc" type="button" data-say="more energy">More energy</button>
           <button class="sc" type="button" data-say="let me sing the bassline">🎤 Sing the bassline</button>
           <button class="sc" type="button" data-say="let me sing the chords">🎤 Sing chords</button>
-          <button class="sc" type="button" data-say="add chords and a bassline">Chords + bass</button>
+          <button class="sc" type="button" data-say="let me sing a melody">🎤 Sing a melody</button>
+          <button class="sc" type="button" data-say="add a bassline">Add a bassline</button>
           <button class="sc" type="button" data-say="mix it: drums up a little, bass a bit more low end, chords softer">Mix it</button>
           <button class="sc" type="button" data-say="undo">Undo</button>
         </div>

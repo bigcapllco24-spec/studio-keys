@@ -42,11 +42,15 @@ function normAction(a){
 }
 const L_=()=>PROJ.bars*4;
 const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
-let BATCH={}; const LAST_TAKE={part:null};
+let BATCH={}; const LAST_TEXT={text:''}; const LAST_TAKE={part:null};
 const newSeed=()=>1+Math.floor(Math.random()*2e9);
 function tasteArtist(){ const p=TASTE.profile; if(!p||!p.artists) return null; for(const a of p.artists){ const A=findArtist(a); if(A) return A; } return null; }
 /* style + artist for a request: named artist > named style > the song's vibe > the person's taste > house */
 function resolveVibe(a){
+  /* the AI sometimes invents a reference; only switch away from the song's vibe when the user actually named it */
+  const said=normName(LAST_TEXT.text||''), named_=x=>{ const k=normName(x||''); return !said||!k||said.includes(k.split(' ')[0])||(findArtist(x)&&findArtist(x).names.some(n=>said.includes(normName(n)))); };
+  if(PROJ.ref&&(a.ref||a.artist||a.like)&&!named_(a.ref||a.artist||a.like)){ a=Object.assign({},a,{ref:undefined,artist:undefined,like:undefined}); }
+  if(PROJ.style&&a.style&&pickStyle(a.style)!==PROJ.style&&said&&!STYLE_WORDS.some(([k,re])=>k===pickStyle(a.style)&&re.test(' '+said+' '))) a=Object.assign({},a,{style:undefined});
   let artist=findArtist(a.ref||a.artist||a.like); let named=artist?null:pickStyle(a.style); /* a known artist decides the style; the AI's style guess is ignored */
   const pl=typeof findPlaylist==='function'?findPlaylist(a.playlist||(/playlist/i.test(a.ref||a.like||'')?(a.ref||a.like):null)):null;
   if(pl){ artist=artist||pl.artists.map(findArtist).find(Boolean)||null; named=named||pl.style||(artist&&artist.style)||null; }
@@ -145,6 +149,17 @@ const ACT={
     t.events=shapePart(t.events,to,projectKey()); t.role=to; t.inst=partInst(to); loadI(t.inst); t.gen=false; t.name=(to==='bass'?'Bassline':to==='chords'?'Chords':'Melody')+' (from '+t.name.replace(/^(Sung|Hummed) /,'').toLowerCase()+')';
     return `${t.name} on ${INST.get(t.inst).name}`; },
   again(a){ const p=LAST_TAKE.part; if(!p) return; BATCH.take=p; return `Again: sing the ${p} after the count-in`; },
+  track_fx(a){ const t=findTrack(a.track); if(!t) return; const w=String(a.effect||'').toLowerCase();
+    const k=/rev|room|hall|space/.test(w)?'rev':/delay|echo/.test(w)?'dly':/side|pump|duck/.test(w)?'duck':/low ?cut|high ?pass|hp|rumble/.test(w)?'hp':/high ?cut|low ?pass|lp|dark|muffle/.test(w)?'lp':/drive|satur|distort|warm|grit/.test(w)?'drive':/comp|glue|punch/.test(w)?'comp':/wid|stereo|spread/.test(w)?'width':/pan/.test(w)?'pan':/preset|default|studio/.test(w)?'preset':null;
+    if(!k) return; t.fx=t.fx||{};
+    if(k==='preset'){ t.fx=roleFx(t.role,PROJ.style); refreshTrackGains(); return `Studio effects on ${t.name}`; }
+    const d=TFX_DEF[k]; if(a.remove||a.amount===0||/off|remove|no /.test(String(a.value||''))){ delete t.fx[k]; refreshTrackGains(); return `${d.name} off on ${t.name}`; }
+    const num=x=>x!=null&&x!==''&&isFinite(+x); let v=num(a.amount)?+a.amount:(num(a.change)?null:d.def*100);
+    if(d.unit==='Hz'){ v=num(a.hz)?+a.hz:(num(a.amount)&&+a.amount>=20?+a.amount:(k==='hp'?(t.role==='bass'?35:t.role==='drums'?30:180):6000)); t.fx[k]=clamp(Math.round(v),d.min,d.max); }
+    else if(k==='pan'){ t.fx.pan=clamp((num(a.amount)?+a.amount:0)/100,-1,1); }
+    else { const cur=t.fx[k]||0; t.fx[k]=clamp(v==null?cur+(+a.change)/100:v/100,0,1); }
+    if(FXOPEN) FXOPEN.add(t.id); refreshTrackGains();
+    return `${d.name} on ${t.name}: ${fxShow(k,t.fx[k])}`; },
   export(a){ const fmt=String(a.format||a.value||'mp3').toLowerCase(); const len=a.minutes?Math.round(+a.minutes*60):a.seconds?+a.seconds:a.loops?Math.min(16,+a.loops):undefined;
     if(!PROJ.tracks.length) return; if(/zip|stem|ableton|wav/.test(fmt)){ exportZip(); return 'Packing the Ableton zip (WAV mix, stems and MIDI)'; } if(/mid/.test(fmt)){ exportMidiOnly(); return 'Downloading the MIDI file'; }
     if(len) { const sel=$('#mp3Len'); if(sel && [...sel.options].some(o=>+o.value===len)) sel.value=String(len); }

@@ -26,6 +26,9 @@ Leave the repo untouched in Design mode (`git status` clean at the end). Report 
 - The groove engine (`groove.js`): genre recipes in `GROOVES`, kick families `KICKS`, hat accents, percussion motifs and per-genre `PERC_SETS`, `makeGroove(recipe, beats, seed)` returns events plus a plain description. Every call with a new seed must sound like the same genre but a different groove (A/B phrases, fills, ghost notes, humanised timing). Bass/chords/melody generators (`music.js`) take a seed and follow `PROJ.prog`.
 - Sound quality bar: a melodic house or techno beat should hold up next to a reference track on good speakers: round sub-heavy kick without clipping, clap and hats sitting back, bass and kick not fighting (sidechain or EQ), pads wide and dark, no harsh resonances.
 
+## Mix architecture (13 Nov 2026)
+Each track strip (`makeStrip` in `src/mixer.js`): high-pass, low-pass, 3-band EQ, drive, compressor, sidechain duck (`duckAt` on every kick), pan, Haas width, then post-fader sends to a shared hall reverb and a dotted-1/8 delay (`makeSends`). Master: glue compressor then limiter. `renderAudio` mirrors the same chain offline for WAV/MP3. Role presets: `roleFx`.
+
 ## Sound rules
 - Every new sound needs a fitting effect preset (`FX_PRESETS`) and levels matched to the others (render and compare RMS).
 - Sample sources must be free to use (CC0, CC BY with credit in the README, or synthesized). Never rip sounds from commercial packs or songs. New samples go through `tools/build_samples.py`; keep `index.html` growth under 1 MB per release unless the lead approves.

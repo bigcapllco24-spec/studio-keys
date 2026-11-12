@@ -3,6 +3,24 @@
 const DRUM_ROWS=[[49,'Crash'],[51,'Ride'],[46,'Open hat'],[44,'Pedal hat'],[42,'Closed hat'],[56,'Cowbell'],[50,'High tom'],[47,'Mid tom'],[45,'Low tom'],[37,'Rim'],[39,'Clap'],[38,'Snare'],[36,'Kick']];
 const ED={tid:null,grid:0.25,top:84,rowH:13,sel:null,drag:null,paint:null};
 let VIEW='playlist';
+const SEL=new Set(), FXOPEN=new Set();
+const fxCount=t=>Object.keys(t.fx||{}).filter(k=>TFX_DEF[k]&&t.fx[k]!=null&&!(k==='lp'&&t.fx[k]>=20000)&&!(k==='pan'&&!t.fx[k])&&t.fx[k]!==0).length;
+const fxLog=(d,v)=>Math.round(d.min*Math.pow(d.max/d.min,v/1000));
+const fxPos=(d,x)=>d.log?Math.round(1000*Math.log(x/d.min)/Math.log(d.max/d.min)):Math.round((x-d.min)/(d.max-d.min)*1000);
+const fxShow=(k,x)=>{ const d=TFX_DEF[k]; if(d.unit==='Hz') return x>=1000?(x/1000).toFixed(1)+' kHz':x+' Hz'; if(k==='pan') return x===0?'Centre':(x<0?'L ':'R ')+Math.round(Math.abs(x)*100); return Math.round(x*100)+'%'; };
+function fxPanel(t){
+  const fx=t.fx||{}, on=TFX_ORDER.filter(k=>fx[k]!=null&&!(k==='lp'&&fx[k]>=20000)&&fx[k]!==0||(k==='pan'&&fx.pan));
+  const rows=on.map(k=>{ const d=TFX_DEF[k], x=fx[k]; return `<div class="fxrow"><span class="fxn" title="${esc(d.hint)}">${d.name}</span><input type="range" min="0" max="1000" value="${fxPos(d,x)}" data-tfxk="${t.id}:${k}" aria-label="${d.name} for ${esc(t.name)}"><span class="fxv" data-tfxv="${t.id}:${k}">${fxShow(k,x)}</span><button class="lk" type="button" data-tfxrm="${t.id}:${k}" title="Remove ${d.name}">✕</button></div>`; }).join('');
+  const add=TFX_ORDER.filter(k=>!on.includes(k)).map(k=>`<option value="${k}">${TFX_DEF[k].name}</option>`).join('');
+  return `<div class="tfx" data-fxfor="${t.id}"><div class="tfx-eq"><b>EQ</b>${dialHTML('eq:'+t.id+':lo','Low')}${dialHTML('eq:'+t.id+':mid','Mid')}${dialHTML('eq:'+t.id+':hi','High')}</div>
+    <div class="tfx-list">${rows||'<span class="hint">No effects yet. Add one, or use the studio preset for this kind of part.</span>'}</div>
+    <div class="tfx-add row"><select class="select inline" data-tfxadd="${t.id}" aria-label="Add an effect to ${esc(t.name)}"><option value="">+ Add effect…</option>${add}</select>
+      <button class="btn small" type="button" data-tfxpreset="${t.id}" title="Effects a producer would start with for this part">Studio preset</button>
+      <button class="btn small ghost" type="button" data-tfxclear="${t.id}">Clear effects</button></div></div>`;
+}
+function selBar(){ if(SEL.size<2) return ''; return `<div class="selbar"><b>${SEL.size} tracks selected</b><span class="hint">Ctrl/Cmd+click a track to add or remove it</span><span class="spacer"></span>
+  <button class="btn small primary" type="button" data-sel="play">▶ Play these together</button><button class="btn small" type="button" data-sel="mute">Mute</button><button class="btn small" type="button" data-sel="solo">Solo</button><button class="btn small" type="button" data-sel="fx">FX</button><button class="btn small" type="button" data-sel="dup">Duplicate</button><button class="btn small ghost" type="button" data-sel="del">Delete</button><button class="btn small ghost" type="button" data-sel="clear">Clear selection</button></div>`; }
+function setPreview(ids){ ensureAudio(); PREVIEW=ids&&ids.size?new Set(ids):null; refreshTrackGains(); if(PREVIEW&&!TR.running) loopPlay(); if(!PREVIEW&&TR.running) loopStop(); renderTracks(); }
 function setView(v){ VIEW=v; document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===v))); $('#playlist').hidden=v!=='playlist'; $('#mixerView').hidden=v!=='mixer'; if(v==='mixer') renderMixerView(); else drawRolls(); }
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 
@@ -15,10 +33,12 @@ function renderTracks(){
   $('#keyInfo').textContent=PROJ.key?'':`detected ${keyName(projectKey())}`;
   const box=$('#tracks');
   if(!PROJ.tracks.length){ box.innerHTML='<div class="custom-empty big">No tracks yet. Ask the assistant (“Keys, give me a house beat at 124”), hum a melody, press Record and play, or use the + buttons.</div>'; closeEditor(); drawRuler(); renderFaders(); return; }
-  box.innerHTML=PROJ.tracks.map((t,i)=>`<div class="trk${t.id===ED.tid?' sel':''}${trackAudible(t)?'':' quiet'}" data-tid="${t.id}" style="--c:${t.color}">
+  [...SEL].forEach(id=>{ if(!PROJ.tracks.some(t=>t.id===id)) SEL.delete(id); });
+  box.innerHTML=selBar()+PROJ.tracks.map((t,i)=>`<div class="trk${t.id===ED.tid?' sel':''}${SEL.has(t.id)?' picked':''}${trackAudible(t)?'':' quiet'}" data-tid="${t.id}" style="--c:${t.color}">
     <div class="th">
       <div class="th1"><span class="tnum">${i+1}</span><input class="tname" value="${esc(t.name)}" data-tname="${t.id}" aria-label="Track name">
-        <button class="ib${PREVIEW===t.id?' on':''}" type="button" data-prev="${t.id}" title="Play only this track">${PREVIEW===t.id?'■':'▶'}</button>
+        <button class="ib${PREVIEW&&PREVIEW.has(t.id)?' on':''}" type="button" data-prev="${t.id}" title="Play only this track (Ctrl/Cmd+click to add more)">${PREVIEW&&PREVIEW.has(t.id)?'■':'▶'}</button>
+        <button class="ib fxb${fxCount(t)?' on':''}${FXOPEN.has(t.id)?' open':''}" type="button" data-tfx="${t.id}" title="Effects and EQ for this track">FX${fxCount(t)?`<small>${fxCount(t)}</small>`:''}</button>
         <button class="ib ms${t.mute?' on':''}" type="button" data-mute="${t.id}" aria-pressed="${!!t.mute}" title="Mute">M</button>
         <button class="ib ms${t.solo?' on':''}" type="button" data-solo="${t.id}" aria-pressed="${!!t.solo}" title="Solo">S</button></div>
       <div class="th2">${t.kind==='notes'?`<select class="select inline tinst" data-tinst="${t.id}" aria-label="Instrument for ${esc(t.name)}">${instOptions()}</select>`:`<select class="select inline tinst" data-tonotes="${t.id}" aria-label="Turn ${esc(t.name)} into notes"><option value="">♪ Turn into notes…</option><option value="melody">Melody</option><option value="bass">Bassline</option><option value="chords">Chords</option></select>`}
@@ -27,6 +47,7 @@ function renderTracks(){
         <span class="row" style="gap:4px">${t.kind==='notes'?`<button class="lk ed-l" type="button" data-edit="${t.id}">✎ Edit notes</button>`:''}<button class="lk" type="button" data-dup="${t.id}" title="Duplicate track">Copy</button><button class="lk del-l" type="button" data-tdel="${t.id}">Delete</button></span></div>
     </div>
     <canvas class="troll" data-roll="${t.id}" aria-label="${esc(t.name)} clip" title="${t.kind==='audio'?'Drag to move · Shift+drag to trim the start':'Click to edit notes'}"></canvas>
+    ${FXOPEN.has(t.id)?fxPanel(t):''}
   </div>`).join('');
   PROJ.tracks.forEach(t=>{ const s=box.querySelector(`[data-tinst="${t.id}"]`); if(s) s.value=t.inst; });
   if(ED.tid && !PROJ.tracks.find(t=>t.id===ED.tid)) closeEditor();
@@ -48,22 +69,42 @@ function drawRolls(){
     const ns=t.events.map(e=>e.n), lo=Math.min(...ns), hi=Math.max(...ns), rngN=Math.max(6,hi-lo);
     t.events.forEach(e=>{ const x=mod(e.b,L)/L*w, y=h-5-((e.n-lo)/rngN)*(h-12); g.globalAlpha=0.45+0.55*e.v; g.fillRect(x,y-2,Math.max(2,e.d/L*w-1),4); }); g.globalAlpha=1; });
 }
-$('#tracks').addEventListener('change',e=>{ const s=e.target.closest('[data-tinst]'); if(s){ const t=PROJ.tracks.find(x=>x.id===s.dataset.tinst); const I=INST.get(s.value); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); if(t.name===(INST.get(t.inst)||{}).name) t.name=I.name; t.inst=s.value; saveProject(); renderTracks(); } });
-$('#tracks').addEventListener('input',e=>{ const n=e.target.closest('[data-tname]'); if(n){ const t=PROJ.tracks.find(x=>x.id===n.dataset.tname); t.name=n.value.slice(0,40); saveProject(); if(ED.tid===t.id) $('#edTitle').textContent=t.name; } });
-$('#tracks').addEventListener('click',e=>{
+$('#tracks').addEventListener('change',e=>{ if(e.target.closest('[data-tfxk]')){ saveProject(); const b=document.querySelector(`[data-tfx="${e.target.closest('[data-tfxk]').dataset.tfxk.split(':')[0]}"]`); return; }
+  const ad=e.target.closest('[data-tfxadd]'); if(ad){ const t=PROJ.tracks.find(x=>x.id===ad.dataset.tfxadd), k=ad.value; if(t&&k){ t.fx=t.fx||{}; t.fx[k]=TFX_DEF[k].def; ensureAudio(); refreshTrackGains(); saveProject(); renderTracks(); } return; } const s=e.target.closest('[data-tinst]'); if(s){ const t=PROJ.tracks.find(x=>x.id===s.dataset.tinst); const I=INST.get(s.value); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); if(t.name===(INST.get(t.inst)||{}).name) t.name=I.name; t.inst=s.value; saveProject(); renderTracks(); } });
+$('#tracks').addEventListener('input',e=>{ const fk=e.target.closest('[data-tfxk]'); if(fk){ const [id,k]=fk.dataset.tfxk.split(':'), t=PROJ.tracks.find(x=>x.id===id), d=TFX_DEF[k]; if(!t) return; t.fx=t.fx||{};
+    const v=+fk.value; t.fx[k]=d.log?fxLog(d,v):Math.round((d.min+(d.max-d.min)*v/1000)*100)/100; if(k==='pan'&&Math.abs(t.fx.pan)<0.04) t.fx.pan=0;
+    const lbl=document.querySelector(`[data-tfxv="${CSS.escape(fk.dataset.tfxk)}"]`); if(lbl) lbl.textContent=fxShow(k,t.fx[k]); ensureAudio(); refreshTrackGains(); return; } const n=e.target.closest('[data-tname]'); if(n){ const t=PROJ.tracks.find(x=>x.id===n.dataset.tname); t.name=n.value.slice(0,40); saveProject(); if(ED.tid===t.id) $('#edTitle').textContent=t.name; } });
+$('#tracks').addEventListener('click',e=>{ if(e.target.closest('[data-mute],[data-solo]')&&!(SEL.size>1&&SEL.has((e.target.closest('[data-mute],[data-solo]').dataset.mute||e.target.closest('[data-mute],[data-solo]').dataset.solo)))) return;
   const d=e.target.closest('[data-tdel]'); if(d){ if(d.dataset.armed){ const t=removeTrack(d.dataset.tdel); if(t) toast(`Deleted “${t.name}”`); } else { d.dataset.armed='1'; d.textContent='Confirm delete'; setTimeout(()=>{ if(d.isConnected){ delete d.dataset.armed; d.textContent='Delete'; } },3000); } return; }
-  const p=e.target.closest('[data-prev]'); if(p){ togglePreview(p.dataset.prev); return; }
+  const p=e.target.closest('[data-prev]'); if(p){ togglePreview(p.dataset.prev,e.ctrlKey||e.metaKey); return; }
+  const fb=e.target.closest('[data-tfx]'); if(fb){ const id=fb.dataset.tfx; FXOPEN.has(id)?FXOPEN.delete(id):FXOPEN.add(id); renderTracks(); return; }
+  const rm=e.target.closest('[data-tfxrm]'); if(rm){ const [id,k]=rm.dataset.tfxrm.split(':'); const t=PROJ.tracks.find(x=>x.id===id); if(t&&t.fx){ delete t.fx[k]; refreshTrackGains(); saveProject(); renderTracks(); } return; }
+  const pr=e.target.closest('[data-tfxpreset]'); if(pr){ const t=PROJ.tracks.find(x=>x.id===pr.dataset.tfxpreset); if(t){ t.fx=roleFx(t.role,PROJ.style); refreshTrackGains(); saveProject(); renderTracks(); toast(`Studio effects for ${t.name}`); } return; }
+  const cl=e.target.closest('[data-tfxclear]'); if(cl){ const t=PROJ.tracks.find(x=>x.id===cl.dataset.tfxclear); if(t){ t.fx={}; refreshTrackGains(); saveProject(); renderTracks(); } return; }
+  const sb=e.target.closest('[data-sel]'); if(sb){ selAction(sb.dataset.sel,sb); return; }
+  const ms=e.target.closest('[data-mute],[data-solo]'); if(ms&&SEL.size>1){ const id=ms.dataset.mute||ms.dataset.solo, f=ms.dataset.mute?'mute':'solo'; if(SEL.has(id)){ e.stopPropagation(); const t0=PROJ.tracks.find(x=>x.id===id), v=!t0[f]; PROJ.tracks.forEach(t=>{ if(SEL.has(t.id)) t[f]=v; }); refreshTrackGains(); saveProject(); renderTracks(); return; } }
+  const head=e.target.closest('.th'); if(head&&!e.target.closest('input,select,button,textarea')){ const id=head.closest('.trk').dataset.tid; if(e.ctrlKey||e.metaKey){ SEL.has(id)?SEL.delete(id):SEL.add(id); if(SEL.size===1&&!SEL.has(id)){} } else { SEL.clear(); SEL.add(id); } renderTracks(); return; }
   const du=e.target.closest('[data-dup]'); if(du){ duplicateTrack(du.dataset.dup); return; }
   const ed=e.target.closest('[data-edit]'); if(ed){ openEditor(ed.dataset.edit); return; }
   const r=e.target.closest('.troll'); if(r){ const t=PROJ.tracks.find(x=>x.id===r.dataset.roll); if(t&&t.kind==='notes') openEditor(t.id); }
 });
+function selAction(a,btn){
+  const ids=PROJ.tracks.filter(t=>SEL.has(t.id)).map(t=>t.id); if(!ids.length) return;
+  if(a==='play'){ setPreview(new Set(ids)); return; }
+  if(a==='mute'||a==='solo'){ const v=!PROJ.tracks.find(t=>t.id===ids[0])[a]; PROJ.tracks.forEach(t=>{ if(SEL.has(t.id)) t[a]=v; }); refreshTrackGains(); saveProject(); renderTracks(); return; }
+  if(a==='fx'){ const all=ids.every(id=>FXOPEN.has(id)); ids.forEach(id=>all?FXOPEN.delete(id):FXOPEN.add(id)); renderTracks(); return; }
+  if(a==='dup'){ ids.forEach(id=>duplicateTrack(id)); return; }
+  if(a==='del'){ if(!btn.dataset.armed){ btn.dataset.armed='1'; btn.textContent=`Confirm: delete ${ids.length}`; setTimeout(()=>{ if(btn.isConnected){ delete btn.dataset.armed; btn.textContent='Delete'; } },3000); return; } ids.forEach(id=>removeTrack(id)); SEL.clear(); toast(`Deleted ${ids.length} tracks`); renderTracks(); return; }
+  if(a==='clear'){ SEL.clear(); renderTracks(); }
+}
 function duplicateTrack(id){ const t=PROJ.tracks.find(x=>x.id===id); if(!t) return; const c=makeTrack(Object.assign(serialize(t),{id:undefined,name:t.name+' copy',solo:false})); c.id='t'+Date.now().toString(36)+Math.floor(Math.random()*1e4); c.color=TRACK_COLORS[PROJ.tracks.length%TRACK_COLORS.length];
   if(t.kind==='audio'&&AUD.has(t.id)){ AUD.set(c.id,AUD.get(t.id)); const d=AUD.get(t.id).getChannelData(0); IDB.put('aud:'+c.id,{sr:AUD.get(t.id).sampleRate,data:new Float32Array(d)},'audio').catch(()=>{}); }
   PROJ.tracks.splice(PROJ.tracks.indexOf(t)+1,0,c); saveProject(); renderTracks(); toast(`Duplicated “${t.name}”`); }
-function togglePreview(id){
-  ensureAudio();
-  if(PREVIEW===id){ PREVIEW=null; if(TR.running) loopStop(); renderTracks(); return; }
-  PREVIEW=id; refreshTrackGains(); if(!TR.running) loopPlay(); renderTracks();
+function togglePreview(id,add){
+  const cur=new Set(PREVIEW||[]);
+  if(add){ cur.has(id)?cur.delete(id):cur.add(id); setPreview(cur); return; }
+  if(SEL.size>1&&SEL.has(id)){ const same=PREVIEW&&PREVIEW.size===SEL.size&&[...SEL].every(x=>PREVIEW.has(x)); setPreview(same?null:SEL); return; }
+  setPreview(PREVIEW&&PREVIEW.size===1&&PREVIEW.has(id)?null:new Set([id]));
 }
 
 /* ----- editor: piano roll for notes, step sequencer for drums, velocity lane, selection, copy/paste ----- */

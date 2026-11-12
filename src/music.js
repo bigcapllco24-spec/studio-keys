@@ -134,3 +134,18 @@ function genMelody(L,seed=11,style){
 }
 const ROLE_MIX={drums:{vol:0.9,lo:2,mid:0,hi:1},hats:{vol:0.55,lo:-15,mid:-2,hi:2},perc:{vol:0.6,lo:-8,mid:0,hi:1},bass:{vol:0.85,lo:3,mid:-1,hi:-4},chords:{vol:0.55,lo:-6,mid:0,hi:0},melody:{vol:0.72,lo:-4,mid:1,hi:1},voice:{vol:0.8,lo:-6,mid:1,hi:2},free:{vol:0.8,lo:0,mid:0,hi:0}};
 const ROLE_NAME={drums:'Drums',hats:'Hi-hats',perc:'Percussion',bass:'Bassline',chords:'Chords',melody:'Melody',voice:'Voice',free:'Part'};
+
+/* effects a producer would start with for each kind of part; club styles pump the bass and pads under the kick */
+const CLUB_STYLES=['house','techno','melodichouse','melodictechno','progressive','deephouse','organichouse','techhouse','afro','amapiano','ukg','nudisco','dnb','liquid'];
+const LUSH_STYLES=['melodichouse','melodictechno','progressive','organichouse','downtempo','deephouse','lofi','liquid','synthwave'];
+function roleFx(role,style){
+  const club=CLUB_STYLES.includes(style), lush=LUSH_STYLES.includes(style);
+  switch(role){
+    case 'drums': return {hp:28,comp:0.3,rev:lush?0.08:0.04};
+    case 'bass': return {hp:28,lp:club?4200:6500,comp:0.4,drive:0.18,duck:club?0.75:0.3};
+    case 'chords': return {hp:lush?170:120,comp:0.2,rev:lush?0.42:0.24,dly:lush?0.14:0.05,duck:club?0.55:0.15,width:0.65};
+    case 'melody': return {hp:220,rev:lush?0.3:0.18,dly:lush?0.32:0.16,duck:club?0.3:0.08,width:0.4};
+    case 'voice': return {hp:95,comp:0.45,rev:0.2,dly:0.08};
+    default: return {hp:60,rev:0.15};
+  }
+}

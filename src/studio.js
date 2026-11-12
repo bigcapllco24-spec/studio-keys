@@ -1,6 +1,6 @@
 
 /* ---------- song project: tracks, transport, recording, takes, saving, export ---------- */
-const TRACK_COLORS=['#e5546a','#f2a6b3','#b48ad0','#7fa6d6','#6fbfb2','#e3c6a0','#d08fb4','#a4c79d','#9f8fe0','#e8ded6'];
+const TRACK_COLORS=['#2fd39a','#9fe3c8','#7fb8e6','#f0a3b1','#e6d29a','#b9a3e3','#5cc8d0','#c6e07a','#ef8f8f','#e8ece4'];
 const newProject=()=>({id:'p'+Date.now().toString(36),name:'Untitled song',bars:4,key:null,style:null,tracks:[]});
 let PROJ=Object.assign(newProject(),store.get('project',{}));
 const AUD=new Map();
@@ -11,7 +11,7 @@ const roleOfInst=inst=>{ const I=INST.get(inst)||{}; return I.drums?'drums':I.ca
 function makeTrack(o){
   const role=o.role||'free', mix=ROLE_MIX[role]||ROLE_MIX.free, I=INST.get(o.inst);
   return Object.assign({id:'t'+Date.now().toString(36)+Math.floor(Math.random()*1e4),kind:'notes',role,inst:o.inst,zone:o.zone||'keys',name:o.name||(I?I.name:ROLE_NAME[role]),
-    color:TRACK_COLORS[PROJ.tracks.length%TRACK_COLORS.length],events:[],vol:mix.vol,lo:mix.lo,mid:mix.mid,hi:mix.hi,mute:false,solo:false},o);
+    color:TRACK_COLORS[PROJ.tracks.length%TRACK_COLORS.length],events:[],vol:mix.vol,lo:mix.lo,mid:mix.mid,hi:mix.hi,mute:false,solo:false,fx:(o.kind==='audio'&&role==='voice'&&!o.take)?{}:roleFx(role,PROJ.style)},o);
 }
 const pickGen=o=>{ const g={}; ['recipe','seed','style','ref','desc'].forEach(k=>{ if(o[k]!==undefined) g[k]=o[k]; }); return g; };
 function addTrack(o,{replaceRole}={}){
@@ -39,7 +39,7 @@ $('#addBars').onclick=()=>setBars(PROJ.bars*2);
 function setTempo(b){
   b=clamp(Math.round(b*10)/10,40,240); if(!b) return;
   if(TR.running && A.ctx){ const now=A.ctx.currentTime, beat=(now-TR.t0)*CTRL.bpm/60; TR.t0=now-beat*60/b; TR.schedT=now; }
-  CTRL.bpm=b; saveCtrl(); $('#bpm').value=b; $('#lcdTempo').textContent=b+' BPM'; FX.tempo(b);
+  CTRL.bpm=b; saveCtrl(); $('#bpm').value=b; $('#lcdTempo').textContent=b+' BPM'; FX.tempo(b); if(A.sends) A.sends.setTempo(b);
 }
 $('#bpm').addEventListener('change',e=>setTempo(+e.target.value));
 (function(){ const taps=[]; $('#tapBtn').onclick=()=>{ const t=performance.now(); if(taps.length && t-taps[taps.length-1]>2000) taps.length=0; taps.push(t); if(taps.length>6) taps.shift();
@@ -119,6 +119,7 @@ $('#playBtn').onclick=()=>{ if(LOOP.state==='stopped') loopPlay(); else if(LOOP.
 function click(t,accent){ const c=A.ctx, o=osc(c,'sine',accent?1760:1175), g=env(c,t,accent?0.9:0.55,0.001,0.012); o.connect(g).connect(A.click); o.start(t); o.stop(t+0.08); }
 function scheduleEvent(tr,e,t,dur){
   const inst=INST.get(tr.inst); if(!inst) return;
+  if(isKick(tr,e.n)){ const ducks=PROJ.tracks.filter(x=>x!==tr&&x.fx&&x.fx.duck>0&&trackAudible(x)).map(x=>[trackStrip(x),x.fx.duck]); if(ducks.length) duckAt(A.ctx,ducks,t); }
   let v; try{ v=inst.play(A.ctx,trackStrip(tr).inp,e.n,e.v,t); }catch(err){ return; }
   if(!v) return; LOOP.voices.add(v); const prevEnd=v.onEnd; v.onEnd=()=>{ LOOP.voices.delete(v); if(prevEnd) prevEnd(); };
   if(!v.oneShot) v.release(t+dur);
@@ -182,18 +183,21 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
       this.proc.onaudioprocess=e=>{ if(LOOP.state!=='take') return; const d=e.inputBuffer.getChannelData(0); this.chunks.push({t:c.currentTime-d.length/c.sampleRate-0.02,d:new Float32Array(d)}); }; }
     try{ MIC.src.disconnect(this.proc); }catch(_){} MIC.src.connect(this.proc);
     $('#micStatus').textContent=`Recording a take (${this.part}): ${PROJ.bars} bars after the count-in. Sing now.`;
+    TAKE_GUIDE=this.part!=='voice'&&PROJ.tracks.some(t=>t.role==='drums'||(INST.get(t.inst)||{}).drums); refreshTrackGains();
+    setOrb('listening',`Get ready: ${CTRL.countIn?'one bar count-in, then ':''}sing ${this.part==='bass'?'the bassline':this.part==='chords'?'one note per chord':this.part==='voice'?'your voice note':'the melody'}.`);
     countInto('take');
   },
-  begin(){ this.chunks=[]; lcd('TAKE · SING NOW'); },
+  begin(){ this.chunks=[]; lcd('TAKE · SING NOW'); const w={bass:'the bassline',chords:'one note per chord',melody:'the melody',voice:'your voice note'}[this.part]||'now';
+    setOrb('listening',`Sing ${w} now: ${PROJ.bars} bar${PROJ.bars>1?'s':''}. ${this.part==='voice'?'':'Only the drums play so I can hear you clearly.'}`); if(typeof showSung==='function'){ ASSIST.sung=[]; showSung(0,false); } },
   noteOn(n,v){ if(LOOP.state!=='take') return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60; this.noteOff(); this.open={n,v,b:Math.max(0,b)}; },
   noteOff(){ if(!this.open) return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60, o=this.open; this.open=null; if(b-o.b>0.12) this.notes.push({b:o.b,d:b-o.b,n:o.n,v:o.v}); },
-  cancel(){ this.chunks=[]; this.notes=[]; this.open=null; $('#micStatus').textContent='Take cancelled.'; },
+  cancel(){ this.chunks=[]; this.notes=[]; this.open=null; TAKE_GUIDE=false; refreshTrackGains(); $('#micStatus').textContent='Take cancelled.'; setOrb(ASSIST.listening?'listening':'idle',idleText()); },
   finish(){
     this.noteOff(); const c=A.ctx, L=PROJ.bars*4, sec=L*spb(), sr=c.sampleRate, pcm=new Float32Array(Math.round(sec*sr));
     this.chunks.forEach(ch=>{ const off=Math.round((ch.t-TR.t0)*sr); for(let i=0;i<ch.d.length;i++){ const j=off+i; if(j>=0&&j<pcm.length) pcm[j]=ch.d[i]; } });
     let pk=0; for(let i=0;i<pcm.length;i++) pk=Math.max(pk,Math.abs(pcm[i])); if(pk>0.001){ const g=0.85/pk; for(let i=0;i<pcm.length;i++) pcm[i]*=g; }
     const q=0.25; let notes=this.notes.map(e=>({b:Math.round(e.b/q)*q,d:Math.max(q,Math.round(e.d/q)*q),n:e.n,v:clamp(e.v/127,0.4,1)})).filter(e=>e.b<L);
-    const part=this.part;
+    const part=this.part; TAKE_GUIDE=false; refreshTrackGains(); setOrb(ASSIST.listening?'listening':'idle',idleText());
     if(part==='voice'){ const n=PROJ.tracks.filter(t=>/^Voice note/.test(t.name)).length+1; const at=makeTrack({kind:'audio',role:'voice',inst:null,name:'Voice note '+n,events:[],cyc:0,start:0,trim:0}); PROJ.tracks.push(at); AUD.set(at.id,makeBuf(pcm,sr)); IDB.put('aud:'+at.id,{sr,data:pcm},'audio').catch(()=>{});
       this.chunks=[]; this.notes=[]; LOOP.state='playing'; saveProject(); renderTracks(); uiLoop(); $('#micStatus').textContent=`Saved “${at.name}”.`;
       ASSIST.say(`Saved “${at.name}”. It plays with the loop. Say “${ASSIST.name}, turn the voice note into a bassline” to play it on an instrument.`,{chips:[at.name]}); return; }
@@ -246,15 +250,25 @@ function buildMidi(tracks,bpm,L,title){
   const head=[0x4D,0x54,0x68,0x64,0,0,0,6,0,1,(out.length>>8)&255,out.length&255,(PPQ>>8)&255,PPQ&255];
   return new Uint8Array([...head,...out.flat()]);
 }
-async function renderAudio(tracks,bpm,L){
+async function renderAudio(tracks,bpm,L,opts={}){
   const sr=44100, s=60/bpm, len=L*s, OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext, oc=new OAC(2,Math.ceil(sr*len*2),sr);
   await FX.loadIR(oc);
-  const bus=oc.createGain(), out=oc.createGain(), comp=oc.createDynamicsCompressor(); comp.threshold.value=-10; comp.knee.value=8; comp.ratio.value=4; comp.attack.value=0.003; comp.release.value=0.2;
-  out.gain.value=Math.pow(CTRL.volume/100,2); out.connect(comp).connect(oc.destination);
+  const bus=oc.createGain(), out=oc.createGain();
+  const glue=oc.createDynamicsCompressor(); glue.threshold.value=-16; glue.knee.value=10; glue.ratio.value=2; glue.attack.value=0.02; glue.release.value=0.25;
+  const lim=oc.createDynamicsCompressor(); lim.threshold.value=-3; lim.knee.value=0; lim.ratio.value=20; lim.attack.value=0.001; lim.release.value=0.08;
+  out.gain.value=Math.pow(CTRL.volume/100,2); out.connect(glue).connect(lim).connect(oc.destination);
   const ms=makeStrip(oc,out); applyStrip(ms,MIX.master,oc,true,true);
   FX.build(oc,bus,ms.inp,FX.slots,{noRepeat:true,bpm});
-  for(const tr of tracks){ const st=makeStrip(oc,bus); applyStrip(st,tr,oc,true,true);
-    if(tr.kind==='audio'){ const buf=AUD.get(tr.id); if(!buf) continue; for(let cyc=0;cyc<2;cyc++){ const src=oc.createBufferSource(); src.buffer=buf; src.connect(st.inp); src.start(cyc*len,0,Math.min(buf.duration,len)); } continue; }
+  const sends=makeSends(oc,ms.inp,bpm);
+  /* every audible track gets its strip (so sidechain works even when exporting one stem), only the requested ones make sound */
+  const all=opts.context||tracks, strips=new Map();
+  for(const tr of all){ const st=makeStrip(oc,bus,sends); applyStrip(st,tr,oc,true,true); strips.set(tr.id,st); }
+  const ducks=all.filter(x=>x.fx&&x.fx.duck>0).map(x=>[strips.get(x.id),x.fx.duck]);
+  const kicks=[]; all.forEach(tr=>{ if(tr.kind==='notes') tr.events.forEach(e=>{ if(isKick(tr,e.n)) kicks.push(e.b); }); });
+  for(let cyc=0;cyc<2;cyc++) kicks.forEach(b=>{ const t=(cyc*L+b)*s; if(t<2*len&&ducks.length) duckAt(oc,ducks,t,bpm); });
+  for(const tr of tracks){ const st=strips.get(tr.id)||makeStrip(oc,bus,sends);
+    if(tr.kind==='audio'){ const buf=AUD.get(tr.id); if(!buf) continue; const st0=(tr.start||0)*s, off=Math.min(tr.trim||0,buf.duration), dur=Math.min(buf.duration-off,len-st0); if(dur<=0.01) continue;
+      for(let cyc=0;cyc<2;cyc++){ const src=oc.createBufferSource(); src.buffer=buf; src.connect(st.inp); src.start(cyc*len+st0,off,dur); } continue; }
     const I=INST.get(tr.inst); if(!I) continue; if(I.set) await loadSet(I.set,loadOpts(I.set)).catch(()=>{});
     for(let cyc=0;cyc<2;cyc++) for(const e of tr.events){ const t=(cyc*L+e.b)*s; if(t>=2*len) continue; const v=I.play(oc,st.inp,e.n,e.v,t); if(v && !v.oneShot) v.release(t+e.d*s); } }
   const buf=await oc.startRendering(), a=Math.round(len*sr), n=Math.round(len*sr);
@@ -299,7 +313,7 @@ async function exportZip(){
     st.textContent='Rendering the mix…'; await nextFrame();
     files.push({name:`${base}/${base} Mix.wav`,data:wavBytes(await renderAudio(tracks,bpm,L),44100)});
     for(let i=0;i<tracks.length;i++){ st.textContent=`Rendering stem ${i+1} of ${tracks.length}…`; await nextFrame();
-      files.push({name:`${base}/Stems/${String(i+1).padStart(2,'0')} ${safeName(tracks[i].name)}.wav`,data:wavBytes(await renderAudio([tracks[i]],bpm,L),44100)}); }
+      files.push({name:`${base}/Stems/${String(i+1).padStart(2,'0')} ${safeName(tracks[i].name)}.wav`,data:wavBytes(await renderAudio([tracks[i]],bpm,L,{context:tracks}),44100)}); }
     const nt=tracks.filter(t=>t.kind==='notes');
     if(nt.length){ files.push({name:`${base}/MIDI/${base} All tracks.mid`,data:buildMidi(nt,bpm,L,base)});
       nt.forEach((t,i)=>files.push({name:`${base}/MIDI/${String(i+1).padStart(2,'0')} ${safeName(t.name)}.mid`,data:buildMidi([t],bpm,L,t.name)})); }
