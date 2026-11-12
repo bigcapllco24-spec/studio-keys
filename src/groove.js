@@ -122,7 +122,53 @@ const KICKS={
   dnb:['x.........x.....','x.........xx....','x......x..x.....','x.x.......x.....'],
   bhangra:['x..x..x.x..x..x.','x..x....x..x....']
 };
-const HAT_ACCENTS=[[1,0.45,0.75,0.45],[1,0.55,0.85,0.6],[0.85,0.4,1,0.45],[1,0.35,0.65,0.8],[0.9,0.6,0.9,0.5]];
+/* ---------- drum feel, measured (SE-3) ----------
+   Averages from the owner's licensed Ableton Drum Essentials grooves (RES-3, .claude/research/data/RES-3-drum-feel.json).
+   Numbers only: no notes, patterns or samples copied. Add a new measured feel as one more entry; pickFeel() chooses it.
+   vel: average velocity per 16th step of the bar (0 = no hits there in the data); the groove keeps its own pattern and
+   multiplies each hit by this shape, so beats 2 and 4 lift and the in-between 16ths sit back.
+   push / spread (ms): where a live drummer lands against the grid (minus = early) and how much it wanders (sd);
+   keep: how much of that wander programmed "human" styles keep (a club beat stays tighter than a live kit). */
+const FEELS={
+  straight:{src:'Drum Essentials, 154 straight grooves',swing:0,ghost:0.33,vel:{
+    hatc:[0.68,0.54,0.47,0.54,0.76,0.46,0.52,0.51,0.62,0.51,0.53,0.52,0.73,0.55,0.53,0.56],
+    hato:[0.88,0.83,0.8,0.81,0.85,0.85,0.83,0.9,0.84,0.81,0.91,0.77,0.75,0.74,0.9,0.77],
+    shaker:[0.6,0.59,0.5,0.45,0.58,0.51,0.56,0.53,0.63,0.51,0.54,0.56,0.68,0.45,0.63,0.61],
+    perc:[0.64,0.34,0.45,0.49,0.48,0.44,0.47,0.44,0.48,0.46,0.45,0.54,0.64,0.61,0.6,0.5]}},
+  swing16:{src:'Drum Essentials, 15 swung grooves (all full triplet swing)',swing:0.333,ghost:0.27,vel:{
+    hatc:[0.62,0.37,0.45,0.37,0.8,0.29,0.52,0.5,0.5,0.47,0.49,0.45,0.79,0.4,0.48,0.66],
+    hato:[0.29,0,0.66,1,0.71,0,0.34,1,0.31,0,0.64,0,0.64,0,0.36,1],
+    shaker:[0.61,0.86,0.4,0,0.54,0.42,0.54,0,0.53,0,0.64,0.58,0.77,0,0.72,1],
+    perc:[0.44,0.28,0.36,0.59,0.74,0.47,0.57,0,0.25,0.21,0.54,0.32,0.64,0.54,0.3,0.74]}},
+  live:{src:'Drum Essentials, 12 live-kit grooves',swing:0,ghost:0.4,vel:{
+    hatc:[0.61,0.53,0.53,0.51,0.63,0.54,0.55,0.59,0.59,0.53,0.54,0.52,0.71,0.56,0.63,0.57]},
+    push:{kick:-9.9,snare:-3.6,hat:0.6,perc:2.8},spread:{kick:16.6,snare:14,hat:27.5,perc:16.3},keep:{kick:0.15,snare:0.15,hat:0.3,perc:0.3}}
+};
+const FEEL_WOBBLE=0.12;   /* each new groove nudges the curves a little, so "another one" never repeats exactly */
+function pickFeel(rec){ return FEELS[rec.feel]||((+rec.swing||0)>0.15?FEELS.swing16:FEELS.straight); }
+/* a velocity curve as a shape around 1; rows with gaps in the data are trusted less (pulled towards flat) */
+function feelShape(c,r){ if(!c) return Array(16).fill(1); const nz=c.filter(x=>x>0), m=nz.length?nz.reduce((a,b)=>a+b,0)/nz.length:1, depth=nz.length/16;
+  return c.map(x=>(1+((x>0?x:m)/m-1)*depth)*(1+(r()-0.5)*FEEL_WOBBLE)); }
+/* swing: 0 = straight, 0.333 = full triplet swing; the off 16ths move swing/4 of a beat late. Musicians count it as a
+   percentage (MPC style): 50% straight, 66% triplet. "less swing" steps down this ladder, "more swing" goes to full. */
+const SWING_STEPS=[0,0.08,0.16,0.333,0.4];
+const swingPct=sw=>Math.floor(50+(+sw||0)*50+0.01);
+function swingName(sw){ return sw<0.02?'straight':sw<0.06?'a touch of swing':sw<0.12?'light swing':sw<0.2?'medium swing':sw<0.3?'strong swing':sw<0.37?'full triplet swing':'heavy swing'; }
+function resolveSwing(v,cur){ cur=+cur||0; if(v==null||v===''||v===false) return v===false?0:undefined; const r3=x=>Math.round(clamp(x,0,0.4)*1000)/1000;
+  if(typeof v==='string'){ const s=v.toLowerCase().trim(), num=parseFloat(s), bit=/\b(bit|little|touch|slight(ly)?|tad)\b/.test(s);
+    if(/^(none|no|off|straight|zero|no swing)$/.test(s)) return 0;
+    if(!isNaN(num)) v=num;
+    else if(/less|light|lower|down|soft/.test(s)) return bit?r3(cur-0.08):(SWING_STEPS.slice().reverse().find(x=>x<cur-0.03)||0);
+    else if(/more|heav|full|lots|max|up|triplet|swing/.test(s)) return bit?r3(cur+0.08):(cur<0.3?0.333:0.4);
+    else return undefined; }
+  v=+v; if(!isFinite(v)) return undefined; if(v>1) v=v>=50?(v-50)/50:v/100; return r3(v); }
+/* the reply in musician words: "Lighter swing, about 58%" */
+function swingWords(sw,prev){ const p=swingPct(sw);
+  if(sw<0.02) return prev!=null&&prev<0.02?'Already straight, no swing':'Straight, no swing';
+  if(prev!=null&&sw<prev-0.005) return `Lighter swing, about ${p}%`;
+  if(prev!=null&&sw>prev+0.005) return sw>=0.3&&sw<0.37?`Full triplet swing, about ${p}%`:sw>=0.37?`Heavy swing, about ${p}% (the most it goes)`:`More swing, about ${p}%`;
+  if(prev!=null&&sw>=0.4) return `Already at the heaviest swing, about ${p}%`;
+  return `${swingName(sw).replace(/^./,c=>c.toUpperCase())}, about ${p}%`; }
 const PERC_SETS={melodichouse:[37,45,50],melodictechno:[37,47],techno:[37,47],progressive:[37,45],deephouse:[37,45],organichouse:[45,50,37],techhouse:[37,56,45],afro:[45,47,50,37],amapiano:[45,50,37],nudisco:[56,45,37],house:[37,45,56],bhangra:[45,47,50],bollywood:[45,47,50],punjabi:[45,50],downtempo:[37,45,50],reggaeton:[37,45],ukg:[37,45],drill:[37]};
 const PERC_MOTIFS={
   37:['...x..x....x..x.','..x..x....x..x..','......x.......x.','...x.......x..x.','.x....x..x....x.'],
@@ -141,9 +187,14 @@ function grooveRecipe(style,artist,over){
 }
 function makeGroove(rec,L,seed){
   const r=rng(seed||1), ev=[], bars=Math.max(1,L/4), E=rec.energy, pick=a=>a[Math.floor(r()*a.length)];
-  const sw=s=>s%2===1?(rec.swing||0)*0.25:0, jit=()=>rec.human?(r()-0.5)*0.016:0, vel=(v)=>clamp(v+(r()-0.5)*0.08,0.08,1);
-  const at=(bar,s,n,v,d=0.2,j=true)=>ev.push({b:Math.max(0,Math.round((bar*4+s/4+sw(s)+(j?jit():0))*1000)/1000),d,n,v:vel(v)});
-  const kickPat=pick(KICKS[rec.kick]||KICKS.four), accents=pick(HAT_ACCENTS);
+  const sw=s=>s%2===1?(rec.swing||0)*0.25:0, vel=(v)=>clamp(v+(r()-0.5)*0.08,0.08,1);
+  /* measured feel: velocity shapes per step, and (human styles) a drummer's push and wander per role */
+  const F=pickFeel(rec), T=rec.human?FEELS.live:null, sh={}; ['hatc','hato','shaker','perc'].forEach(k=>sh[k]=feelShape(F.vel[k],r));
+  const bpm=(typeof CTRL!=='undefined'&&+CTRL.bpm)||120, msB=ms=>ms/1000*bpm/60, gs=()=>{ const u=Math.max(1e-6,r()), w=r(); return clamp(Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*w),-2,2); };
+  const roleOf=n=>n===36?'kick':(n===38||n===39||n===37&&rec.back==='rim')?'snare':(n===42||n===44||n===46||n===51)?'hat':'perc';
+  const feelMs=(n,j)=>{ if(!T) return 0; const k=roleOf(n); return (T.push[k]||0)+(j||k==='kick'||k==='snare'?gs()*(T.spread[k]||0)*(T.keep[k]||0):0); };
+  const at=(bar,s,n,v,d=0.2,j=true)=>ev.push({b:Math.max(0,Math.round((bar*4+s/4+sw(s)+msB(feelMs(n,j)))*1000)/1000),d,n,v:vel(v)});
+  const kickPat=pick(KICKS[rec.kick]||KICKS.four), hc=sh.hatc;
   const percNotes=(rec.percSet||PERC_SETS[rec.style]||[37,45,47]).slice().sort(()=>r()-0.5).slice(0,clamp(+rec.perc||0,0,3));
   const percPat={}; percNotes.forEach(n=>percPat[n]=pick(PERC_MOTIFS[n]));
   const percB={}; percNotes.forEach(n=>percB[n]=pick(PERC_MOTIFS[n]));      /* B-section variant */
@@ -167,11 +218,11 @@ function makeGroove(rec,L,seed){
     /* hats */
     const closed=[];
     switch(rec.hats){
-      case 'offbeat': [2,6,10,14].forEach(s=>closed.push([s,0.85])); break;
-      case 'offbeat16': for(let s=0;s<16;s++){ const a=s%4===2?0.9:(E>=3&&s%2===1?0.35+r()*0.15:0); if(a) closed.push([s,a]); } break;
-      case '8th': for(let s=0;s<16;s+=2) closed.push([s,s%4===0?0.85:0.55]); if(E>=4) closed.push([15,0.35]); break;
-      case '16th': for(let s=0;s<16;s++) closed.push([s,accents[s%4]*(E>=4?1:0.85)]); break;
-      case 'shuffle16': for(let s=0;s<16;s++){ if(E<=2&&s%4===1&&r()<0.5) continue; closed.push([s,accents[s%4]*(0.75+r()*0.2)]); } break;
+      case 'offbeat': [2,6,10,14].forEach(s=>closed.push([s,0.92*hc[s]])); break;
+      case 'offbeat16': for(let s=0;s<16;s++){ const a=s%4===2?0.95:(E>=3&&s%2===1?0.42+r()*0.12:0); if(a) closed.push([s,a*hc[s]]); } break;
+      case '8th': for(let s=0;s<16;s+=2) closed.push([s,0.62*hc[s]]); if(E>=4) closed.push([15,0.35*hc[15]]); break;
+      case '16th': for(let s=0;s<16;s++) closed.push([s,(E>=4?0.7:0.6)*hc[s]]); break;
+      case 'shuffle16': for(let s=0;s<16;s++){ if(E<=2&&s%4===1&&r()<0.5) continue; closed.push([s,(0.52+r()*0.12)*hc[s]]); } break;
       case 'trap': { for(let s=0;s<16;s+=2) closed.push([s,s%4===0?0.85:0.6]);
         if(bar%2===1||E>=4){ const at1=trapRollAt[bar%2], div=pick([3,4,6]); for(let k=0;k<div;k++) ev.push({b:bar*4+at1/4+k*(0.5/div),d:0.08,n:42,v:0.45+k*0.08}); } break; }
       case 'drill': for(let s=0;s<16;s+=2) closed.push([s,0.7]); [3,11].forEach(s=>closed.push([s,0.5])); if(bar%2===1) for(let k=0;k<3;k++) ev.push({b:bar*4+3.5+k/6,d:0.08,n:42,v:0.5+k*0.1}); break;
@@ -181,11 +232,11 @@ function makeGroove(rec,L,seed){
     }
     const openSteps=rec.open?(rec.hats==='8th'?[14]:[2,6,10,14]):[];
     closed.forEach(([s,v])=>{ if(openSteps.includes(s)) return; at(bar,s,42,v,0.12); });
-    openSteps.forEach(s=>{ if(rec.hats==='8th'&&!(isFill||bar%2===1)) return; at(bar,s,46,rec.hats==='8th'?0.6:0.7,0.3); });
-    if(rec.shaker) for(let s=0;s<16;s++){ const v=s%2===1?0.55:0.3; if(E<=2&&s%2===0) continue; at(bar,s,44,v,0.1); }
+    openSteps.forEach(s=>{ if(rec.hats==='8th'&&!(isFill||bar%2===1)) return; at(bar,s,46,(rec.hats==='8th'?0.6:0.7)*sh.hato[s],0.3); });
+    if(rec.shaker) for(let s=0;s<16;s++){ const v=s%2===1?0.55:0.3; if(E<=2&&s%2===0) continue; at(bar,s,44,v*sh.shaker[s],0.1); }
     if(rec.ride&&(E>=4||isB)) [2,6,10,14].forEach(s=>at(bar,s,51,0.5,0.4));
     /* percussion */
-    percNotes.forEach((n,i)=>{ if(i>0&&!isB&&E<4) return; const p=isB?percB[n]:percPat[n]; for(let s=0;s<16;s++) if(p[s]==='x') at(bar,s,n,0.55+r()*0.2,0.15); });
+    percNotes.forEach((n,i)=>{ if(i>0&&!isB&&E<4) return; const p=isB?percB[n]:percPat[n]; for(let s=0;s<16;s++) if(p[s]==='x') at(bar,s,n,(0.55+r()*0.15)*sh.perc[s],0.15); });
     if(rec.crash&&phrase===0&&bar>0) at(bar,0,49,0.6,1.5,false);
     /* fills */
     if(isFill){
@@ -203,7 +254,7 @@ function makeGroove(rec,L,seed){
   words.push({offbeat:'off-beat hats',offbeat16:'off-beat hats with 16th ghosts','8th':'8th hats','16th':'16th hats',shuffle16:'shuffled 16th hats',trap:'trap hats with rolls',drill:'drill hats',none:'no hats'}[rec.hats]||'hats');
   if(rec.open) words.push('open hats'); if(rec.shaker) words.push('shaker'); if(rec.ride) words.push('ride');
   if(percNotes.length) words.push(percNotes.map(n=>({37:'rims',45:'congas',47:'toms',56:'cowbell',50:'high toms'}[n])).join(' and '));
-  if(rec.swing>0.1) words.push('swing'); if(fillEvery){ const fw=fillKind==='snareroll'?'snare roll':fillKind==='tom'?'tom fill':fillKind==='drop'?'kick drop':fillKind==='openhat'?'open-hat lift':fillKind==='clapflam'?'clap build':'hat roll'; words.push(`${/^[aeiou]/.test(fw)?'an':'a'} ${fw} every ${fillEvery} bars`); }
+  if(rec.swing>=0.06) words.push(`${swingName(rec.swing)} (about ${swingPct(rec.swing)}%)`); if(fillEvery){ const fw=fillKind==='snareroll'?'snare roll':fillKind==='tom'?'tom fill':fillKind==='drop'?'kick drop':fillKind==='openhat'?'open-hat lift':fillKind==='clapflam'?'clap build':'hat roll'; words.push(`${/^[aeiou]/.test(fw)?'an':'a'} ${fw} every ${fillEvery} bars`); }
   if(0) words.push(`a ${fillKind==='snareroll'?'snare roll':fillKind==='tom'?'tom fill':fillKind==='drop'?'kick drop':fillKind==='openhat'?'open-hat lift':fillKind==='clapflam'?'clap build':'hat roll'} every ${fillEvery} bars`);
   return {events:ev,desc:words.join(', ')};
 }
