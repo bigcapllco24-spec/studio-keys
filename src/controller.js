@@ -114,25 +114,25 @@ $('#hwTransport').addEventListener('click',e=>{ const b=e.target.closest('[data-
     lowE=lowE*0.6+low*0.4; lvl=lvl*0.8+all*0.2;
     const deskY=h-$('#ctrlBody').offsetHeight-34;
     // wall
-    const wall=g.createLinearGradient(0,0,0,deskY); wall.addColorStop(0,'#1a1c21'); wall.addColorStop(1,'#23252b'); g.fillStyle=wall; g.fillRect(0,0,w,deskY);
+    const wall=g.createLinearGradient(0,0,0,deskY); wall.addColorStop(0,'#120f2e'); wall.addColorStop(0.6,'#1a1840'); wall.addColorStop(1,'#231c4a'); g.fillStyle=wall; g.fillRect(0,0,w,deskY);
     // acoustic panels
-    const pw=56, ph=56, gap=6; for(let y=10;y<deskY-30;y+=ph+gap) for(let x=10+((y/(ph+gap))%2?28:0);x<w;x+=pw+gap){ const gr=g.createLinearGradient(x,y,x+pw,y+ph); gr.addColorStop(0,'#2a2c33'); gr.addColorStop(1,'#1d1f24'); g.fillStyle=gr; g.fillRect(x,y,pw,ph); g.fillStyle='rgba(0,0,0,.18)'; for(let k=8;k<pw;k+=12) g.fillRect(x+k,y+4,3,ph-8); }
+    const pw=56, ph=56, gap=6; for(let y=10;y<deskY-30;y+=ph+gap) for(let x=10+((y/(ph+gap))%2?28:0);x<w;x+=pw+gap){ const gr=g.createLinearGradient(x,y,x+pw,y+ph); gr.addColorStop(0,'#272456'); gr.addColorStop(1,'#1a1838'); g.fillStyle=gr; g.fillRect(x,y,pw,ph); g.fillStyle='rgba(0,0,0,.18)'; for(let k=8;k<pw;k+=12) g.fillRect(x+k,y+4,3,ph-8); }
     // light strip
-    const glow=0.25+lvl*1.6; g.fillStyle=`rgba(255,155,66,${Math.min(0.9,glow)})`; g.fillRect(0,0,w,3); const halo=g.createLinearGradient(0,0,0,40); halo.addColorStop(0,`rgba(255,155,66,${Math.min(0.25,glow*0.25)})`); halo.addColorStop(1,'rgba(255,155,66,0)'); g.fillStyle=halo; g.fillRect(0,0,w,40);
+    const glow=0.25+lvl*1.6; const strip=g.createLinearGradient(0,0,w,0); strip.addColorStop(0,`rgba(143,107,255,${Math.min(0.95,glow)})`); strip.addColorStop(0.5,`rgba(255,111,181,${Math.min(0.95,glow)})`); strip.addColorStop(1,`rgba(69,227,211,${Math.min(0.95,glow)})`); g.fillStyle=strip; g.fillRect(0,0,w,3); const halo=g.createLinearGradient(0,0,0,70); halo.addColorStop(0,`rgba(194,107,255,${Math.min(0.3,glow*0.3)})`); halo.addColorStop(1,'rgba(194,107,255,0)'); g.fillStyle=halo; g.fillRect(0,0,w,70);
     // desk
     const desk=g.createLinearGradient(0,deskY,0,h); desk.addColorStop(0,'#5a4030'); desk.addColorStop(0.04,'#3b2a20'); desk.addColorStop(1,'#20170f'); g.fillStyle=desk; g.fillRect(0,deskY,w,h-deskY);
     g.fillStyle='rgba(255,220,180,.08)'; g.fillRect(0,deskY,w,2);
     // screen in the middle
     const sw=Math.min(520,w*0.42), sh=Math.min(110,deskY-40), sx=(w-sw)/2, sy=deskY-sh-18;
-    if(sh>50){ g.fillStyle='#0a0b0d'; g.fillRect(sx-6,sy-6,sw+12,sh+12); g.fillStyle='#0d1417'; g.fillRect(sx,sy,sw,sh); g.fillStyle='#14171b'; g.fillRect(w/2-30,deskY-18,60,18);
-      g.font='600 11px '+cssVar('--mono'); g.fillStyle='#8fd3da'; g.fillText(`${PROJ.name.toUpperCase().slice(0,28)} · ${CTRL.bpm} BPM · ${PROJ.tracks.length} TRACKS`,sx+10,sy+16);
-      if(bands){ const n=48; for(let i=0;i<n;i++){ const idx=Math.floor(Math.pow(i/n,1.7)*300)+1, v=bands[idx]/255, bh=v*(sh-30); g.fillStyle=i%6===0?'#ff9b42':'#5ccfdb'; g.fillRect(sx+10+i*(sw-20)/n,sy+sh-6-bh,(sw-20)/n-2,bh); } }
-      if(TR.running && LOOP.L){ const pos=mod(LOOP.rawBeat(),LOOP.L)/LOOP.L; g.fillStyle='#ff9b42'; g.fillRect(sx+10+pos*(sw-20),sy+22,2,sh-28); } }
+    if(sh>50){ g.fillStyle='#070914'; g.fillRect(sx-6,sy-6,sw+12,sh+12); g.fillStyle='#0b1028'; g.fillRect(sx,sy,sw,sh); g.fillStyle='#14173a'; g.fillRect(w/2-30,deskY-18,60,18);
+      g.font='600 11px '+cssVar('--mono'); g.fillStyle='#a6fff4'; g.fillText(`${PROJ.name.toUpperCase().slice(0,28)} · ${CTRL.bpm} BPM · ${PROJ.tracks.length} TRACKS`,sx+10,sy+16);
+      if(bands){ const n=48; for(let i=0;i<n;i++){ const idx=Math.floor(Math.pow(i/n,1.7)*300)+1, v=bands[idx]/255, bh=v*(sh-30); g.fillStyle=i%6===0?'#ff6fb5':(i%3===0?'#9b7bff':'#45e3d3'); g.fillRect(sx+10+i*(sw-20)/n,sy+sh-6-bh,(sw-20)/n-2,bh); } }
+      if(TR.running && LOOP.L){ const pos=mod(LOOP.rawBeat(),LOOP.L)/LOOP.L; g.fillStyle='#ff6fb5'; g.fillRect(sx+10+pos*(sw-20),sy+22,2,sh-28); } }
     // monitors
     if(w>760){ const mw=Math.min(110,w*0.09), mh=mw*1.45, my=deskY-mh-6;
-      [[w*0.06,1],[w*0.94-mw,-1]].forEach(([mx])=>{ g.fillStyle='#111214'; g.fillRect(mx,my,mw,mh); g.strokeStyle='#2c2f35'; g.strokeRect(mx+0.5,my+0.5,mw-1,mh-1);
+      [[w*0.06,1],[w*0.94-mw,-1]].forEach(([mx])=>{ g.fillStyle='#0e0f1f'; g.fillRect(mx,my,mw,mh); g.strokeStyle='#2b2f55'; g.strokeRect(mx+0.5,my+0.5,mw-1,mh-1);
         const cx=mx+mw/2, wy=my+mh*0.66, r=mw*0.33*(1+lowE*0.12);
-        g.beginPath(); g.arc(cx,wy,mw*0.38,0,Math.PI*2); g.fillStyle='#1c1d20'; g.fill();
+        g.beginPath(); g.arc(cx,wy,mw*0.38,0,Math.PI*2); g.fillStyle='#181a33'; g.fill();
         const cone=g.createRadialGradient(cx,wy,2,cx,wy,r); cone.addColorStop(0,'#4a4d55'); cone.addColorStop(0.5,'#202226'); cone.addColorStop(1,'#34373e'); g.beginPath(); g.arc(cx,wy,r,0,Math.PI*2); g.fillStyle=cone; g.fill();
         g.beginPath(); g.arc(cx,my+mh*0.22,mw*0.12,0,Math.PI*2); g.fillStyle='#2a2c31'; g.fill(); g.beginPath(); g.arc(cx,my+mh*0.22,mw*0.05,0,Math.PI*2); g.fillStyle='#55585f'; g.fill();
         g.fillStyle=lvl>0.02?'#7bd88f':'#3a3d43'; g.fillRect(mx+mw-12,my+mh-10,5,3); }); }

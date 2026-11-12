@@ -13,7 +13,7 @@ $('#bpm').addEventListener('change',e=>setTempo(+e.target.value));
 
 /* ---------- transport + looper ---------- */
 const TR={running:false,t0:0,schedT:0};
-const LAYER_COLORS=['#ff9b42','#5ccfdb','#c792ea','#7bd88f','#f2c14e','#ff7a90','#82aaff','#e8e4dc'];
+const LAYER_COLORS=['#9b7bff','#45e3d3','#c792ea','#7bd88f','#f2c14e','#ff7a90','#82aaff','#e8e4dc'];
 const LOOP={
   state:'empty', L:0, fixed:0, layers:store.get('loopLayers',[]), pass:null, open:new Map(), voices:new Set(), lastPress:0, seq:0,
   capturing(){ return this.state==='counting'||this.state==='recording'||this.state==='overdub'; },

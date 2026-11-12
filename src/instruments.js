@@ -118,6 +118,7 @@ const BUILTIN=[
   {id:'drums',name:'Synth Kit',cat:'Drums',desc:'Synthesized GM kit with clap, cowbell and cymbals',play:playDrum,drums:true,percussive:true,fxp:'drums',gm:0}
 ];
 const CAT_ORDER=['Keys','Orchestra','Winds & brass','World','Guitar','Synth','Bass','Drums'];
+const CAT_COLOR={Keys:'#9b7bff',Orchestra:'#ff6fb5','Winds & brass':'#ffb37a',World:'#ffd166',Guitar:'#ff8a8a',Synth:'#6fb6ff',Bass:'#7ee08a',Drums:'#45e3d3',Mine:'#c48bff'};
 /* the effect settings each sound starts with; anything not listed sits at neutral */
 const FX_PRESETS={piano:{reverb:0.22},epiano:{reverb:0.18,chorus:0.25},organ:{reverb:0.15,chorus:0.2},mallet:{reverb:0.25,echo:0.1},keys:{reverb:0.2},
   strings:{reverb:0.38},choir:{reverb:0.45},brass:{reverb:0.2},world:{reverb:0.28,echo:0.12},guitar:{reverb:0.2,chorus:0.15},
@@ -157,7 +158,7 @@ function updateZoneUI(){
 }
 function renderRack(){
   const mk=inst=>{ const i=ORDER.indexOf(inst.id), k=i<10?String((i+1)%10):'', loading=inst.set&&!LOADED[inst.set];
-    return `<div class="card" draggable="true" data-id="${inst.id}"${inst.set?` data-set="${inst.set}"`:''}><button class="inst" type="button" data-id="${inst.id}" title="Load on the keys"><span class="nm">${esc(inst.name)}</span>${k?`<span class="kbd" title="Computer key">${k}</span>`:'<span></span>'}<span class="ds">${esc(inst.desc)}</span></button><div class="card-z"><button class="zb k" type="button" data-zone="keys" data-id="${inst.id}" aria-pressed="false">Keys</button><button class="zb p" type="button" data-zone="pads" data-id="${inst.id}" aria-pressed="false">Pads</button></div>${inst.custom?`<button class="del" type="button" data-del="${inst.id}" aria-label="Delete ${esc(inst.name)}" title="Delete">×</button>`:''}</div>`; };
+    return `<div class="card" draggable="true" style="--cc:${CAT_COLOR[inst.cat]||'#9b7bff'}" data-id="${inst.id}"${inst.set?` data-set="${inst.set}"`:''}><button class="inst" type="button" data-id="${inst.id}" title="Load on the keys"><span class="nm">${esc(inst.name)}</span>${k?`<span class="kbd" title="Computer key">${k}</span>`:'<span></span>'}<span class="ds">${esc(inst.desc)}</span></button><div class="card-z"><button class="zb k" type="button" data-zone="keys" data-id="${inst.id}" aria-pressed="false">Keys</button><button class="zb p" type="button" data-zone="pads" data-id="${inst.id}" aria-pressed="false">Pads</button></div>${inst.custom?`<button class="del" type="button" data-del="${inst.id}" aria-label="Delete ${esc(inst.name)}" title="Delete">×</button>`:''}</div>`; };
   $('#catTabs').innerHTML=['All',...CAT_ORDER].map(c=>`<button class="tab" type="button" role="tab" data-cat="${c}" aria-selected="${RACK.cat===c}">${c}</button>`).join('');
   const q=RACK.q.trim().toLowerCase(); let h='';
   CAT_ORDER.forEach(cat=>{ if(RACK.cat!=='All'&&RACK.cat!==cat) return; const list=BUILTIN.filter(i=>i.cat===cat&&(!q||(i.name+' '+i.desc+' '+cat).toLowerCase().includes(q))); if(list.length) h+=`<div class="cat-h">${cat}</div>`+list.map(mk).join(''); });
