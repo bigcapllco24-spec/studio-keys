@@ -19,6 +19,15 @@ const store={
 let toastTimer=0;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),3200); }
 function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+/* colour theme: velvet (default), plum, ink. TC caches the colours canvases need. */
+const TC={};
+function themeColors(){ ['--t0','--t1','--t2','--t3','--t4','--t5','--t6','--t7','--t8','--t9','--accent','--signal','--ink','--muted','--line','--panel','--raised','--bg'].forEach(k=>TC[k.slice(2)]=cssVar(k)); }
+function setTheme(t){ t=['velvet','plum','ink'].includes(t)?t:'velvet'; if(t==='velvet') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t;
+  try{ localStorage.setItem('studiokeys.theme',t); }catch(e){} themeColors();
+  document.querySelectorAll('.themes [data-theme]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.theme===t)));
+  if(typeof drawRolls==='function'){ try{ drawRolls(); drawRuler(); if(ED.tid) drawEditor(); }catch(e){} } }
+(function(){ let t='velvet'; try{ t=localStorage.getItem('studiokeys.theme')||'velvet'; }catch(e){} setTheme(t);
+  document.addEventListener('click',e=>{ const b=e.target.closest('.themes [data-theme]'); if(b) setTheme(b.dataset.theme); }); })();
 
 /* ---------- persisted controls ---------- */
 const CTRL=Object.assign({volume:80,curve:'linear',transpose:0,octave:4,bpm:120,metro:true,countIn:true,quant:0.25,loopLen:0},store.get('ctrl',{}));
