@@ -1,6 +1,6 @@
 
 /* ---------- song project: tracks, transport, recording, takes, saving, export ---------- */
-const TRACK_COLORS=['#9b7bff','#45e3d3','#ff6fb5','#ffb37a','#6fb6ff','#7ee08a','#ffd166','#c48bff','#ff8a8a','#5ad1ff'];
+const TRACK_COLORS=['#c8a96e','#8fae94','#7f9bb3','#c27e66','#a58fa8','#a9a96b','#d2b48c','#6fa39c','#c49090','#9a958a'];
 const newProject=()=>({id:'p'+Date.now().toString(36),name:'Untitled song',bars:4,key:null,style:null,tracks:[]});
 let PROJ=Object.assign(newProject(),store.get('project',{}));
 const AUD=new Map();

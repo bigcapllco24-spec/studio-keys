@@ -118,7 +118,7 @@ const BUILTIN=[
   {id:'drums',name:'Synth Kit',cat:'Drums',desc:'Synthesized GM kit with clap, cowbell and cymbals',play:playDrum,drums:true,percussive:true,fxp:'drums',gm:0}
 ];
 const CAT_ORDER=['Keys','Orchestra','Winds & brass','World','Guitar','Synth','Bass','Drums'];
-const CAT_COLOR={Keys:'#9b7bff',Orchestra:'#ff6fb5','Winds & brass':'#ffb37a',World:'#ffd166',Guitar:'#ff8a8a',Synth:'#6fb6ff',Bass:'#7ee08a',Drums:'#45e3d3',Mine:'#c48bff'};
+const CAT_COLOR={Keys:'#c8a96e',Orchestra:'#b48f9e','Winds & brass':'#c99a6b',World:'#b5a56a',Guitar:'#c27e66',Synth:'#7f9bb3',Bass:'#8fae94',Drums:'#6fa39c',Mine:'#a58fa8'};
 /* the effect settings each sound starts with; anything not listed sits at neutral */
 const FX_PRESETS={piano:{reverb:0.22},epiano:{reverb:0.18,chorus:0.25},organ:{reverb:0.15,chorus:0.2},mallet:{reverb:0.25,echo:0.1},keys:{reverb:0.2},
   strings:{reverb:0.38},choir:{reverb:0.45},brass:{reverb:0.2},world:{reverb:0.28,echo:0.12},guitar:{reverb:0.2,chorus:0.15},
