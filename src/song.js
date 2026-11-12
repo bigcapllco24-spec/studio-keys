@@ -107,7 +107,7 @@ function songAdd(o={}){ const src=o.copyOf?songFind(o.copyOf):null; let made=nul
 const songDuplicate=(ref,at)=>{ const s=songFind(ref); return s?songAdd({copyOf:s.id,at}):null; };
 function songRemove(ref){ const s=songFind(ref); if(!s) return false; const S=songSections(); if(S.length<2){ toast('A song needs at least one section.'); return false; }
   const i=S.indexOf(s); songEdit(S=>{ S.splice(S.indexOf(s),1); },{structure:true});
-  if(SONG.view.sel===s.id) SONG.view.sel=(S[Math.min(i,S.length-1)]||{}).id||null; if(SONG.view.loop&&SONG.view.loop.sid===s.id) SONG.view.loop=null; songViewSave(); songRender();
+  if(SONG.view.sel===s.id) SONG.view.sel=(S[Math.min(i,S.length-1)]||{}).id||null; if(SONG.view.loop&&SONG.view.loop.sid===s.id) SONG.view.loop=null; songViewSave(); songUIState();
   songChip(`Deleted ${s.name}`); return true; }
 function songMove(ref,index){ const s=songFind(ref); if(!s) return false; const S=songSections(), i=S.indexOf(s); index=clamp(Math.round(index),0,S.length-1); if(i===index) return false;
   songEdit(S=>{ S.splice(i,1); S.splice(index,0,s); },{structure:true}); songFlash({sections:[s.id]},`Moved ${s.name}`); return true; }
@@ -264,16 +264,16 @@ function songLaneHTML(t){ const S=songSections(), px=songPx(); let x=0;
     const h=`<button type="button" class="part${on?' on':''}${w<26?' tiny':''}" data-sid="${s.id}" data-tid="${t.id}" aria-pressed="${on}" style="left:${x}px;width:${Math.max(2,w-2)}px;--pv:var(--pv${v});--pw:${PROJ.bars*px}px;--po:${-(s.off||0)/4*px}px" aria-label="${esc(t.name)} in ${esc(s.name)}${v!=='A'?', pattern '+v:''}" title="${esc(t.name)} in ${esc(s.name)}: click to switch ${on?'off':'on'} · double-click to edit the notes">${on&&v!=='A'?`<i class="pbadge">${v}</i>`:''}${wo?`<i class="pwo">no ${esc(wo.join(', '))}</i>`:''}</button>`;
     x+=w; return h; }).join('');
   return `<div class="slane" data-lane="${t.id}"><div class="sl-in" style="width:${x+84}px">${parts}</div></div>`; }
-function songRender(){ songUI(); if(!songOn()||!$('#songStrip')) return;
+function songRender(){ songUI(); if(!songOn()||!$('#songStrip')) return; const fk=songFocusKey();
   const S=songSections(), px=songPx(), sel=SONG.view.sel, lp=SONG.view.loop&&SONG.view.loop.sid; let x=0;
   $('#songStrip').style.width=(songBars()*px+84)+'px';
-  $('#songStrip').innerHTML=S.map(s=>{ const w=s.bars*px, h=`<div class="sec k-${s.kind}${s.id===sel?' cur':''}${s.id===lp?' looped':''}${w<46?' tiny':''}" data-sid="${s.id}" style="left:${x}px;width:${Math.max(4,w-2)}px">
+  $('#songStrip').innerHTML=S.map(s=>{ const w=s.bars*px, h=`<div class="sec k-${s.kind}${s.id===sel?' cur':''}${s.id===lp?' looped':''}${w<46?' tiny':w<112?' narrow':''}" data-sid="${s.id}" style="left:${x}px;width:${Math.max(4,w-2)}px">
       <button type="button" class="sname" aria-pressed="${s.id===sel}" title="${esc(s.name)} · ${s.bars} bars · drag to move, Alt+drag copies · double-click to rename · right-click for more">${esc(s.name)}</button><span class="sbars mono">${s.bars}</span>${s.end&&s.end.to&&s.end.to!=='none'?`<i class="send" title="Into the next part: ${esc(s.end.to)}"></i>`:''}<button type="button" class="smore" aria-haspopup="menu" aria-label="More for ${esc(s.name)}" title="More">⋯</button><span class="rz" title="Drag to make ${esc(s.name)} longer or shorter (Alt: 1 bar)"></span></div>`; x+=w; return h; }).join('')
     +`<button type="button" class="btn small sadd" style="left:${x+6}px" title="Add an 8-bar section at the end">+ Add</button>`;
   $('#songLen').textContent=songLenText();
   $('#songFollow').setAttribute('aria-pressed',String(!!SONG.view.follow));
   $('#songMap').innerHTML=S.map(s=>`<button type="button" class="smb k-${s.kind}${s.id===lp?' looped':''}" data-sid="${s.id}" style="flex-grow:${s.bars}" aria-pressed="${s.id===lp}" title="Tap to loop ${esc(s.name)}"><b>${esc(s.name)}</b><span>${s.bars} bars</span></button>`).join('')+'<span class="hint smap-hint">Tap a section to loop it. Editing parts needs a tablet or a computer.</span>';
-  songPreviews(); songScrollSync(); songApplyFlash(); }
+  songPreviews(); songScrollSync(); songApplyFlash(); if(fk) songRefocus(fk); }
 function songPreviews(){ PROJ.tracks.forEach(t=>{ const lane=document.querySelector(`.slane[data-lane="${t.id}"]`); if(!lane) return; const used=new Set(['A']); songSections().forEach(s=>{ const p=s.parts[t.id]; if(p&&p.variant) used.add(p.variant); });
   used.forEach(v=>{ try{ lane.style.setProperty('--pv'+v,`url("${songPvURL(t,v)}")`); }catch(e){} }); }); }
 function songScrollSync(){ const sc=$('#songScroll'); if(!sc) return; $('#playlist').style.setProperty('--sx',sc.scrollLeft+'px'); songDrawRuler(); }
