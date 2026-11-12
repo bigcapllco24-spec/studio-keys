@@ -140,10 +140,12 @@
       <button class="btn tbtn" type="button" id="playBtn" title="Play the song">▶ Play</button>
       <button class="btn tbtn" type="button" id="stopBtn" title="Stop">■ Stop</button>
       <button class="loopbtn" type="button" id="loopBtn" data-state="empty"><span class="led" id="loopLed"></span><span id="loopLbl">Record loop</span></button>
-      <span class="pos mono" id="posDisp" title="Bar . beat">1 . 1</span>
+      <span class="pos mono" id="posDisp" title="Bar . beat" aria-live="off">1 . 1</span>
+      <span class="seg songseg" id="songSeg" role="group" aria-label="Play the loop or the whole song"><button type="button" data-songmode="loop" aria-pressed="true" title="Loop: the pattern repeats">Loop</button><button type="button" data-songmode="song" aria-pressed="false" title="Song: the sections play in order, start to end">Song</button></span>
+      <button class="btn small" type="button" id="songMake" aria-haspopup="menu" aria-expanded="false" title="Lay your loop out as a song: a short one for a reel, or a full track">Make it a song ▾</button>
       <span class="tempo"><label for="bpm">BPM</label><input class="input inline mono" type="number" id="bpm" min="40" max="240" step="0.1" value="120"><button class="btn small" type="button" id="tapBtn">Tap</button><span class="ind" title="Follows MIDI clock when your controller sends it"><span class="led" id="clockLed"></span>Clock</span></span>
       <label for="keySel"><select class="select inline" id="keySel" aria-label="Key"></select><span class="hint" id="keyInfo"></span></label>
-      <label for="barsSel">Length <select class="select inline" id="barsSel"><option value="1">1 bar</option><option value="2">2 bars</option><option value="4" selected>4 bars</option><option value="8">8 bars</option><option value="16">16 bars</option></select><button class="btn small ghost" type="button" id="addBars" title="Double the length; parts repeat">×2</button></label>
+      <label for="barsSel"><span id="barsLbl" title="How long the loop (pattern) is">Length</span> <select class="select inline" id="barsSel"><option value="1">1 bar</option><option value="2">2 bars</option><option value="4" selected>4 bars</option><option value="8">8 bars</option><option value="16">16 bars</option></select><button class="btn small ghost" type="button" id="addBars" title="Double the length; parts repeat">×2</button></label>
       <label for="metro"><input type="checkbox" id="metro"> Metronome</label>
       <label for="countIn"><input type="checkbox" id="countIn"> Count-in</label>
       <label for="quant">Quantize <select class="select inline" id="quant"><option value="0">Off</option><option value="0.25">1/16</option><option value="0.5">1/8</option><option value="1">1/4</option></select></label>
@@ -165,6 +167,17 @@
     </div>
 
     <div class="playlist" id="playlist">
+      <div class="song-head" id="songHead" hidden>
+        <div class="sh-corner">
+          <div class="sh-l1"><b class="sh-len mono" id="songLen">4 bars · 0:08</b><span class="song-chip" id="songChip" hidden role="status"><span id="songChipT"></span><button class="lk" type="button" id="songChipU">Undo</button></span></div>
+          <div class="sh-l2"><button class="btn small" type="button" id="songAddSec" title="Add an 8-bar section at the end">+ Section</button>
+            <span class="seg" role="group" aria-label="Zoom"><button type="button" id="songZOut" title="Zoom out (−)" aria-label="Zoom out">−</button><button type="button" id="songZIn" title="Zoom in (+)" aria-label="Zoom in">+</button><button type="button" id="songZFit" title="Show the whole song (W)">Fit</button></span>
+            <button class="btn small ghost" type="button" id="songFollow" aria-pressed="true" title="Scroll with the playhead">Follow</button></div>
+        </div>
+        <div class="sh-time"><canvas id="songRuler" title="Click to play from that bar" aria-label="Song ruler: click to play from a bar"></canvas><div class="sviewport" id="songScroll"><div class="sstrip" id="songStrip" role="toolbar" aria-label="Song sections"></div></div></div>
+      </div>
+      <div class="song-map" id="songMap" hidden role="group" aria-label="Song map: tap a section to loop it"></div>
+      <div class="hint song-hint" id="songHint" hidden>Click a part to switch it on or off · double-click it to edit its notes · drag a section to move it, its right edge to resize (Alt+drag copies) · right-click for more · with the song area selected: Space play · Ctrl/Cmd+D duplicate · Ctrl/Cmd+L loop · Delete · + − W zoom · Home</div>
       <div class="pl-head"><span class="pl-corner">Tracks</span><canvas id="ruler" aria-hidden="true"></canvas></div>
       <div class="tracks" id="tracks"></div>
       <div class="drop-hint">Drop audio or MIDI files to add them as tracks</div>
@@ -184,9 +197,11 @@
         <button class="btn small ghost" type="button" id="edClear">Clear notes</button>
         <button class="btn small" type="button" id="edClose">Close</button>
       </div>
+      <div class="ed-pat" id="edPat" hidden></div>
       <div class="ed-wrap" id="edWrap"><canvas id="edCanvas" aria-label="Note editor"></canvas><div class="ed-play" id="edPlay"></div></div>
     </div>
 
+    <div class="song-menu" id="songMenu" role="menu" hidden></div>
     <div class="mixer-wrap">
       <h3>Live mixer</h3>
       <div class="mixer" id="mixer"></div>
