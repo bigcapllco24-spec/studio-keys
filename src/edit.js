@@ -12,10 +12,10 @@ function undoNote(){
   UNDO.t=now; UNDO.redo=[]; UNDO.last=j; undoButtons();
 }
 const _saveProject=saveProject;
-saveProject=function(){ undoNote(); _saveProject(); };
+saveProject=function(){ if(typeof songSync==='function') songSync(); undoNote(); _saveProject(); };
 function applyState(j){
   UNDO.busy=true; const o=JSON.parse(j);
-  PROJ=Object.assign(newProject(),o.p); if(o.bpm&&o.bpm!==CTRL.bpm) setTempo(o.bpm);
+  PROJ=migrateSong(Object.assign(newProject(),o.p)); SONG.ver++; if(o.bpm&&o.bpm!==CTRL.bpm) setTempo(o.bpm);
   if(ED.tid&&!PROJ.tracks.find(t=>t.id===ED.tid)) closeEditor(); ED.sel=new Set();
   if(!PROJ.tracks.length&&LOOP.state!=='empty'){ loopStop(); LOOP.state='empty'; } else if(PROJ.tracks.length&&LOOP.state==='empty') LOOP.state='stopped';
   loadAudioFor(PROJ).then(()=>drawRolls()); refreshTrackGains(); renderTracks(); uiLoop(); _saveProject(); UNDO.last=j; UNDO.busy=false; undoButtons();
