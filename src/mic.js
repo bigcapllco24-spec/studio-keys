@@ -28,7 +28,7 @@ function micStop(){
 }
 $('#micBtn').onclick=()=>MIC.on?micStop():micStart();
 function micNoteOn(n){
-  const zone=ASSIST.listening?'none':$('#micZone').value; MIC.active=n; MIC.activeT=performance.now(); MIC.zone=zone; ASSIST.onMicNote(n,true);
+  const zone=(ASSIST.listening||LOOP.state==='take'||LOOP.state==='counting')?'none':$('#micZone').value; MIC.active=n; MIC.activeT=performance.now(); MIC.zone=zone; ASSIST.onMicNote(n,true);
   MIC.hist.push({n,t0:(performance.now()-MIC.t0)/1000,t1:null}); if(MIC.hist.length>300) MIC.hist.shift();
   if(LOOP.state==='take') TAKE.noteOn(n,MIC.vel);
   if(zone!=='none') noteOn(n,MIC.vel,'mic',zone==='pads'?{zone:'pads',pitch:n}:{zone:'keys'}); else lit(n,1);

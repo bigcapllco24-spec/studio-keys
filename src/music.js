@@ -99,12 +99,12 @@ function genBass(style,L,seed){
   return ev;
 }
 function voice(pcs,lo=55){ return pcs.map(pc=>nearestAbove(pc,lo)).sort((a,b)=>a-b); }
-function genChords(style,L,seed){
-  const st=STYLES[style]||STYLES.house, {plan}=chordPlan(), ev=[], r=rng(seed||9), rh=[[0,0.75,1.5],[0,0.75,1.5,2.5,3.25],[0.5,1.25,2,2.75,3.5],[0,1.5,2.25,3]][Math.floor(r()*4)];
+function genChords(style,L,seed,csOver){
+  const st=STYLES[style]||STYLES.house, cs=csOver||st.chordStyle, {plan}=chordPlan(), ev=[], r=rng(seed||9), rh=[[0,0.75,1.5],[0,0.75,1.5,2.5,3.25],[0.5,1.25,2,2.75,3.5],[0,1.5,2.25,3]][Math.floor(r()*4)];
   for(let bar=0;bar<L/4;bar++){
     const c=plan[bar%plan.length], base=bar*4, notes=voice(st.chordStyle==='seventh'?c.sev:c.pcs,57);
     const hit=(b,d,v=0.75,ns=notes,strum=0)=>ns.forEach((n,i)=>ev.push({b:base+b+i*strum,d,n,v}));
-    switch(st.chordStyle){
+    switch(cs){
       case 'stabs': [0.5,1.5,2.5,3.5].forEach(b=>hit(b,0.3,0.8)); break;
       case 'pulse8': for(let s=0;s<8;s++) hit(s/2,0.45,s%2?0.6:0.78); break;
       case 'seventh': hit(0,3.8,0.65,notes,0.03); break;

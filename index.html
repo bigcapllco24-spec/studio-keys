@@ -2963,12 +2963,12 @@ function genBass(style,L,seed){
   return ev;
 }
 function voice(pcs,lo=55){ return pcs.map(pc=>nearestAbove(pc,lo)).sort((a,b)=>a-b); }
-function genChords(style,L,seed){
-  const st=STYLES[style]||STYLES.house, {plan}=chordPlan(), ev=[], r=rng(seed||9), rh=[[0,0.75,1.5],[0,0.75,1.5,2.5,3.25],[0.5,1.25,2,2.75,3.5],[0,1.5,2.25,3]][Math.floor(r()*4)];
+function genChords(style,L,seed,csOver){
+  const st=STYLES[style]||STYLES.house, cs=csOver||st.chordStyle, {plan}=chordPlan(), ev=[], r=rng(seed||9), rh=[[0,0.75,1.5],[0,0.75,1.5,2.5,3.25],[0.5,1.25,2,2.75,3.5],[0,1.5,2.25,3]][Math.floor(r()*4)];
   for(let bar=0;bar<L/4;bar++){
     const c=plan[bar%plan.length], base=bar*4, notes=voice(st.chordStyle==='seventh'?c.sev:c.pcs,57);
     const hit=(b,d,v=0.75,ns=notes,strum=0)=>ns.forEach((n,i)=>ev.push({b:base+b+i*strum,d,n,v}));
-    switch(st.chordStyle){
+    switch(cs){
       case 'stabs': [0.5,1.5,2.5,3.5].forEach(b=>hit(b,0.3,0.8)); break;
       case 'pulse8': for(let s=0;s<8;s++) hit(s/2,0.45,s%2?0.6:0.78); break;
       case 'seventh': hit(0,3.8,0.65,notes,0.03); break;
@@ -3400,7 +3400,7 @@ function shapePart(notes,part,key){
 const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
   async start(part){ this.part=PART_NAME[part]||part==='voice'?part:'melody';
     const c=ensureAudio(); if(!c) return;
-    if(!MIC.on){ await micStart(); if(!MIC.on) return; }
+    this.micByTake=!MIC.on; if(!MIC.on){ await micStart(); if(!MIC.on) return; }
     if(TR.running) loopStop();
     if(!PROJ.tracks.length){ PROJ.bars=PROJ.bars||4; }
     PROJ.tracks.forEach(t=>{ t.cyc=-1; t.events.forEach(e=>e.cyc=-1); });
@@ -3417,13 +3417,20 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     setOrb('listening',`Sing ${w} now: ${PROJ.bars} bar${PROJ.bars>1?'s':''}. ${this.part==='voice'?'':'Only the drums play so I can hear you clearly.'}`); if(typeof showSung==='function'){ ASSIST.sung=[]; showSung(0,false); } },
   noteOn(n,v){ if(LOOP.state!=='take') return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60; this.noteOff(); this.open={n,v,b:Math.max(0,b)}; },
   noteOff(){ if(!this.open) return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60, o=this.open; this.open=null; if(b-o.b>0.12) this.notes.push({b:o.b,d:b-o.b,n:o.n,v:o.v}); },
-  cancel(){ this.chunks=[]; this.notes=[]; this.open=null; TAKE_GUIDE=false; refreshTrackGains(); $('#micStatus').textContent='Take cancelled.'; setOrb(ASSIST.listening?'listening':'idle',idleText()); },
+  releaseMic(){ if(this.micByTake&&!(ASSIST.listening&&ASSIST.hum)){ this.micByTake=false; try{ micStop(); }catch(e){} } },
+  cancel(){ this.releaseMic(); this.chunks=[]; this.notes=[]; this.open=null; TAKE_GUIDE=false; refreshTrackGains(); $('#micStatus').textContent='Take cancelled.'; setOrb(ASSIST.listening?'listening':'idle',idleText()); },
   finish(){
     this.noteOff(); const c=A.ctx, L=PROJ.bars*4, sec=L*spb(), sr=c.sampleRate, pcm=new Float32Array(Math.round(sec*sr));
     this.chunks.forEach(ch=>{ const off=Math.round((ch.t-TR.t0)*sr); for(let i=0;i<ch.d.length;i++){ const j=off+i; if(j>=0&&j<pcm.length) pcm[j]=ch.d[i]; } });
     let pk=0; for(let i=0;i<pcm.length;i++) pk=Math.max(pk,Math.abs(pcm[i])); if(pk>0.001){ const g=0.85/pk; for(let i=0;i<pcm.length;i++) pcm[i]*=g; }
     const q=0.25; let notes=this.notes.map(e=>({b:Math.round(e.b/q)*q,d:Math.max(q,Math.round(e.d/q)*q),n:e.n,v:clamp(e.v/127,0.4,1)})).filter(e=>e.b<L);
-    const part=this.part; TAKE_GUIDE=false; refreshTrackGains(); setOrb(ASSIST.listening?'listening':'idle',idleText());
+    /* the live pitch tracker runs a little behind the voice; the recording itself gives exact onsets */
+    if(this.part!=='voice'&&typeof audioToNotes==='function'){ try{ const det=audioToNotes(makeBuf(pcm,sr)), sb=spb();
+      if(det.length>=Math.min(2,notes.length||2)) notes=det.map(x=>({b:Math.round(x.t0/sb/q)*q,d:Math.max(q,Math.round((x.t1-x.t0)/sb/q)*q),n:x.n,v:clamp(x.v,0.45,1)})).filter(e=>e.b<L); }catch(e){ console.warn('take analysis',e); } }
+    notes.sort((a,b)=>a.b-b.b); notes=notes.filter((e,i)=>!(i&&notes[i-1].b===e.b&&notes[i-1].n===e.n));
+    for(let i=0;i<notes.length-1;i++){ if(notes[i+1].b===notes[i].b){ notes.splice(i+1,1); i--; continue; } if(notes[i].b+notes[i].d>notes[i+1].b) notes[i].d=notes[i+1].b-notes[i].b; }
+    notes.forEach(e=>e.d=Math.min(e.d,L-e.b));
+    const part=this.part; this.releaseMic(); TAKE_GUIDE=false; refreshTrackGains(); setOrb(ASSIST.listening?'listening':'idle',idleText());
     if(part==='voice'){ const n=PROJ.tracks.filter(t=>/^Voice note/.test(t.name)).length+1; const at=makeTrack({kind:'audio',role:'voice',inst:null,name:'Voice note '+n,events:[],cyc:0,start:0,trim:0}); PROJ.tracks.push(at); AUD.set(at.id,makeBuf(pcm,sr)); IDB.put('aud:'+at.id,{sr,data:pcm},'audio').catch(()=>{});
       this.chunks=[]; this.notes=[]; LOOP.state='playing'; saveProject(); renderTracks(); uiLoop(); $('#micStatus').textContent=`Saved “${at.name}”.`;
       ASSIST.say(`Saved “${at.name}”. It plays with the loop. Say “${ASSIST.name}, turn the voice note into a bassline” to play it on an instrument.`,{chips:[at.name]}); return; }
@@ -3951,7 +3958,8 @@ function localBrain(raw){
     if(wantDrums) A.push({type:'add_drums',ref,style:style||(!ref&&/4\s*\/\s*4|four on the floor/.test(t)&&!PROJ.style?'house':undefined),kit:iw==='bass808'?'kit808':undefined,hats:hatsKind&&hatsKind!=='open'&&hatsKind!=='shaker'?hatsKind:undefined,claps,perc,shaker,open});
     else if(hatsKind) A.push({type:'hats',pattern:hatsKind,style});
     if(/\b(bass ?line|bass)\b/.test(t)) A.push({type:'add_bass',style,ref,instrument:iw&&(INST.get(iw)||{}).cat==='Bass'?iw:undefined});
-    if(/\b(chords?|pads?|harmony|progression)\b/.test(t)) A.push({type:'add_chords',style,ref,instrument:iw&&(INST.get(iw)||{}).cat!=='Bass'?iw:undefined});
+    if(iw&&!role&&/\b(add|want|put|give|layer|bring in|with|need)\b/.test(t)&&!/\b(drums?|beat|bass|chords?|melody)\b/.test(t)){ const I=INST.get(iw)||{}; if(I.cat==='Bass') A.push({type:'add_bass',style,ref,instrument:iw,new:true}); else if(/choir|strings|pad|organ|cello|brass/.test(iw)) A.push({type:'add_chords',style,ref,instrument:iw}); else A.push({type:'add_melody',style,ref,instrument:iw}); }
+    else if(/\b(chords?|pads?|harmony|progression)\b/.test(t)) A.push({type:'add_chords',style,ref,instrument:iw&&(INST.get(iw)||{}).cat!=='Bass'?iw:undefined});
     if(/\b(melody|hook|riff|tune)\b/.test(t) && !/\b(sing|hum)\b/.test(t)) A.push({type:'add_melody',style,ref,instrument:iw&&(INST.get(iw)||{}).cat!=='Bass'?iw:undefined});
   }
   if(/\b(sing|record (my )?voice|record me|vocal take|record a melody)\b/.test(t)) A.push({type:'sing'});
@@ -4037,6 +4045,11 @@ function grooveOver(a){
   else if(a.perc!=null) o.perc=clamp(Math.round(+a.perc),0,3);
   return o;
 }
+/* a new part is a new track; it replaces the last generated part of that kind only when asked (replace: true) */
+function addPart(o,a){ const replace=a.replace===true||a.mode==='replace';
+  if(replace){ const old=[...PROJ.tracks].reverse().find(t=>t.role===o.role&&t.kind==='notes'&&t.gen); if(old){ const t=addTrack(o,{replaceRole:o.role}); t.isNew=false; return t; } }
+  if(o.name&&PROJ.tracks.some(t=>t.name===o.name)){ let k=2; while(PROJ.tracks.some(t=>t.name===o.name+' '+k)) k++; o.name=o.name+' '+k; }
+  const t=addTrack(o); t.isNew=true; return t; }
 function regenTrack(t,opts={}){
   if(!t||!t.gen) return null; const s=t.style||PROJ.style||'house', seed=opts.seed||newSeed();
   if(t.role==='drums'){ const rec=Object.assign({},t.recipe||grooveRecipe(s,findArtist(t.ref)),opts.recipe||{}); rec.energy=clamp(Math.round(+rec.energy||3),1,5); const g=makeGroove(rec,L_(),seed); Object.assign(t,{events:g.events,recipe:rec,seed,desc:g.desc}); return g.desc; }
@@ -4070,11 +4083,12 @@ const ACT={
     if(t.role==='chords'&&a.progression!==false){ ensureProg(true); PROJ.tracks.filter(x=>x.gen&&(x.role==='bass'||x.role==='chords'||x.role==='melody')).forEach(x=>regenTrack(x)); return `New chord progression (${PROJ.prog.map(d=>['i','ii','iii','iv','v','vi','vii'][d]).join('–')}); bass and melody follow it`; }
     const d=regenTrack(t); return d?`${t.name}: ${d}`:null; },
   add_bass(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'bass')||(artist&&artist.sounds.bass)||STYLES[s].bass, I=loadI(id), seed=+a.seed||newSeed();
-    addTrack({role:'bass',inst:id,gen:true,name:'Bassline',events:genBass(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},{replaceRole:'bass'}); return `Bassline on ${I.name} in ${keyName(projectKey())}`; },
+    addPart({role:'bass',inst:id,gen:true,name:'Bassline',events:genBass(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},Object.assign({},a,{replace:a.replace!==false&&!a.new})); return `Bassline on ${I.name} in ${keyName(projectKey())}`; },
   add_chords(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.chords)||STYLES[s].chords, I=loadI(id), seed=+a.seed||newSeed();
-    addTrack({role:'chords',inst:id,gen:true,name:'Chords',events:genChords(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},{replaceRole:'chords'}); return `Chords on ${I.name} in ${keyName(projectKey())}`; },
+    const held=/choir|strings|pad|organ|cello|brass|darkpad/i.test(id+' '+I.name), cs=held&&!/pads|seventh|sustain/.test(STYLES[s].chordStyle)?'pads':undefined;
+    const t=addPart({role:'chords',inst:id,gen:true,name:a.instrument?I.name:'Chords',events:genChords(s,L_(),seed,cs),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name} in ${keyName(projectKey())}`; },
   add_melody(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.lead)||STYLES[s].lead||'lead', I=loadI(id), seed=+a.seed||newSeed();
-    addTrack({role:'melody',inst:id,gen:true,name:'Melody',events:genMelody(L_(),seed,s),seed,style:s,ref:artist?artist.name:undefined},{replaceRole:'melody'}); return `A melody on ${I.name}`; },
+    const t=addPart({role:'melody',inst:id,gen:true,name:a.instrument?I.name:'Melody',events:genMelody(L_(),seed,s),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name}`; },
   tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
   bars(a){ setBars(+a.bars||+a.value||4); return `${PROJ.bars} bars`; },
   key(a){ const k=parseKey(a.key||a.value); if(!k) return; setKey(k); BATCH.key=true; return `Key ${keyName(k)}`; },
@@ -4307,7 +4321,7 @@ function micStop(){
 }
 $('#micBtn').onclick=()=>MIC.on?micStop():micStart();
 function micNoteOn(n){
-  const zone=ASSIST.listening?'none':$('#micZone').value; MIC.active=n; MIC.activeT=performance.now(); MIC.zone=zone; ASSIST.onMicNote(n,true);
+  const zone=(ASSIST.listening||LOOP.state==='take'||LOOP.state==='counting')?'none':$('#micZone').value; MIC.active=n; MIC.activeT=performance.now(); MIC.zone=zone; ASSIST.onMicNote(n,true);
   MIC.hist.push({n,t0:(performance.now()-MIC.t0)/1000,t1:null}); if(MIC.hist.length>300) MIC.hist.shift();
   if(LOOP.state==='take') TAKE.noteOn(n,MIC.vel);
   if(zone!=='none') noteOn(n,MIC.vel,'mic',zone==='pads'?{zone:'pads',pitch:n}:{zone:'keys'}); else lit(n,1);
@@ -4435,7 +4449,7 @@ async function handleRequest(text){
   } else { const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
   if(!reply) reply=done.length?'Done: '+done.join(', ')+'. '+nextStep():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
   ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false; LAST_TEXT.text='';
-  ASSIST.say(reply,{chips:done}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());
+  if(BATCH.take){ ASSIST.say(reply,{chips:done,speak:false}); if(ASSIST.voice) speak('Sing after the count-in.'); } else ASSIST.say(reply,{chips:done}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());
   if(BATCH.take){ const part=BATCH.take; LAST_TAKE.part=part; afterSpeak(()=>TAKE.start(part)); }
 }
 /* ---- speech recognition with a wake name ---- */

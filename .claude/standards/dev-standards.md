@@ -16,7 +16,8 @@ Owned by the lead. Every developer reads this before every job. Last updated: 13
 - It keeps the song's vibe: never switches artist or style unless the user names one (the app also guards against invented references).
 - Every new part gets a producer's starting effects for its role and style (`roleFx` in `src/music.js`): low cuts, compression, kick sidechain on bass/pads/plucks in club styles, reverb and dotted-1/8 delay sends, width. Each track has an FX button (EQ plus effects users add as needed).
 - The bar is professional, club-ready sound that matches the owner's Spotify artists, never amateur or "AI-generated". Measure against reference tracks.
-- Singing is part of talking to the assistant: while a part is sung, only the drums play (`TAKE_GUIDE`), and humming is never thrown away as speech (`isSpeechy`).
+- Singing is part of talking to the assistant: while a part is sung, only the drums play (`TAKE_GUIDE`), humming is never thrown away as speech (`isSpeechy`), the singer's notes are NEVER played back live (the owner found the delayed copy confusing), and the part is only heard once it's analysed from the recording (`audioToNotes`), quantized and mixed. The mic turns off after a take it started.
+- "Add a choir / melody / flute" always adds a NEW track; replacing a part only when the user says replace or change.
 
 ## How we build
 - Source in `src/`, one file per area (see `.claude/CLAUDE.md` for owners). `python3 tools/build.py` writes `index.html`; never edit `index.html` by hand.

@@ -174,7 +174,7 @@ function shapePart(notes,part,key){
 const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
   async start(part){ this.part=PART_NAME[part]||part==='voice'?part:'melody';
     const c=ensureAudio(); if(!c) return;
-    if(!MIC.on){ await micStart(); if(!MIC.on) return; }
+    this.micByTake=!MIC.on; if(!MIC.on){ await micStart(); if(!MIC.on) return; }
     if(TR.running) loopStop();
     if(!PROJ.tracks.length){ PROJ.bars=PROJ.bars||4; }
     PROJ.tracks.forEach(t=>{ t.cyc=-1; t.events.forEach(e=>e.cyc=-1); });
@@ -191,13 +191,20 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     setOrb('listening',`Sing ${w} now: ${PROJ.bars} bar${PROJ.bars>1?'s':''}. ${this.part==='voice'?'':'Only the drums play so I can hear you clearly.'}`); if(typeof showSung==='function'){ ASSIST.sung=[]; showSung(0,false); } },
   noteOn(n,v){ if(LOOP.state!=='take') return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60; this.noteOff(); this.open={n,v,b:Math.max(0,b)}; },
   noteOff(){ if(!this.open) return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60, o=this.open; this.open=null; if(b-o.b>0.12) this.notes.push({b:o.b,d:b-o.b,n:o.n,v:o.v}); },
-  cancel(){ this.chunks=[]; this.notes=[]; this.open=null; TAKE_GUIDE=false; refreshTrackGains(); $('#micStatus').textContent='Take cancelled.'; setOrb(ASSIST.listening?'listening':'idle',idleText()); },
+  releaseMic(){ if(this.micByTake&&!(ASSIST.listening&&ASSIST.hum)){ this.micByTake=false; try{ micStop(); }catch(e){} } },
+  cancel(){ this.releaseMic(); this.chunks=[]; this.notes=[]; this.open=null; TAKE_GUIDE=false; refreshTrackGains(); $('#micStatus').textContent='Take cancelled.'; setOrb(ASSIST.listening?'listening':'idle',idleText()); },
   finish(){
     this.noteOff(); const c=A.ctx, L=PROJ.bars*4, sec=L*spb(), sr=c.sampleRate, pcm=new Float32Array(Math.round(sec*sr));
     this.chunks.forEach(ch=>{ const off=Math.round((ch.t-TR.t0)*sr); for(let i=0;i<ch.d.length;i++){ const j=off+i; if(j>=0&&j<pcm.length) pcm[j]=ch.d[i]; } });
     let pk=0; for(let i=0;i<pcm.length;i++) pk=Math.max(pk,Math.abs(pcm[i])); if(pk>0.001){ const g=0.85/pk; for(let i=0;i<pcm.length;i++) pcm[i]*=g; }
     const q=0.25; let notes=this.notes.map(e=>({b:Math.round(e.b/q)*q,d:Math.max(q,Math.round(e.d/q)*q),n:e.n,v:clamp(e.v/127,0.4,1)})).filter(e=>e.b<L);
-    const part=this.part; TAKE_GUIDE=false; refreshTrackGains(); setOrb(ASSIST.listening?'listening':'idle',idleText());
+    /* the live pitch tracker runs a little behind the voice; the recording itself gives exact onsets */
+    if(this.part!=='voice'&&typeof audioToNotes==='function'){ try{ const det=audioToNotes(makeBuf(pcm,sr)), sb=spb();
+      if(det.length>=Math.min(2,notes.length||2)) notes=det.map(x=>({b:Math.round(x.t0/sb/q)*q,d:Math.max(q,Math.round((x.t1-x.t0)/sb/q)*q),n:x.n,v:clamp(x.v,0.45,1)})).filter(e=>e.b<L); }catch(e){ console.warn('take analysis',e); } }
+    notes.sort((a,b)=>a.b-b.b); notes=notes.filter((e,i)=>!(i&&notes[i-1].b===e.b&&notes[i-1].n===e.n));
+    for(let i=0;i<notes.length-1;i++){ if(notes[i+1].b===notes[i].b){ notes.splice(i+1,1); i--; continue; } if(notes[i].b+notes[i].d>notes[i+1].b) notes[i].d=notes[i+1].b-notes[i].b; }
+    notes.forEach(e=>e.d=Math.min(e.d,L-e.b));
+    const part=this.part; this.releaseMic(); TAKE_GUIDE=false; refreshTrackGains(); setOrb(ASSIST.listening?'listening':'idle',idleText());
     if(part==='voice'){ const n=PROJ.tracks.filter(t=>/^Voice note/.test(t.name)).length+1; const at=makeTrack({kind:'audio',role:'voice',inst:null,name:'Voice note '+n,events:[],cyc:0,start:0,trim:0}); PROJ.tracks.push(at); AUD.set(at.id,makeBuf(pcm,sr)); IDB.put('aud:'+at.id,{sr,data:pcm},'audio').catch(()=>{});
       this.chunks=[]; this.notes=[]; LOOP.state='playing'; saveProject(); renderTracks(); uiLoop(); $('#micStatus').textContent=`Saved “${at.name}”.`;
       ASSIST.say(`Saved “${at.name}”. It plays with the loop. Say “${ASSIST.name}, turn the voice note into a bassline” to play it on an instrument.`,{chips:[at.name]}); return; }

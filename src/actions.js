@@ -76,6 +76,11 @@ function grooveOver(a){
   else if(a.perc!=null) o.perc=clamp(Math.round(+a.perc),0,3);
   return o;
 }
+/* a new part is a new track; it replaces the last generated part of that kind only when asked (replace: true) */
+function addPart(o,a){ const replace=a.replace===true||a.mode==='replace';
+  if(replace){ const old=[...PROJ.tracks].reverse().find(t=>t.role===o.role&&t.kind==='notes'&&t.gen); if(old){ const t=addTrack(o,{replaceRole:o.role}); t.isNew=false; return t; } }
+  if(o.name&&PROJ.tracks.some(t=>t.name===o.name)){ let k=2; while(PROJ.tracks.some(t=>t.name===o.name+' '+k)) k++; o.name=o.name+' '+k; }
+  const t=addTrack(o); t.isNew=true; return t; }
 function regenTrack(t,opts={}){
   if(!t||!t.gen) return null; const s=t.style||PROJ.style||'house', seed=opts.seed||newSeed();
   if(t.role==='drums'){ const rec=Object.assign({},t.recipe||grooveRecipe(s,findArtist(t.ref)),opts.recipe||{}); rec.energy=clamp(Math.round(+rec.energy||3),1,5); const g=makeGroove(rec,L_(),seed); Object.assign(t,{events:g.events,recipe:rec,seed,desc:g.desc}); return g.desc; }
@@ -109,11 +114,12 @@ const ACT={
     if(t.role==='chords'&&a.progression!==false){ ensureProg(true); PROJ.tracks.filter(x=>x.gen&&(x.role==='bass'||x.role==='chords'||x.role==='melody')).forEach(x=>regenTrack(x)); return `New chord progression (${PROJ.prog.map(d=>['i','ii','iii','iv','v','vi','vii'][d]).join('–')}); bass and melody follow it`; }
     const d=regenTrack(t); return d?`${t.name}: ${d}`:null; },
   add_bass(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'bass')||(artist&&artist.sounds.bass)||STYLES[s].bass, I=loadI(id), seed=+a.seed||newSeed();
-    addTrack({role:'bass',inst:id,gen:true,name:'Bassline',events:genBass(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},{replaceRole:'bass'}); return `Bassline on ${I.name} in ${keyName(projectKey())}`; },
+    addPart({role:'bass',inst:id,gen:true,name:'Bassline',events:genBass(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},Object.assign({},a,{replace:a.replace!==false&&!a.new})); return `Bassline on ${I.name} in ${keyName(projectKey())}`; },
   add_chords(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.chords)||STYLES[s].chords, I=loadI(id), seed=+a.seed||newSeed();
-    addTrack({role:'chords',inst:id,gen:true,name:'Chords',events:genChords(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},{replaceRole:'chords'}); return `Chords on ${I.name} in ${keyName(projectKey())}`; },
+    const held=/choir|strings|pad|organ|cello|brass|darkpad/i.test(id+' '+I.name), cs=held&&!/pads|seventh|sustain/.test(STYLES[s].chordStyle)?'pads':undefined;
+    const t=addPart({role:'chords',inst:id,gen:true,name:a.instrument?I.name:'Chords',events:genChords(s,L_(),seed,cs),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name} in ${keyName(projectKey())}`; },
   add_melody(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.lead)||STYLES[s].lead||'lead', I=loadI(id), seed=+a.seed||newSeed();
-    addTrack({role:'melody',inst:id,gen:true,name:'Melody',events:genMelody(L_(),seed,s),seed,style:s,ref:artist?artist.name:undefined},{replaceRole:'melody'}); return `A melody on ${I.name}`; },
+    const t=addPart({role:'melody',inst:id,gen:true,name:a.instrument?I.name:'Melody',events:genMelody(L_(),seed,s),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name}`; },
   tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
   bars(a){ setBars(+a.bars||+a.value||4); return `${PROJ.bars} bars`; },
   key(a){ const k=parseKey(a.key||a.value); if(!k) return; setKey(k); BATCH.key=true; return `Key ${keyName(k)}`; },
