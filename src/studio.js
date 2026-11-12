@@ -227,7 +227,7 @@ function uiLoop(){
   $('#loopPill').innerHTML=`<span class="${ledCls}"></span><span>${pill}</span>`;
   lcd({counting:'COUNT-IN',recording:'REC',playing:'PLAY',overdub:'OVERDUB',stopped:'STOP',empty:'READY',take:'TAKE'}[st]);
   const has=PROJ.tracks.length>0;
-  $('#exportZip').disabled=!has; $('#exportMid').disabled=!has; $('#playBtn').disabled=!has||PLAYING.has(st);
+  $('#exportZip').disabled=!has; $('#exportMid').disabled=!has; $('#exportMp3').disabled=!has; $('#playBtn').disabled=!has||PLAYING.has(st);
   $('#recBtn').classList.toggle('on',st==='recording'||st==='overdub'); $('#playBtn').classList.toggle('on',PLAYING.has(st));
   document.querySelectorAll('.tp').forEach(b=>b.classList.toggle('on',(b.dataset.tp==='play'&&PLAYING.has(st))||(b.dataset.tp==='rec'&&(st==='recording'||st==='overdub'||st==='take'))||(b.dataset.tp==='loop'&&st!=='empty'&&st!=='stopped')));
 }
@@ -314,4 +314,36 @@ async function exportMidiOnly(){
   if(!PROJ.tracks.length) return; const bpm=CTRL.bpm, L=PROJ.bars*4, base=`${safeName(PROJ.name)} ${bpm}bpm ${PROJ.bars}bars`, st=$('#exportStatus');
   try{ const r=await saveFile(`${base}.mid`,new Blob([buildMidi(PROJ.tracks.filter(trackAudible),bpm,L,base)],{type:'audio/midi'})); st.textContent=r==='declined'?'Download cancelled.':'MIDI downloaded.'; }catch(e){ st.textContent='Export failed: '+e.message; }
 }
-$('#exportZip').onclick=exportZip; $('#exportMid').onclick=exportMidiOnly;
+/* ---------- MP3: the mix, looped to the chosen length, encoded with LAME (lamejs, LGPL; its own script block) ---------- */
+async function makeMp3(tracks,loopsOrSeconds,onProgress){
+  if(typeof lamejs==='undefined'||!lamejs.Mp3Encoder) throw new Error('the MP3 encoder didn’t load');
+  const bpm=CTRL.bpm, L=PROJ.bars*4, loopSec=L*60/bpm, sr=44100;
+  const want=+loopsOrSeconds||60, loops=want>=30?Math.max(1,Math.min(64,Math.round(want/loopSec))):Math.max(1,Math.min(64,want));
+  const [l,r]=await renderAudio(tracks,bpm,L), n=l.length, total=n*loops;
+  let pk=0; for(let i=0;i<n;i++){ const a=Math.abs(l[i]), b=Math.abs(r[i]); if(a>pk) pk=a; if(b>pk) pk=b; }
+  const gain=pk>0.97?0.97/pk:1, fade=Math.min(Math.round(sr*2.5),Math.round(total/3));
+  const enc=new lamejs.Mp3Encoder(2,sr,192), out=[], B=1152, L16=new Int16Array(B), R16=new Int16Array(B);
+  for(let i=0,k=0;i<total;i+=B,k++){
+    const m=Math.min(B,total-i);
+    for(let j=0;j<m;j++){ const p=i+j, s=p%n; let g=gain; if(p>total-fade) g*=(total-p)/fade;
+      const a=clamp(l[s]*g,-1,1), b=clamp(r[s]*g,-1,1); L16[j]=a<0?a*0x8000:a*0x7FFF; R16[j]=b<0?b*0x8000:b*0x7FFF; }
+    const buf=enc.encodeBuffer(m<B?L16.subarray(0,m):L16,m<B?R16.subarray(0,m):R16); if(buf.length) out.push(new Uint8Array(buf));
+    if(k%300===0){ if(onProgress) onProgress(i/total); await nextFrame(); }
+  }
+  const end=enc.flush(); if(end.length) out.push(new Uint8Array(end));
+  return {blob:new Blob(out,{type:'audio/mpeg'}),seconds:total/sr,loops};
+}
+async function exportMp3(lenOverride){
+  if(!PROJ.tracks.length){ toast('Make something first, then download it as an MP3.'); return null; }
+  const tracks=PROJ.tracks.filter(trackAudible), st=$('#exportStatus'), btn=$('#exportMp3');
+  if(!tracks.length){ st.textContent='All tracks are muted.'; return null; }
+  btn.disabled=true; st.textContent='Rendering your song…';
+  try{
+    const r=await makeMp3(tracks,lenOverride||$('#mp3Len').value,p=>{ st.textContent=`Making the MP3… ${Math.round(p*100)}%`; });
+    const name=`${safeName(PROJ.name)} ${CTRL.bpm}bpm.mp3`, res=await saveFile(name,r.blob);
+    const mins=Math.floor(r.seconds/60), secs=Math.round(r.seconds%60);
+    const zipped=!!(await getDownloads()); st.textContent=res==='declined'?'Download cancelled.':`Downloaded ${name} (${mins?mins+' min ':''}${secs} s, ${(r.blob.size/1048576).toFixed(1)} MB)${zipped?'. This view can only save it inside a zip; on the live site you get the plain MP3.':''}`;
+    btn.disabled=false; return r;
+  }catch(e){ console.error(e); st.textContent='MP3 failed: '+e.message; btn.disabled=false; return null; }
+}
+$('#exportZip').onclick=exportZip; $('#exportMid').onclick=exportMidiOnly; $('#exportMp3').onclick=()=>exportMp3();

@@ -145,6 +145,10 @@ const ACT={
     t.events=shapePart(t.events,to,projectKey()); t.role=to; t.inst=partInst(to); loadI(t.inst); t.gen=false; t.name=(to==='bass'?'Bassline':to==='chords'?'Chords':'Melody')+' (from '+t.name.replace(/^(Sung|Hummed) /,'').toLowerCase()+')';
     return `${t.name} on ${INST.get(t.inst).name}`; },
   again(a){ const p=LAST_TAKE.part; if(!p) return; BATCH.take=p; return `Again: sing the ${p} after the count-in`; },
+  export(a){ const fmt=String(a.format||a.value||'mp3').toLowerCase(); const len=a.minutes?Math.round(+a.minutes*60):a.seconds?+a.seconds:a.loops?Math.min(16,+a.loops):undefined;
+    if(!PROJ.tracks.length) return; if(/zip|stem|ableton|wav/.test(fmt)){ exportZip(); return 'Packing the Ableton zip (WAV mix, stems and MIDI)'; } if(/mid/.test(fmt)){ exportMidiOnly(); return 'Downloading the MIDI file'; }
+    if(len) { const sel=$('#mp3Len'); if(sel && [...sel.options].some(o=>+o.value===len)) sel.value=String(len); }
+    exportMp3(len); return 'Making your MP3, the download starts in a few seconds'; },
   save(a){ if(a.name) PROJ.name=String(a.name).slice(0,60); saveNamed(); return `Saved “${PROJ.name}”`; },
   new_project(a){ newSong(a.name); return 'New song'; },
   rename(a){ if(!a.name) return; PROJ.name=String(a.name).slice(0,60); saveProject(); return `Song renamed to “${PROJ.name}”`; }

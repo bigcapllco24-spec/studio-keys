@@ -29,6 +29,7 @@ Leave the repo untouched in Design mode (`git status` clean at the end). Report 
 ## Sound rules
 - Every new sound needs a fitting effect preset (`FX_PRESETS`) and levels matched to the others (render and compare RMS).
 - Sample sources must be free to use (CC0, CC BY with credit in the README, or synthesized). Never rip sounds from commercial packs or songs. New samples go through `tools/build_samples.py`; keep `index.html` growth under 1 MB per release unless the lead approves.
+- Exports: the Ableton zip (WAV mix, stems, MIDI) and the MP3 (`makeMp3` in `src/studio.js`, LAME via `src/vendor/lame.min.js`, never modify that file). Keep both loud enough and never clipping.
 - No clipping on the master at full volume with a full project (drums, bass, chords, melody, voice).
 
 ## Testing (required before you report)

@@ -23,7 +23,7 @@ Spotify needs a one-time setup: create an app at developer.spotify.com (Spotify 
 
 ## Songs and tracks
 
-Tracks work like a small DAW: rename, change instrument, volume, mute/solo, play one track on its own, duplicate, delete, and open an editor (a piano roll for instruments, a step sequencer for drums) with draw and select tools, box select, Alt+drag to copy, Ctrl+C/V/D, arrow-key nudges and a velocity lane. Everything is undoable (Ctrl+Z / Ctrl+Shift+Z). Drop audio files (voice memos too) or MIDI files on the tracks to import them; drag audio clips to line them up, and use **Turn into notes** to play a recording on an instrument. Songs autosave in the browser; **New**, **Open** and **Save a copy** manage several songs. Export as a zip of WAV stems plus MIDI for Ableton or FL Studio.
+Tracks work like a small DAW: rename, change instrument, volume, mute/solo, play one track on its own, duplicate, delete, and open an editor (a piano roll for instruments, a step sequencer for drums) with draw and select tools, box select, Alt+drag to copy, Ctrl+C/V/D, arrow-key nudges and a velocity lane. Everything is undoable (Ctrl+Z / Ctrl+Shift+Z). Drop audio files (voice memos too) or MIDI files on the tracks to import them; drag audio clips to line them up, and use **Turn into notes** to play a recording on an instrument. Songs autosave in the browser; **New**, **Open** and **Save a copy** manage several songs. **Download MP3** saves the song (looped to 1 loop, 4 loops, or about 1, 2 or 3 minutes) as a 192 kbps MP3; you can also just say "download it as an MP3". **Export for Ableton** gives a zip of WAV stems plus MIDI for Ableton or FL Studio.
 
 ## Run it
 
@@ -70,6 +70,9 @@ python3 tools/build.py
 
 `tools/build_samples.py` and `tools/fetch_fluid.sh` rebuild `src/samples.json` from the source sample libraries.
 
+## Themes
+Three colour themes, switched with the dots in the top bar: **Velvet** (wine red, default), **Sapphire** (deep blue) and **Emerald** (bottle green).
+
 ## Sound credits
 
 - Grand Piano: Salamander Grand Piano V2 by Alexander Holm (CC BY 3.0).
@@ -79,3 +82,6 @@ python3 tools/build.py
 
 ## Development team
 The project is developed by an AI team run from `.claude/` (playbook in `.claude/CLAUDE.md`, roles in `.claude/agents/`, standards in `.claude/standards/`). Scheduled check-ins design, build and test changes; the owner approves designs and test links in the Studio Keys HQ app before anything goes live. `bash .claude/tools/check.sh` runs the build, syntax checks and the headless smoke test (`tests/smoke.mjs`).
+
+## Third-party code
+- MP3 encoding: [lamejs](https://github.com/zhuker/lamejs) 1.2.1, a JavaScript port of [LAME](https://lame.sourceforge.io), licensed LGPL-3.0. It is kept unmodified in `src/vendor/lame.min.js` and included in `index.html` as its own script block, so it can be replaced. Its license note is in `src/vendor/LAME-LICENSE.txt`.

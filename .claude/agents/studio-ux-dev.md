@@ -25,7 +25,7 @@ Leave the repo untouched in Design mode (`git status` clean at the end). Report 
 Your files are listed in the description. The bar is Ableton and FL Studio: everything editable directly, nothing hidden, fast keyboard shortcuts, undo for everything, drag and drop, and clear feedback. Today the editor has draw/select tools (B), box select, Alt+drag copy, Ctrl+C/V/D/A, arrows, a velocity lane, and undo/redo for every change (snapshots taken in `saveProject`). Audio clips move by drag and slip with Shift+drag. Files can be dropped on the tracks (audio, MIDI). Keep these working on every change.
 
 ## UI rules
-- Three themes (Velvet default, Plum, Ink) built only from CSS variables (`--t0`..`--t9` surfaces, `--accent`, `--signal`, `--ink`, `--muted`); canvases use `TC`. Matte, solid colours, no gradients or glows, no orange or brass. Reuse the components (`.btn`, `.seg`, `.sc`, `.lk`, `.card`); theme styles live at the end of `src/head.html`. Check every UI change in all three themes.
+- Three themes (Velvet default, Sapphire, Emerald) built only from CSS variables (`--t0`..`--t9` surfaces, `--accent`, `--signal`, `--ink`, `--muted`); canvases use `TC`. Matte, solid colours, no gradients or glows, no orange or brass. Reuse the components (`.btn`, `.seg`, `.sc`, `.lk`, `.card`); theme styles live at the end of `src/head.html`. Check every UI change in all three themes.
 - Text a musician understands: "Sing the bassline", not "Start capture". Short labels; hints in the editor header.
 - Works at 1400 px desktop and down to a tablet; keyboard and screen-reader basics (labels, focus, aria-pressed on toggles).
 - Never block the audio thread: heavy work (pitch tracking, rendering) in chunks or after a short timeout with a toast.

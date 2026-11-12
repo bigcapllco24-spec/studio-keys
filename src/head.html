@@ -22,21 +22,21 @@
   --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
   color-scheme:dark;
 }
-/* Plum: midnight plum with a raspberry accent and lavender */
-:root[data-theme="plum"]{
-  --t0:#0b0810;--t1:#110c18;--t2:#17111f;--t3:#1d1627;--t4:#241b30;--t5:#2e233d;--t6:#3a2d4c;--t7:#4f3f64;--t8:#6b5b81;--t9:#8d7ea3;
-  --bg:#110c18;--panel:#1a1424;--raised:#231b2f;--line:#3a2d4c;
-  --ink:#f4eff9;--ink2:#e2daee;--muted:#ada1c2;--muted2:#9589ab;
-  --accent:#e0457b;--accent-rgb:224,69,123;--accent2:#b6a4ec;--warm:#e0457b;--grad:#e0457b;
-  --signal:#b6a4ec;--signal-rgb:182,164,236;
+/* Sapphire: deep navy blue with an azure accent and ice */
+:root[data-theme="sapphire"]{
+  --t0:#050a14;--t1:#09101f;--t2:#0d1628;--t3:#111c32;--t4:#16233d;--t5:#1d2d4c;--t6:#26395f;--t7:#344c7a;--t8:#4c6797;--t9:#728bb8;
+  --bg:#09101f;--panel:#0f182c;--raised:#152038;--line:#26395f;
+  --ink:#eef4fc;--ink2:#d6e1f0;--muted:#98abcb;--muted2:#8294b4;
+  --accent:#2e9bff;--accent-rgb:46,155,255;--on-accent:#fff;--accent2:#a9dcff;--warm:#2e9bff;--grad:#2e9bff;
+  --signal:#a9dcff;--signal-rgb:169,220,255;
 }
-/* Ink: blue-black ink with a scarlet accent and ivory */
-:root[data-theme="ink"]{
-  --t0:#08090c;--t1:#0d0f14;--t2:#12151b;--t3:#181b23;--t4:#1e222b;--t5:#272c37;--t6:#323846;--t7:#464e60;--t8:#626b80;--t9:#8992a6;
-  --bg:#0d0f14;--panel:#161920;--raised:#1d212a;--line:#323846;
-  --ink:#f2efe8;--ink2:#dedad1;--muted:#9ba2b1;--muted2:#868d9c;
-  --accent:#ff4655;--accent-rgb:255,70,85;--accent2:#e8dcc4;--warm:#ff4655;--grad:#ff4655;
-  --signal:#e8dcc4;--signal-rgb:232,220,196;
+/* Emerald: bottle green with a jade accent and mint */
+:root[data-theme="emerald"]{
+  --t0:#050d0a;--t1:#08130f;--t2:#0c1a15;--t3:#10211b;--t4:#152a22;--t5:#1b352b;--t6:#244538;--t7:#325c4b;--t8:#487966;--t9:#6e9c8a;
+  --bg:#08130f;--panel:#0f1d18;--raised:#14261f;--line:#244538;
+  --ink:#eef7f2;--ink2:#d5e8de;--muted:#9bbdad;--muted2:#85a798;
+  --accent:#1fbf83;--accent-rgb:31,191,131;--on-accent:#04140d;--accent2:#b4ecd2;--warm:#1fbf83;--grad:#1fbf83;
+  --signal:#b4ecd2;--signal-rgb:180,236,210;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -554,9 +554,11 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 .lk.ed-l{color:var(--accent)}
 .dial{background:conic-gradient(from -135deg,var(--accent) calc(var(--v) * 270deg),var(--t5) 0 270deg,transparent 0)}
 #exportStatus:empty{display:none}
+.mp3grp{display:inline-flex;gap:4px;align-items:center}
+#mp3Len{font-size:12px;padding:4px 8px;border-radius:10px}
 .themes{display:inline-flex;gap:6px;align-items:center;padding:4px 6px;border:1px solid var(--line);border-radius:999px;background:var(--panel)}
-.themes button{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;position:relative}
-.themes button[aria-pressed="true"]{border-color:var(--ink)}
-.themes button span{position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--panel)}
+.themes button{width:20px;height:20px;border-radius:50%;border:0;cursor:pointer;padding:0;box-shadow:inset 0 0 0 5px var(--sw,#333);outline:2px solid transparent;outline-offset:2px;transition:outline-color .15s}
+.themes button[aria-pressed="true"]{outline-color:var(--ink)}
+.themes button span{display:none}
 </style>
 </head>

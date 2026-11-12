@@ -7,9 +7,9 @@
   <nav class="jump" aria-label="Sections"><a href="#studio">Studio</a><a href="#sounds">Sounds</a><a href="#effects">Effects</a><a href="#sing">Sing</a><a href="#lab">Sound Lab</a></nav>
   <div class="pills">
     <span class="themes" role="group" aria-label="Colour theme">
-      <button type="button" data-theme="velvet" title="Velvet: wine and crimson" style="background:#2a141d"><span style="background:#e5384f"></span></button>
-      <button type="button" data-theme="plum" title="Plum: plum and raspberry" style="background:#231b2f"><span style="background:#e0457b"></span></button>
-      <button type="button" data-theme="ink" title="Ink: blue-black and scarlet" style="background:#1d212a"><span style="background:#ff4655"></span></button>
+      <button type="button" data-theme="velvet" title="Velvet: wine red and crimson" style="background:#e5384f;--sw:#2a141d"><span style="background:#e5384f"></span></button>
+      <button type="button" data-theme="sapphire" title="Sapphire: deep blue and azure" style="background:#2e9bff;--sw:#152038"><span style="background:#2e9bff"></span></button>
+      <button type="button" data-theme="emerald" title="Emerald: bottle green and jade" style="background:#1fbf83;--sw:#14261f"><span style="background:#1fbf83"></span></button>
     </span>
     <button class="pill" id="audioPill" type="button"><span class="led warn"></span><span>Sound off · click to start</span></button>
     <span class="pill" id="loopPill"><span class="led"></span><span>Studio empty</span></span>
@@ -80,7 +80,8 @@
         <button class="btn small" type="button" id="openBtn">Open song…</button>
         <button class="btn small" type="button" id="saveBtn">Save</button>
         <button class="btn small ghost" type="button" id="copyBtn">Save a copy</button>
-        <button class="btn small primary" type="button" id="exportZip">Export for Ableton (.zip)</button>
+        <span class="mp3grp"><button class="btn small primary" type="button" id="exportMp3" title="Download the song as an MP3">⬇ Download MP3</button><select class="select inline" id="mp3Len" aria-label="MP3 length" title="How long the MP3 is"><option value="1">1 loop</option><option value="4">4 loops</option><option value="60" selected>About 1 minute</option><option value="120">About 2 minutes</option><option value="180">About 3 minutes</option></select></span>
+        <button class="btn small" type="button" id="exportZip">Export for Ableton (.zip)</button>
         <button class="btn small ghost" type="button" id="exportMid">MIDI only</button>
       </div>
     </div>
