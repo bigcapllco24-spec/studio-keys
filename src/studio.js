@@ -325,7 +325,7 @@ async function renderSongSpan(tracks,bpm,from,to,o={}){
     const fl=songFlat(tr); for(let i=songLB(fl,b0);i<fl.length&&fl[i].B<to;i++){ const e=fl[i], t=at(e.B), v=I.play(oc,st.inp,e.n,e.v,t); if(v&&!v.oneShot) v.release(t+e.d*s);
       if(performance.now()-tk>20){ await yieldMain(); tk=performance.now(); } } }
   const buf=await oc.startRendering(), a=Math.round(pre*sr), n=o.samples||Math.round((span+tail)*sr);
-  return [buf.getChannelData(0).slice(a,a+n),buf.getChannelData(1).slice(a,a+n)];
+  return [buf.getChannelData(0).subarray(a,a+n),buf.getChannelData(1).subarray(a,a+n)];
 }
 /* the whole song as laid out, rendered 16 bars at a time and kept as 16-bit audio (6 dB headroom) until it's encoded */
 async function makeSongMp3(tracks,onProgress,opts={}){
@@ -335,9 +335,11 @@ async function makeSongMp3(tracks,onProgress,opts={}){
   for(let from=0;from<E;from+=CH){ const to=Math.min(E,from+CH), last=to>=E, n=at(to)-at(from)+(last?Math.round(tail*sr):0), o=at(from);
     if(onProgress) onProgress(from/E*0.85,`bar ${from/4+1} of ${E/4}`);
     const [l,r]=await renderSongSpan(tracks,bpm,from,to,{tail:last?tail:0,samples:n,context:opts.context});
-    for(let i=0;i<n&&o+i<total;i++){ const a=l[i], b=r[i], m=a>b?(a>-b?a:-b):(b>-a?b:-a); if(m>pk) pk=m; L16[o+i]=clamp(Math.round(a*16384),-32768,32767); R16[o+i]=clamp(Math.round(b*16384),-32768,32767); }
+    let tk=performance.now();
+    for(let i=0;i<n&&o+i<total;i++){ const a=l[i], b=r[i], m=a>b?(a>-b?a:-b):(b>-a?b:-a); if(m>pk) pk=m; L16[o+i]=clamp(Math.round(a*16384),-32768,32767); R16[o+i]=clamp(Math.round(b*16384),-32768,32767);
+      if((i&16383)===0&&performance.now()-tk>20){ await yieldMain(); tk=performance.now(); } }
     await yieldMain(); }
-  const g=pk>0.97?0.97/pk:1, k=2*g/32768, fade=Math.round(sr*1.5);
+  const g=pk>0.94?0.94/pk:1, /* MP3 decoders overshoot a little: keep the encoded peak at -0.5 dBFS */ k=2*g/32768, fade=Math.round(sr*1.5);
   const enc=new lamejs.Mp3Encoder(2,sr,192), out=[], B=1152, LB=new Int16Array(B), RB=new Int16Array(B); let sq=0, tk=performance.now();
   for(let i=0;i<total;i+=B){ const m=Math.min(B,total-i);
     for(let j=0;j<m;j++){ const p=i+j; let f=k; if(p>total-fade) f*=(total-p)/fade; const a=clamp(L16[p]*f,-1,1), b=clamp(R16[p]*f,-1,1); sq+=a*a+b*b; LB[j]=a<0?a*0x8000:a*0x7FFF; RB[j]=b<0?b*0x8000:b*0x7FFF; }
