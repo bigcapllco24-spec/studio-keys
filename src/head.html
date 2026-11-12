@@ -561,10 +561,12 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 .as-notes i.now{color:var(--on-accent);background:var(--accent);border-color:transparent}
 .as-notes .as-mic{font:600 12px var(--body);color:var(--signal);margin-right:4px}
 .as-notes .as-mic.live{color:var(--accent)}
-.ib.fxb{width:auto;padding:0 7px;font:700 10.5px var(--body);letter-spacing:.06em;position:relative}
-.ib.fxb.on{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+.ib.fxb{width:auto;min-width:30px;padding:0 7px;font:700 10.5px var(--body);letter-spacing:.06em;position:relative;white-space:nowrap;display:inline-flex;align-items:center;gap:2px}
+.ib.fxb.on{background:transparent;color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
 .ib.fxb.open{background:var(--accent);color:var(--on-accent);border-color:transparent}
-.ib.fxb small{font-size:9px;margin-left:3px;opacity:.85}
+.ib.fxb small{font-size:9px;margin-left:1px;opacity:.85}
+.ib.on,.ms.on{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.ib.fxb.open{background:var(--accent);color:var(--on-accent)}
 .trk .tfx{grid-column:1/-1;display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 20px;align-items:start;padding:12px 14px;margin-top:4px;border-top:1px dashed var(--line);background:var(--t2);border-radius:10px}
 .tfx-eq{display:flex;gap:10px;align-items:center;grid-row:span 2}
 .tfx-eq b{font-size:11px;letter-spacing:.14em;color:var(--muted);margin-right:4px}
