@@ -1,0 +1,152 @@
+{
+ "id": "RES-2",
+ "title": "Song sections and arrangement view (research for AI-1 and UX-1)",
+ "for": [
+  "AI-1",
+  "UX-1"
+ ],
+ "question": "How do Ableton, FL Studio, Logic, Bitwig and AI tools represent and edit song structure, what makes an arrangement view feel good on desktop and tablet, and what default arrangement fits melodic house/techno?",
+ "bottomLine": "Build songs from named sections (length in bars plus which parts play), with each track's loop as a linked pattern: Logic's Arrangement track and FL's patterns, drawn like Ableton's lanes. Give the assistant coarse section actions and the current arrangement every time, because open models fumble fine edits. Default melodic template at 124 bpm: 16-bar phrases, kick and bass out in the break, a 4-8 bar riser or filter build into each drop. Short is 96 bars (about 3:06), Club is 192 bars (about 6:12).",
+ "findings": [
+  "Ableton: clip lanes per track plus locators, loop brace and time selection. Cmd+D duplicates, Cmd+E splits, Cmd+J consolidates, Cmd+L loops, 0 mutes a clip. Follow scrolls with the playhead and pauses while you edit.",
+  "FL Studio: patterns placed as linked clips in the Playlist (edit once, every copy changes), with a PAT/SONG switch between looping a pattern and playing the song.",
+  "Logic Arrangement track: 8-bar section markers by default. Dragging one moves its content and closes the gap, Option-drag duplicates. Session Players change their parts per section and follow the Chord track.",
+  "Bitwig: launchable cue markers, a loop region, and a clip launcher next to the arranger.",
+  "Suno v5.5 / Studio 2.0 (2026): structure tags are 'wishes, not overrides'. What works is one job per section and targeted edits, not regenerating everything.",
+  "DAWZY (Dec 2025): chat-driven REAPER edits were enjoyed (4.5/5) but control rated lowest (3.8). Open models made valid edits in only 25-50% of trials. Fresh project state, unit conversion, plain summaries and atomic undo helped.",
+  "LANDR Composer uses length-and-key 'scenes'. AbletonMCP still lacks Arrangement view. Mozart AI claims chat arranging, but evidence is promotional.",
+  "Melodic house/techno: 122-125 bpm, 8/16/32-bar phrases, a change at every 8 or 16 bars. DJ intros and outros of 16-32 bars, mostly drums. Kick and bass out in the break. Filter build, riser or roll plus a 1-bar gap into the drop, then a crash.",
+  "Böhmer-style (EDMProd reading at 124 bpm): a new element every 16 bars and a long 32-bar delay breakdown with a new melody. Tension comes from automation more than snare rolls. Afterlife/Massano: filtered intro, lead teased filtered before the drop, short silence before the drop, lean kit.",
+  "Extended mixes had a median length of 4:31 in a 63-track sample. The 2015 Beatport Top 100 averaged 5:53 (old data). Afterlife-style extended mixes often run 6-8 minutes (our observation)."
+ ],
+ "recommendations": [
+  "AI-1: add coarse actions arrange (short/club/custom), section (add/remove/length/move/duplicate), parts (in/out by role per section), transition (riser/snareroll/filter/kickdrop/none) and loop_section, in the Worker prompt, actions.js and maker.js. Never ask for clip coordinates.",
+  "AI-1: send a one-line arrangement summary with every request. Resolve 'second drop' by order. 'Longer' or 'shorter' means ±8 bars snapped to 4. 'Add a second drop' duplicates Drop 1 after a break.",
+  "AI-1: keep 'N-bar intro' apart from the existing 1-16 bars loop action. 'Full track like X' should end with arrange. Replies name the change in musical words, and each request is one undo step.",
+  "AI-1: add an arrange hint per artist in ARTISTS (Böhmer: long layering and a 32-bar break with automation; Bodzin/Afterlife: filtered intro, teased lead, silence before the drop).",
+  "UX-1: data model is ordered sections {name, bars, colour} plus per track × section on/off and a pattern variation. Patterns are linked, with Make unique. Old loops open as one section.",
+  "UX-1: a section strip (resize, move with content, Alt-drag or Cmd+D duplicate, double-click to loop) over track lanes (click a cell to toggle, 0 mutes), a ruler with loop brace, a following playhead, and zoom (+/-, Cmd+scroll, W, pinch). Add a Loop/Song switch.",
+  "UX-1: tablet gets 44 pt handles and a long-press menu; phone gets the song map only. Draw only visible bars and render export in chunks. Flash cells the assistant changed and show an Undo chip.",
+  "Sound engine (via lead): generators take section role and energy (fill at the end of a Build, crash on a Drop). Transitions need riser, kick-drop and sweep sounds."
+ ],
+ "ideas": [
+  {
+   "name": "Song map with energy line",
+   "hook": "See and loop your whole track at a glance",
+   "loop": "Say or tap a section, it loops, tweak by voice, move on",
+   "why": "Producers think in sections. A coloured strip with an energy curve shows where the track sags.",
+   "scope": "S",
+   "reuse": "UX-1 section strip and ruler",
+   "risks": "Needs per-section energy values",
+   "similar": "Logic Arrangement track, Ableton locators"
+  },
+  {
+   "name": "Arrange it like...",
+   "hook": "One sentence turns a loop into a 3- or 6-minute track in an artist's style",
+   "loop": "Make a loop, say 'arrange it like Böhmer', listen, adjust sections by voice",
+   "why": "The loop-to-song jump is where most producers stall (EDMProd's '8-bar loop trap').",
+   "scope": "M",
+   "reuse": "ARTISTS table, groove generators, AI-1 arrange action",
+   "risks": "Templates can sound samey; vary lengths and transitions per artist",
+   "similar": "Suno full-song generation, Logic Session Players, LANDR Composer scenes"
+  },
+  {
+   "name": "Auto transitions",
+   "hook": "Risers, fills and kick drops appear at section changes",
+   "loop": "Sections change, the transition is added, say 'no riser here' or 'bigger build'",
+   "why": "Transitions are tedious to draw and make a track sound finished.",
+   "scope": "M",
+   "reuse": "groove.js fill kinds (snareroll, drop, openhat), fx.js filter",
+   "risks": "Needs riser and impact sounds; can feel cheesy if overdone",
+   "similar": "Logic Drummer fills and Session Players"
+  }
+ ],
+ "sources": [
+  {
+   "title": "Ableton Live 12 manual, Arrangement View",
+   "url": "https://www.ableton.com/de/live-manual/12/arrangement-view/"
+  },
+  {
+   "title": "MusicRadar, Session to Arrangement in Ableton (2019)",
+   "url": "https://musicradar.com/how-to/how-to-arrange-tracks-in-ableton-live-from-session-to-arrangement-view"
+  },
+  {
+   "title": "FL Studio manual, Playlist patterns",
+   "url": "https://www.image-line.com/fl-studio-learning/fl-studio-online-manual/html/playlist_patterns.htm"
+  },
+  {
+   "title": "MusicRadar, Logic Arrangement track (2019)",
+   "url": "https://www.musicradar.com/how-to/how-to-use-logic-pro-xs-arrangement-track-to-try-out-ideas"
+  },
+  {
+   "title": "Sound On Sound, Logic Pro Session Players (2024)",
+   "url": "https://www.soundonsound.com/techniques/logic-pro-session-players"
+  },
+  {
+   "title": "Apple, Logic Pro for iPad markers",
+   "url": "https://support.apple.com/guide/logicpro-ipad/lpipcf2eb4a7/ipados"
+  },
+  {
+   "title": "Bitwig user guide, Playing back the Arranger",
+   "url": "https://www.bitwig.com/userguide/latest/playing_back_the_arranger/"
+  },
+  {
+   "title": "Jack Righteous, Why Suno v5.5 meta tags still aren't working (2026)",
+   "url": "https://jackrighteous.com/blogs/guides-using-suno-ai-music-creation/why-your-suno-v5-5-meta-tags-still-arent-working"
+  },
+  {
+   "title": "Jack Righteous, Suno Studio 2.0 guide (2026)",
+   "url": "https://jackrighteous.com/blogs/guides-using-suno-ai-music-creation/suno-studio-2-0-guide-browser-daw"
+  },
+  {
+   "title": "Gearnews, LANDR Composer (2024)",
+   "url": "https://gearnews.com/landr-composer-studio"
+  },
+  {
+   "title": "AI Musicpreneur, Mozart AI (2025)",
+   "url": "https://the-ai-musicpreneur.beehiiv.com/p/talk-to-your-daw-like-it-s-human"
+  },
+  {
+   "title": "Ableton MCP Extended (GitHub)",
+   "url": "https://github.com/uisato/ableton-mcp-extended"
+  },
+  {
+   "title": "DAWZY paper, arXiv 2512.03289 (2025)",
+   "url": "https://arxiv.org/html/2512.03289v1"
+  },
+  {
+   "title": "Beatportal, Melodic house and techno step by step (2025)",
+   "url": "https://www.beatportal.com/articles/899368-step-by-step-guide-to-creating-a-melodic-house-techno-track-anyma-miss-monique-artbat-stephan-bodzin"
+  },
+  {
+   "title": "EDMProd, How to make melodic house",
+   "url": "https://www.edmprod.com/how-to-make-melodic-house/"
+  },
+  {
+   "title": "The Producer School, Melodic techno like Massano (2024)",
+   "url": "https://theproducerschool.com/blogs/featured-blogs/how-to-make-melodic-techno-like-massano-afterlife"
+  },
+  {
+   "title": "We Rave You, Ben Böhmer breaks down Beyond Beliefs (2021)",
+   "url": "https://weraveyou.com/tech/ben-bohmer-breaks-down-how-he-made-beyond-beliefs/"
+  },
+  {
+   "title": "Attack, 4 ways to break out of the loop (2020)",
+   "url": "https://www.attackmagazine.com/technique/tutorials/4-ways-to-break-out-of-the-loop/"
+  },
+  {
+   "title": "EDMProd, Avoid the 8-bar loop trap",
+   "url": "https://www.edmprod.com/how-to-avoid-the-8-bar-loop-trap/"
+  },
+  {
+   "title": "EDMProd, Beatport Top 100 analysis (2015, old)",
+   "url": "https://www.edmprod.com/beatport-analysis/"
+  },
+  {
+   "title": "Mixgraph, Track structure and intros",
+   "url": "https://www.mixgraph.io/glossary/intro"
+  }
+ ],
+ "status": "done",
+ "at": "2026-11-13T00:00:00Z"
+}
