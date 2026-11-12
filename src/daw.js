@@ -54,7 +54,7 @@ function renderTracks(){
   drawRolls(); drawRuler(); renderFaders(); if(VIEW==='mixer') renderMixerView(); if(ED.tid){ drawEditor(); edPatUI(); }
   songRender(); songRefocus(songFk);
 }
-function drawRuler(){ const cv=$('#ruler'); if(!cv||!cv.clientWidth) return; const {g,w,h}=prepCanvas(cv), L=PROJ.bars*4; g.font='11px '+cssVar('--mono'); for(let b=0;b<=L;b++){ const x=b/L*w; g.fillStyle=b%4===0?cssVar('--muted'):cssVar('--line'); g.fillRect(Math.min(w-1,x),b%4===0?6:14,1,h); if(b%4===0&&b<L){ g.fillStyle=cssVar('--muted'); g.fillText(String(b/4+1),x+4,13); } } }
+function drawRuler(){ if(songOn()){ songDrawRuler(); return; } const cv=$('#ruler'); if(!cv||!cv.clientWidth) return; const {g,w,h}=prepCanvas(cv), L=PROJ.bars*4; g.font='11px '+cssVar('--mono'); for(let b=0;b<=L;b++){ const x=b/L*w; g.fillStyle=b%4===0?cssVar('--muted'):cssVar('--line'); g.fillRect(Math.min(w-1,x),b%4===0?6:14,1,h); if(b%4===0&&b<L){ g.fillStyle=cssVar('--muted'); g.fillText(String(b/4+1),x+4,13); } } }
 function drawRolls(){
   const L=PROJ.bars*4, line=cssVar('--line'), mut=cssVar('--muted');
   PROJ.tracks.forEach(t=>{ const cv=document.querySelector(`[data-roll="${t.id}"]`); if(!cv||!cv.clientWidth) return; const {g,w,h}=prepCanvas(cv);

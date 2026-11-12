@@ -4013,6 +4013,7 @@ function songUI(){ const on=songOn(), pl=$('#playlist'); if(!pl) return;
   ['#songHead','#songHint','#songMap'].forEach(id=>{ const el=$(id); if(el) el.hidden=!on; });
   const h=$('.pl-head'); if(h) h.hidden=on; const ml=$('#mp3Len'); if(ml) ml.hidden=on;
   const mp=$('#exportMp3'); if(mp) mp.title=on?'Download the whole song, start to end, as an MP3':'Download the song as an MP3';
+  const zp=$('#exportZip'); if(zp) zp.title=on?'Exports the loop (one pattern) with stems for Ableton; Download MP3 and MIDI only give the whole song':'';
   const mk=$('#songMake'); if(mk) mk.disabled=!PROJ.tracks.length; const bl=$('#barsLbl'); if(bl) bl.textContent=on?'Pattern':'Length'; if(on) songDrawRuler(); }
 function songPvURL(t,v){ const L=PROJ.bars*4, audio=t.kind==='audio', ev=audio?null:songPatEvents(t,v);
   let h=L*131+(audio?Math.round((t.start||0)*7+(t.trim||0)*1000+CTRL.bpm*3)+(AUD.has(t.id)?1:0):0);
@@ -4073,7 +4074,14 @@ function songAnim(){ const ph=$('#playhead'), pos=$('#posDisp'), sc=$('#songScro
   if(m&&t&&ED.tid&&!$('#editor').hidden){ const p=at&&at.section.parts[ED.tid], L=PROJ.bars*4;
     if(playing&&p&&p.on&&(p.variant||'A')===(ED.pat||'A')){ const G=edGeom(), pb=mod(at.beatInSection+(at.section.off||0),L); m.style.left=(G.drum?G.K+pb*4*G.cw:G.K+pb*G.bw)+'px'; m.style.height=G.gh+'px'; m.style.display='block'; } else m.style.display='none'; } }
 function songZoom(f,clientX){ const sc=$('#songScroll'); if(!sc) return; const cur=songPx(), r=sc.getBoundingClientRect(), ax=clientX!=null?clientX-r.left:sc.clientWidth/2, bx=(sc.scrollLeft+ax)/cur;
-  SONG.view.zoom=f===0?0:clamp(cur*f,3,160); songViewSave(); renderTracks(); const nz=songPx(); sc.scrollLeft=f===0?0:Math.max(0,bx*nz-ax); songScrollSync(); }
+  SONG.view.zoom=f===0?0:clamp(cur*f,3,160); songViewSave(); songRelayout(); const nz=songPx(); sc.scrollLeft=f===0?0:Math.max(0,bx*nz-ax); songScrollSync(); }
+/* zoom: move and resize what's there instead of rebuilding the tracks */
+function songRelayout(){ const S=songSections(), px=songPx(), starts={}; let x=0; S.forEach(s=>{ starts[s.id]=x; x+=s.bars*px; });
+  document.querySelectorAll('#tracks .part').forEach(el=>{ const s=S.find(q=>q.id===el.dataset.sid); if(!s) return; const w=s.bars*px; el.style.left=starts[s.id]+'px'; el.style.width=Math.max(2,w-2)+'px'; el.style.setProperty('--pw',PROJ.bars*px+'px'); el.style.setProperty('--po',-(s.off||0)/4*px+'px'); el.classList.toggle('tiny',w<26); });
+  document.querySelectorAll('#tracks .sl-in').forEach(el=>el.style.width=(x+84)+'px');
+  $('#songStrip').style.width=(x+84)+'px';
+  document.querySelectorAll('#songStrip .sec').forEach(el=>{ const s=S.find(q=>q.id===el.dataset.sid); if(!s) return; const w=s.bars*px; el.style.left=starts[s.id]+'px'; el.style.width=Math.max(4,w-2)+'px'; el.classList.toggle('tiny',w<46); el.classList.toggle('narrow',w>=46&&w<112); });
+  const add=$('#songStrip .sadd'); if(add) add.style.left=(x+6)+'px'; songScrollSync(); }
 function songFocusKey(){ const a=document.activeElement, pl=$('#playlist'); if(!a||!pl||!pl.contains(a)) return null;
   if(a.classList.contains('part')) return `.part[data-sid="${a.dataset.sid}"][data-tid="${a.dataset.tid}"]`; const sec=a.closest('.sec'); if(sec) return `.sec[data-sid="${sec.dataset.sid}"] .${a.classList.contains('smore')?'smore':'sname'}`;
   if(a===pl) return '#playlist'; return null; }
@@ -4157,6 +4165,7 @@ function songStartRename(id){ const el=document.querySelector(`#songStrip .sec[d
     songSelect(el.dataset.sid,{cursor:!TR.running}); if(t.kind==='notes') openEditor(t.id,{sid:el.dataset.sid}); else toast('That’s a recording: switch it on or off here. Use “Turn into notes” to edit it as notes.'); });
   /* the song area takes the keyboard while it has focus; clicking the piano gives the keys back */
   pl.addEventListener('pointerdown',e=>{ if(!songOn()||e.target.closest('input,select,textarea,button,.slane')) return; if(e.target.closest('.th,.tfx')) return; pl.focus({preventScroll:true}); });
+  document.addEventListener('pointerdown',e=>{ const a=document.activeElement; if(a&&a!==document.body&&pl.contains(a)&&!pl.contains(e.target)&&!e.target.closest('#songMenu')) a.blur(); },true); /* e.g. the piano: its keys play notes again */
   pl.addEventListener('keyup',e=>{ if(songOn()&&e.key===' '&&!/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) e.preventDefault(); });
   pl.addEventListener('keydown',e=>{ if(!songOn()) return; const tg=e.target; if(tg&&/INPUT|SELECT|TEXTAREA/.test(tg.tagName)) return; if(tg.closest&&tg.closest('.th,.tfx')&&e.key!==' ') return;
     const m=e.ctrlKey||e.metaKey, k=e.key.toLowerCase(), sel=songSel(), S=songSections(); let done=true;
@@ -4172,7 +4181,7 @@ function songStartRename(id){ const el=document.querySelector(`#songStrip .sec[d
     else if(!m&&e.altKey&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){ if(sel) songMove(sel.id,S.indexOf(sel)+(e.key==='ArrowLeft'?-1:1)); }
     else done=false;
     if(done){ e.preventDefault(); e.stopPropagation(); } });
-  window.addEventListener('resize',()=>{ if(songOn()&&!SONG.view.zoom) setTimeout(()=>renderTracks(),130); else songDrawRuler(); });
+  let rz=0; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(songOn()&&!SONG.view.zoom) songRelayout(); else songDrawRuler(); },130); });
 })();
 
 
@@ -4231,7 +4240,7 @@ function renderTracks(){
   drawRolls(); drawRuler(); renderFaders(); if(VIEW==='mixer') renderMixerView(); if(ED.tid){ drawEditor(); edPatUI(); }
   songRender(); songRefocus(songFk);
 }
-function drawRuler(){ const cv=$('#ruler'); if(!cv||!cv.clientWidth) return; const {g,w,h}=prepCanvas(cv), L=PROJ.bars*4; g.font='11px '+cssVar('--mono'); for(let b=0;b<=L;b++){ const x=b/L*w; g.fillStyle=b%4===0?cssVar('--muted'):cssVar('--line'); g.fillRect(Math.min(w-1,x),b%4===0?6:14,1,h); if(b%4===0&&b<L){ g.fillStyle=cssVar('--muted'); g.fillText(String(b/4+1),x+4,13); } } }
+function drawRuler(){ if(songOn()){ songDrawRuler(); return; } const cv=$('#ruler'); if(!cv||!cv.clientWidth) return; const {g,w,h}=prepCanvas(cv), L=PROJ.bars*4; g.font='11px '+cssVar('--mono'); for(let b=0;b<=L;b++){ const x=b/L*w; g.fillStyle=b%4===0?cssVar('--muted'):cssVar('--line'); g.fillRect(Math.min(w-1,x),b%4===0?6:14,1,h); if(b%4===0&&b<L){ g.fillStyle=cssVar('--muted'); g.fillText(String(b/4+1),x+4,13); } } }
 function drawRolls(){
   const L=PROJ.bars*4, line=cssVar('--line'), mut=cssVar('--muted');
   PROJ.tracks.forEach(t=>{ const cv=document.querySelector(`[data-roll="${t.id}"]`); if(!cv||!cv.clientWidth) return; const {g,w,h}=prepCanvas(cv);
