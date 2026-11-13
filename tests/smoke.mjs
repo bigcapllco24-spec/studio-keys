@@ -98,7 +98,8 @@ try {
   const rc = await E(() => { songMode('song'); recordPress(); const m = SONG.view.mode; loopStop(); return m; });
   ok('song: Rec in Song mode switches to Loop', rc === 'loop', rc);
   const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
-  await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(2500);
+  await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(1500);
+  await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 15000 }).catch(() => {}); // keepLastSong is async: wait for it on a busy machine
   const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null; try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r) await loadNamed(id);
     return { n0, name0, listed: !!r, name: PROJ.name, n: PROJ.tracks.length, s: songSections().length }; }, before.id);
   ok('song: opening the app starts a new empty song; the last one reopens from the list intact', rl.n0 === 0 && rl.listed && rl.name === 'Before reload' && rl.n === before.n && rl.s === before.s, `new song had ${rl.n0} tracks; reopened "${rl.name}" ${rl.n} tracks, ${rl.s} sections`);
