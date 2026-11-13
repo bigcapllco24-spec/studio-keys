@@ -136,7 +136,8 @@ try {
   const rc = await E(() => { songMode('song'); recordPress(); const m = SONG.view.mode; loopStop(); return m; });
   ok('song: Rec in Song mode switches to Loop', rc === 'loop', rc);
   // UX-5: a part sung in Song mode lands like a part Keys adds (selected section only) and says where it plays, once back in Song mode
-  await E(() => { songTemplate('short'); songSelect('intro'); window.__toasts = []; const o = toast; window.toast = function (m) { window.__toasts.push(m); return o.apply(this, arguments); };
+  // a chords take left by check 6b would make this a re-sung take (keeps its old placement, no toast), so start from no chords take
+  await E(() => { PROJ.tracks.filter(t => t.take === 'chords').forEach(t => removeTrack(t.id)); songTemplate('short'); songSelect('intro'); window.__toasts = []; const o = toast; window.toast = function (m) { window.__toasts.push(m); return o.apply(this, arguments); };
     runActions([{ type: 'add_melody' }]); window.__ref = PROJ.tracks[PROJ.tracks.length - 1].id; ASSIST.run('let me sing the chords'); });
   await p.waitForFunction(() => PROJ.tracks.some(t => t.take === 'chords') && LOOP.state !== 'take', { timeout: 40000 }).catch(() => {}); await W(1300); // the toast shows 0.9 s after the take
   const sg = await E(() => { const S = songSections(), t = PROJ.tracks.find(t => t.take === 'chords'), on = id => S.filter(s => s.parts[id] && s.parts[id].on).map(s => s.name).join(',');
@@ -158,4 +159,6 @@ try {
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
+// the phone layout checks (UX-4) run in their own browser with touch: tests/phone.mjs
+{ const { spawnSync } = await import('child_process'); const r = spawnSync(process.execPath, [path.join(root, 'tests/phone.mjs'), target], { stdio: 'inherit', env: process.env }); results.push(r.status === 0); }
 const failed = results.filter(x => !x).length; console.log(failed ? `SMOKE FAILED: ${failed} of ${results.length}` : `SMOKE OK: ${results.length} checks`); process.exit(failed ? 1 : 0);
