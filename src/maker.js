@@ -22,13 +22,19 @@ function localBrain(raw){
   const singRole=/\b(sing|hum|whistle|record (my )?voice|let me (do|try))\b/.test(t)?(/\bbass/.test(t)?'bass':/\bchord|\bpad/.test(t)?'chords':/\b(melody|lead|hook|tune|riff|top ?line|voice)\b/.test(t)?'melody':null):null;
   if(/\b(download|export|bounce|render|save|give me)\b.*\b(mp3|audio file|song file|the song|the track)\b|\bmp3\b/.test(t)&&!/\b(zip|stems?|ableton|midi)\b/.test(t)){ const mm=t.match(/(\d+)\s*(min|minute)/), loops=t.match(/(\d+)\s*loops?/); return {actions:[{type:'export',format:'mp3',minutes:mm?+mm[1]:undefined,loops:loops?+loops[1]:undefined}]}; }
   if(/\b(download|export)\b.*\b(zip|stems?|ableton)\b/.test(t)) return {actions:[{type:'export',format:'zip'}]};
+  /* "turn <audio track> into a bassline": a voice note, an imported recording, or one named ("turn hook idea into chords"). Checked before singing and voice notes. */
+  { const aud=PROJ.tracks.filter(x=>x.kind==='audio'), tm=aud.length&&t.match(/\b(?:turn|convert|make|transcribe) (.+?) (?:in)?to (?:a |an |the |some )?(bass(?:line)?|chords?|melody|notes|piano|instrument|midi)\b/);
+    if(tm){ const nm=s=>String(s).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), x=nm(tm[1].replace(/^(the|my|this|that|our) /,'')), roleWord=/^(drums?|beat|bass(line)?|chords?|pads?|melody|lead|hook)$/.test(x);
+      const named=[...aud].reverse().find(a=>{ const n=nm(a.name); return n===x||(!roleWord&&x.length>=3&&n.length>=3&&(n.includes(x)||x.includes(n))); });
+      const hum=ASSIST.lastHum&&PROJ.tracks.findIndex(y=>y.id===ASSIST.lastHum), newest=aud[aud.length-1];
+      const generic=/^(it|that|this|voice ?notes?|voice ?memo|memo|voice|recording|audio|vocals?|clip|sample|take|singing)( \d+)?$/.test(x)&&!(/^(it|that|this)$/.test(x)&&hum>PROJ.tracks.indexOf(newest));
+      const hit=named||(generic?newest:null); if(hit) return {actions:[{type:'transcribe',track:hit.id,to:tm[2]}]}; } }
   { const fxw=t.match(/\b(reverb|delay|echo|sidechain|side chain|pump|compress(?:ion|or)?|drive|saturation|distortion|width|wider|stereo|low ?cut|high ?cut)\b/); const tr=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
     if(fxw&&tr&&/\b(add|put|more|less|on|to|give|use|some|turn)\b/.test(t)){ const less=/\b(less|reduce|lower|down|remove|no)\b/.test(t); return {actions:[{type:'track_fx',track:tr==='drums'?'drums':tr,effect:fxw[1],change:less?-20:(/\bmore\b/.test(t)?20:undefined),remove:/\b(remove|no|off)\b/.test(t)}]}; } }
+  { const tone=toneFix(t); if(tone) return tone; }
   if(/^\s*(undo|undo that|go back|revert( that)?|take that back)\b/.test(t)) return {actions:[{type:'undo'}]};
   if(/^\s*(redo|redo that)\b/.test(t)) return {actions:[{type:'redo'}]};
   if(/\b(voice note|record (my )?voice|just record( me)?|record (some )?audio)\b/.test(t)) return {actions:[{type:'sing',part:'voice'}]};
-  const tr=t.match(/\b(?:turn|convert|make|transcribe) (?:the |my |this |that )?(voice note|voice|recording|audio|vocal|it)\b.*?\b(?:in)?to (?:a |the )?(bass(?:line)?|chords?|melody|notes|piano|instrument)\b/);
-  if(tr && (PROJ.tracks.some(x=>x.kind==='audio'))) return {actions:[{type:'transcribe',to:tr[2]}]};
   if(singRole) return {actions:[{type:'sing',part:singRole}]};
   if(/^\s*(again|redo|one more time|try that again|retake)\b/.test(t) && LAST_TAKE.part) return {actions:[{type:'again'}]};
   const conv=t.match(/\b(?:make|turn|use) (?:it|that|this|the hum(?:med melody)?|my hum|the melody)(?: in)?(?:to| as)? (?:the |a )?(bass(?:line)?|chords?|melody)\b/);
@@ -75,4 +81,46 @@ function localBrain(raw){
   if(/\b(sing|record (my )?voice|record me|vocal take|record a melody)\b/.test(t)) A.push({type:'sing'});
   else if(/\b(play|start|listen|let'?s hear|hear it)\b/.test(t)) A.push({type:'transport',do:'play'});
   return {actions:A};
+}
+/* mixing words: "the bass is muddy", "cut the lows on the bass", "the mix is harsh". Changes EQ and low cut with the
+   existing track_fx / mix actions and keeps the notes. Each repeat ("still muddy") goes a step further. */
+const TONE_PART={drums:'the drums',bass:'the bass',chords:'the chords',melody:'the melody',voice:'the vocal'};
+const TONE_HP={bass:[45,10,90],drums:[40,10,80],chords:[200,1.4,500],melody:[250,1.4,600],voice:[150,1.4,400]};
+function toneFix(t){
+  let kind=null;
+  if(/\b(more|bigger|fatter|boost|add|needs?|want) (some |more )?(low end|lows|bottom|body|weight)\b|\b(thin|no body|weak low end)\b/.test(t)) kind='thin';
+  else if(/\b(muddy|mud|boomy|rumbly|rumble|low mids?|low ?end|lows|clean(?:ed)? (?:it |this |that |the \w+ )?up)\b/.test(t)) kind='mud';
+  else if(/\b(boxy|honky|nasal)\b/.test(t)) kind='box';
+  else if(/\b(harsh|shrill|piercing|sibilant|too bright|too sharp|too much top)\b/.test(t)) kind='harsh';
+  else if(/\b(dull|muffled|lifeless|too dark|brighter|more air|more sparkle|more top end)\b/.test(t)) kind='dull';
+  if(!kind||/\badd (a |an |some )?(new )?(bass ?line|bass|chords?|melody|drums?|beat|pads?|lead|hook)\b/.test(t)) return null;
+  const role=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0], A=[], hz=x=>x>=1000?(x/1000).toFixed(1)+' kHz':x+' Hz';
+  const eq=(T,band,d)=>{ const f={low:'lo',mid:'mid',high:'hi'}[band]; A.push({type:'mix',track:T.id,[band]:clamp(Math.round((T[f]||0)+d),-15,15)}); };
+  const cut=T=>{ const cur=(T.fx&&T.fx.hp)||20, [mn,st,mx]=TONE_HP[T.role]||[120,1.4,400], v=Math.min(mx,Math.max(mn,st<2?Math.round(cur*st):cur+st)); if(v>cur) A.push({type:'track_fx',track:T.id,effect:'low cut',amount:v}); return Math.max(v,cur); };
+  const more=` Say “still ${{mud:'muddy',box:'boxy',harsh:'harsh',dull:'dull',thin:'thin'}[kind]}” to go further.`;
+  if(role){
+    const list=PROJ.tracks.filter(x=>x.role===role), part=TONE_PART[role]||role;
+    if(!list.length) return {actions:[],reply:role==='drums'||role==='chords'?`There are no ${role} yet to fix. Want me to add some?`:`There's no ${part.replace(/^the /,'')} yet to fix. Want me to add one?`};
+    let say='';
+    list.forEach((T,i)=>{ if(kind==='mud'){ const v=cut(T); eq(T,'low',T.role==='bass'?-2:-3); if(!i) say=`Cleaned up ${part}: low cut up to ${hz(v)} and ${T.role==='bass'?2:3} dB less low boom, same notes.`; }
+      else if(kind==='box'){ eq(T,'mid',-3); say=`Took the boxiness out of ${part}: 3 dB less mids around 1 kHz.`; }
+      else if(kind==='harsh'){ eq(T,'high',-3); say=`Softened ${part}: 3 dB less highs.`; }
+      else if(kind==='dull'){ eq(T,'high',3); const lp=T.fx&&T.fx.lp; if(lp&&lp<16000){ const v=Math.min(20000,Math.round(lp*1.5)); A.push({type:'track_fx',track:T.id,effect:'high cut',amount:v}); if(!i) say=`Brightened ${part}: 3 dB more highs and the high cut opened to ${hz(v)}.`; } else if(!i) say=`Brightened ${part}: 3 dB more highs.`; }
+      else { eq(T,'low',3); say=`Fattened ${part}: 3 dB more low end.`; } });
+    return {actions:A,reply:say+more};
+  }
+  /* the whole mix */
+  const all=PROJ.tracks;
+  if(!all.length) return {actions:[],reply:'There’s nothing in the song to mix yet. Start with drums or name an artist.'};
+  if(kind==='mud'){
+    const up=all.filter(x=>x.role!=='bass'&&x.role!=='drums');
+    if(!up.length) return {actions:[],reply:'So far it’s just drums and bass, and their low end is the groove. Tell me which one: “the bass is muddy” or “the kick is boomy”.'};
+    const done=up.map(T=>{ const v=cut(T); eq(T,'low',-3); return `${T.name} (${hz(v)})`; });
+    return {actions:A,reply:`Cleaned up the mix: higher low cuts and 3 dB less low end on ${done.length>1?done.slice(0,-1).join(', ')+' and '+done[done.length-1]:done[0]}; bass and kick untouched.`+more};
+  }
+  if(kind==='box'){ all.filter(x=>x.role!=='drums').forEach(T=>eq(T,'mid',-2)); return {actions:A,reply:'Took the boxiness out of the mix: 2 dB less mids around 1 kHz on every part but the drums.'+more}; }
+  if(kind==='harsh'){ all.forEach(T=>eq(T,'high',-2)); return {actions:A,reply:'Softened the top of the mix: 2 dB less highs on every part.'+more}; }
+  if(kind==='dull'){ all.forEach(T=>eq(T,'high',2)); return {actions:A,reply:'Brightened the mix: 2 dB more highs on every part.'+more}; }
+  const low=all.filter(x=>x.role==='bass'||x.role==='drums'); (low.length?low:all).forEach(T=>eq(T,'low',2));
+  return {actions:A,reply:`Fattened the mix: 2 dB more low end on ${low.length?'the drums and bass':'every part'}.`+more};
 }
