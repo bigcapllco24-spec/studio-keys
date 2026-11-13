@@ -1,5 +1,5 @@
 # Studio Keys board (mirror of Studio Keys HQ)
-Last updated: 13 Nov 2026, 23:05 IST
+Last updated: 14 Nov 2026, 00:58 IST
 
 ## Awaiting build OK (owner tries the test link, in HQ). All links include the Song view (main 50b6315).
 - UX-4 · studio-ux-dev · L · Phone layout with Keys first (tabs Keys · Song · Mix · Play · More, mini transport, sheets, full-screen editor) + iPhone talking fixes. Round 2. https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-4/ · head 3bf75ff (main + UX-2 + UX-5) · tester READY after 4 fixes (`UX-4-retest.md`), 39 smoke + 13 phone checks. Ships after UX-2 and UX-5.
@@ -7,7 +7,8 @@ Last updated: 13 Nov 2026, 23:05 IST
 - UX-5 · studio-ux-dev · S · Bug fix: a part sung in Song mode says which section it plays in (tester F1). Round 1. https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-5/ · head 45391b5 · tester READY (`UX-5-test.md`). Ship after UX-2 (studio.js).
 - SE-3 · sound-engine-dev · S · Real drummer feel + swing ladder. Round 2. https://studio-keys.bigcapllco24.workers.dev/p/preview-se-3/ · head edbef43 (main merged in, 39 checks). Deploy the Worker on release.
 - AI-4 · assistant-dev · S · Assistant bug fixes (offline brain). Round 1. https://studio-keys.bigcapllco24.workers.dev/p/preview-ai-4/ · head 18e0ad3 (main merged in). Deploy the Worker and run the Llama check on release.
-- Merge order: UX-2, UX-5, then UX-4; SE-3 then AI-4 (maker.js/worker.js). Rebuild index.html after each.
+- UX-6 · studio-ux-dev · S · Install on the phone's home screen (manifest, service worker, icons, More → Add to Home Screen, one-time tip; Worker routes for the app files). Round 1. https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-6/ · head 391561d (8d7c605 + tester's tests/pwa.mjs) on top of UX-4 · tester READY, no bugs (`UX-6-test.md`). The real install needs the Worker routing update: early deploy was blocked by the safety check, held for the owner's 'deploy the UX-6 Worker' or the release. Rough edges: weak signal waits for the network; tip can cover Keys' first reply at 360x640.
+- Merge order: UX-2, UX-5, UX-4, then UX-6 (Worker deploy); SE-3 then AI-4 (maker.js/worker.js). Rebuild index.html after each.
 
 ## Awaiting design OK (owner, in HQ)
 - AI-1 · assistant-dev · L · Song sections by voice. Round 1. Market: great 5/5. Proposal `.claude/work/proposals/AI-1.md`. Builds together with UX-1.
@@ -19,7 +20,6 @@ Last updated: 13 Nov 2026, 23:05 IST
 - AI-3 · assistant-dev · L · Reference track: drop a song you love; the assistant matches tempo, key, groove and tonal balance.
 
 ## Up next (the team designs these first; the owner approves in HQ)
-- UX-6 · studio-ux-dev (+ Worker routes) · S · Install on the phone's home screen (manifest, service worker, icons). Approved with UX-4 (owner: installable web app only for now); goes straight to build after UX-4. Worker deploy at release.
 - SE-6 · sound-engine-dev (+ studio-ux-dev, assistant-dev) · L · Split a song into stems: karaoke ("play the background") and remixes (owner request 13 Nov). RES-5 done: HTDemucs in the browser via ONNX Runtime Web; next a device speed spike, then design. Owner decisions: model hosting, licence, rights text.
 - AI-5 · assistant-dev · S · One-tap Spotify connect: build in the owner's Spotify app Client ID (waiting for him to send it; it is public, not a secret).
 - AI-2 · assistant-dev · M · The assistant remembers what you like ("softer claps", "always Rolling Bass") and uses it next time. Done when: preferences said once are applied in later songs.
