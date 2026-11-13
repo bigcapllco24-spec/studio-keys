@@ -3169,7 +3169,8 @@ function feelShape(c,r){ if(!c) return Array(16).fill(1); const nz=c.filter(x=>x
    percentage (MPC style): 50% straight, 66% triplet. "less swing" steps down this ladder, "more swing" goes to full. */
 const SWING_STEPS=[0,0.08,0.16,0.333,0.4];
 const swingPct=sw=>Math.floor(50+(+sw||0)*50+0.01);
-function swingName(sw){ return sw<0.02?'straight':sw<0.06?'a touch of swing':sw<0.12?'light swing':sw<0.2?'medium swing':sw<0.3?'strong swing':sw<0.37?'full triplet swing':'heavy swing'; }
+/* the name follows the percentage shown next to it, so the word and the number always agree (59% and 60% are both medium) */
+function swingName(sw){ const p=swingPct(sw); return sw<0.02?'straight':p<54?'a touch of swing':p<57?'light swing':p<62?'medium swing':p<65?'strong swing':p<68?'full triplet swing':'heavy swing'; }
 function resolveSwing(v,cur){ cur=+cur||0; if(v==null||v===''||v===false) return v===false?0:undefined; const r3=x=>Math.round(clamp(x,0,0.4)*1000)/1000;
   if(typeof v==='string'){ const s=v.toLowerCase().trim(), num=parseFloat(s), bit=/\b(bit|little|touch|slight(ly)?|tad)\b/.test(s);
     if(/^(none|no|off|straight|zero|no swing)$/.test(s)) return 0;
@@ -3178,13 +3179,13 @@ function resolveSwing(v,cur){ cur=+cur||0; if(v==null||v===''||v===false) return
     else if(/more|heav|full|lots|max|up|triplet|swing/.test(s)) return bit?r3(cur+0.08):(cur<0.3?0.333:0.4);
     else return undefined; }
   v=+v; if(!isFinite(v)) return undefined; if(v>1) v=v>=50?(v-50)/50:v/100; return r3(v); }
-/* the reply in musician words: "Lighter swing, about 58%" */
-function swingWords(sw,prev){ const p=swingPct(sw);
+/* the reply in musician words, with the same name the beat description uses: "Lighter: medium swing, about 58%" */
+function swingWords(sw,prev){ const p=swingPct(sw), nm=swingName(sw), most=sw>=0.395;
   if(sw<0.02) return prev!=null&&prev<0.02?'Already straight, no swing':'Straight, no swing';
-  if(prev!=null&&sw<prev-0.005) return `Lighter swing, about ${p}%`;
-  if(prev!=null&&sw>prev+0.005) return sw>=0.3&&sw<0.37?`Full triplet swing, about ${p}%`:sw>=0.37?`Heavy swing, about ${p}% (the most it goes)`:`More swing, about ${p}%`;
-  if(prev!=null&&sw>=0.4) return `Already at the heaviest swing, about ${p}%`;
-  return `${swingName(sw).replace(/^./,c=>c.toUpperCase())}, about ${p}%`; }
+  if(prev!=null&&sw<prev-0.005) return `Lighter: ${nm}, about ${p}%`;
+  if(prev!=null&&sw>prev+0.005) return `${nm.replace(/^./,c=>c.toUpperCase())}, about ${p}%${most?' (the most it goes)':''}`;
+  if(prev!=null&&most) return `Already at the most it goes: ${nm}, about ${p}%`;
+  return `${nm.replace(/^./,c=>c.toUpperCase())}, about ${p}%`; }
 const PERC_SETS={melodichouse:[37,45,50],melodictechno:[37,47],techno:[37,47],progressive:[37,45],deephouse:[37,45],organichouse:[45,50,37],techhouse:[37,56,45],afro:[45,47,50,37],amapiano:[45,50,37],nudisco:[56,45,37],house:[37,45,56],bhangra:[45,47,50],bollywood:[45,47,50],punjabi:[45,50],downtempo:[37,45,50],reggaeton:[37,45],ukg:[37,45],drill:[37]};
 const PERC_MOTIFS={
   37:['...x..x....x..x.','..x..x....x..x..','......x.......x.','...x.......x..x.','.x....x..x....x.'],
@@ -3957,15 +3958,32 @@ const INST_WORDS=[['bass808',/\b808\b/],['reese',/\breese\b/],['moog',/\bmoog\b/
 const ROLE_WORDS=[['drums',/\b(hats?|drums?|beat|kick|groove|percussion)\b/],['bass',/\b(bass ?line|bass)\b/],['chords',/\b(chords?|pads?|harmony|progression)\b/],['melody',/\b(melody|lead|hook|riff|tune|hum)\b/],['voice',/\b(voice|vocals?|singing)\b/]];
 /* swing words → a swing value for the groove action: "58%", 0, "a bit less", "less", "a bit more", "more"; null if none */
 function swingSaid(raw){ const t=' '+String(raw||'').toLowerCase().replace(/per ?cent/g,'%').replace(/[,.!?]+(?!\d)/g,' ')+' '; let m;
-  if(!/\b(swing|swung|swingy|swingier|shuffle|straight|straighten)\b/.test(t)) return null;
-  if((m=t.match(/\b(\d{2}(?:\.\d+)?)\s*%?\s*(?:of\s+)?(?:swing|shuffle)\b/))||(m=t.match(/\b(?:swing|shuffle)\s*(?:to|at|of|on|by)?\s*(\d{2}(?:\.\d+)?)\b(?!\s*(?:bars?|bpm|beats?))/))) return m[1]+'%';
-  if(/\b(no|no more|without|remove|kill|lose|drop|turn off|zero)( the| any| all)? (swing|shuffle)\b|\bswing off\b|\bstraighten\b|\bstraight (beat|groove|hats|drums|16th|timing|feel|again)\b|\b(make|play|keep|put|go) (it|the (beat|groove|drums|hats)) (back )?straight\b|\bnot swung\b|^\s*(play |go |keep it |make it )?straight( please| again| now| then)?\s*$/.test(t)) return 0;
+  if(!/\b(swing|swings|swinging|swingin|swung|swingy|swingier|shuffle|straight|straighten)\b/.test(t)) return null;
+  if((m=t.match(/\b(\d{2,3}(?:\.\d+)?)\s*%?\s*(?:of\s+)?(?:swing|shuffle)\b/))||(m=t.match(/\b(?:swing|shuffle)\s*(?:to|at|of|on|by)?\s*(\d{2,3}(?:\.\d+)?)\b(?!\s*(?:bars?|bpm|beats?))/))) return m[1]+'%';
+  if(/\b(no|no more|without|remove|kill|lose|drop|turn off|zero)( the| any| all)? (swing|shuffle)\b|\btake out (the |all the |all )?(swing|shuffle)\b|\btake (the |all the |all )?(swing|shuffle) out\b|\bget rid of (the |all the )?(swing|shuffle)\b|\b(beat|groove|drums|hats|rhythm)s? straight\b(?! to\b)|\bswing off\b|\bstraighten\b|\bstraight (beat|groove|hats|drums|16th|timing|feel|again)\b|\b(make|play|keep|put|go) (it|the (beat|groove|drums|hats)) (back )?straight\b|\bnot swung\b|^\s*(play |go |keep it |make it )?straight( please| again| now| then)?\s*$/.test(t)) return 0;
   if(/\b(a (little|bit|touch|tad)|slightly|little|bit) less (swing|shuffle|swung|swingy)\b|\bswing (it )?a (bit|little) less\b/.test(t)) return 'a bit less';
-  if(/\b(less|lighter|softer|lower|reduce|lower the|reduce the|turn down the|tone down the) (swing|shuffle)\b|\btoo (much )?(swing|swingy|swung|heavy)\b|\bswing (is )?too (much|heavy|strong)\b|\bless swung\b/.test(t)) return 'less';
+  if(/\b(less|lighter|softer|lower|reduce|lower the|reduce the|turn down the|tone down the) (swing|shuffle|swingy|swung)\b|\bswing(s|ing)? too (much|hard|heavy|strong)\b|\btoo (much )?(swing|swingy|swung|heavy)\b|\bswing (is )?too (much|heavy|strong)\b|\bless swung\b/.test(t)) return 'less';
   if(/\b(a (little|bit|touch|tad)( more)?( of)?|slightly( more)?|little more|bit more) (swing|shuffle)\b|\bswing it a (bit|little)( more)?\b/.test(t)) return 'a bit more';
   if(/\b(more|add|adding|some|lots of|loads of|heavy|heavier|full|max|maximum|triplet|with|big) (swing|shuffle)\b|\bswing (it )?(more|harder)\b|\bmore swung\b|\bswing it\b|\bswingier\b|\bmake it swing\b/.test(t)) return 'more';
   return null; }
+/* is the request only about swing? (then it is one groove change; anything else said goes through the parser too) */
+function swingOnly(raw,hasDrums){ let s=' '+String(raw||'').toLowerCase().replace(/per ?cent/g,'%').replace(/[’']/g,'')+' ';
+  s=s.replace(/\b\d{2,3}(\.\d+)?\s*%/g,' ').replace(/\b(swing|shuffle)\s*(to|at|of|on|by)?\s*\d{2,3}(\.\d+)?\b(?!\s*(bars?|bpm|beats?))/g,' ').replace(/\b\d{2,3}\s*(of\s+)?(swing|shuffle)\b/g,' ').replace(/\bswing(s|ing)? (it )?(more|harder)\b/g,' ');
+  s=s.replace(/\b(swing|swings|swinging|swingin|swung|swingy|swingier|shuffle|shuffled|shuffly|straight|straighter|straighten|more|less|lighter|softer|lower|reduce|turn|down|up|off|tone|a|an|the|bit|little|touch|tad|slightly|some|lots|loads|of|heavy|heavier|full|max|maximum|triplet|with|big|too|much|strong|is|its|it|make|put|play|keep|go|back|again|now|then|please|can|could|would|you|give|me|us|take|out|remove|kill|lose|drop|get|rid|no|without|any|all|zero|not|set|to|at|on|by|just|bring|this|that|yeah|ok|okay|hey|so|and|plus|add|adding|i|want|need|lets|amount|way|feel|timing|percent|hard)\b/g,' ');
+  if(hasDrums) s=s.replace(/\b(beat|groove|drums?|hats|hi ?hats?|rhythm)\b/g,' ');
+  return !s.replace(/[^a-z0-9]+/g,'').length; }
 function localBrain(raw){
+  const sws=swingSaid(raw), anyDrums=PROJ.tracks.some(x=>x.role==='drums'), hasDrums=PROJ.tracks.some(x=>x.role==='drums'&&x.recipe);
+  if(sws!=null&&swingOnly(raw,hasDrums)){
+    if(hasDrums) return {actions:[{type:'groove',track:'drums',swing:sws}]};
+    if(!anyDrums) return {actions:[],reply:"There's no beat yet. Say 'make a house beat' first."}; }
+  const R=brainCore(raw,sws), A=R.actions||[];
+  /* swing said next to something else ("add a bassline with some swing"): do both */
+  if(sws!=null&&hasDrums&&!A.some(x=>x.type==='add_drums'||(x.type==='groove'&&x.swing!=null))){
+    const g=A.find(x=>x.type==='groove'&&(x.track||'drums')==='drums');
+    if(g) g.swing=sws; else { const i=A.findIndex(x=>x.type==='transport'); A.splice(i<0?A.length:i,0,{type:'groove',track:'drums',swing:sws}); } }
+  return R; }
+function brainCore(raw,sws){
   const t=' '+raw.toLowerCase().replace(/hi[\s-]?hats?|high[\s-]?hats?|hihats?/g,'hats').replace(/drum ?(and|&|n|'n') ?bass|d ?& ?b|d n b/g,'dnb').replace(/hip[\s-]?hop/g,'hiphop').replace(/lo[\s-]?fi/g,'lofi').replace(/eighths?|8ths?|8th notes?|eight notes?|8\s*\/\s*8/g,' 8th ').replace(/sixteenths?|16ths?|16 notes?|16\s*\/\s*16/g,' 16th ').replace(/beats per minute|bpm/g,' bpm ')+' ';
   const A=[]; let m;
   const artist=artistIn(raw); let ref=artist?artist.name:undefined;
@@ -3989,20 +4007,20 @@ function localBrain(raw){
   if(conv) return {actions:[{type:'convert',track:(ASSIST.lastHum&&PROJ.tracks.find(x=>x.id===ASSIST.lastHum))?ASSIST.lastHum:'melody',to:conv[1]}]};
   /* another / different / more energy */
   const roleHit=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
-  /* swing: steps from the beat's current swing ("less swing" 66% → 58% → 54% → straight), or an exact "swing 58%" */
-  const sws=swingSaid(raw), hasDrums=PROJ.tracks.some(x=>x.role==='drums'&&x.recipe);
-  if(sws!=null&&hasDrums&&!/\b(another|different|new|other|fresh|variation)\b/.test(t)) return {actions:[{type:'groove',track:'drums',swing:sws}]};
+  /* "another one with less swing": a new take plus the swing step (swing alone is handled in localBrain) */
   if(/\b(another|different|new|other|variation|change( it)? up|switch it up|try again|regenerate)\b/.test(t) && PROJ.tracks.length && !/\b(add|new song|new project)\b/.test(t)){
     const vt=roleHit||(/\bprogression|chords?\b/.test(t)?'chords':'drums');
     return {actions:[{type:'vary',track:vt}].concat(sws!=null&&vt==='drums'?[{type:'groove',track:'drums',swing:sws}]:[])}; }
   if(/\b(more energy|harder|busier|more drive|pump it|more intense|build it up)\b/.test(t)) return {actions:[{type:'groove',track:'drums',change:1}]};
   if(/\b(less busy|calmer|chill(er)?|softer groove|less energy|simpler|strip(ped)? (it )?back)\b/.test(t) && PROJ.tracks.some(x=>x.role==='drums')) return {actions:[{type:'groove',track:'drums',change:-1}]};
-  if(/\b(add|more) (percussion|perc|congas?|bongos?|rims?)\b/.test(t) && PROJ.tracks.some(x=>x.role==='drums')) return {actions:[{type:'groove',track:'drums',perc:3}]};
-  if(/\badd (a )?shaker\b/.test(t) && PROJ.tracks.some(x=>x.role==='drums')) return {actions:[{type:'groove',track:'drums',shaker:true}]};
+  if(/\b(add|more) (some |a few |a bit of )?(percussion|perc|congas?|bongos?|rims?)\b/.test(t) && PROJ.tracks.some(x=>x.role==='drums')) return {actions:[{type:'groove',track:'drums',perc:3}]};
+  if(/\badd (a |some )?shakers?\b/.test(t) && PROJ.tracks.some(x=>x.role==='drums')) return {actions:[{type:'groove',track:'drums',shaker:true}]};
+  if(/\badd (a |some |the )?(claps?|snares?)\b/.test(t) && PROJ.tracks.some(x=>x.role==='drums'&&x.recipe)) return {actions:[{type:'groove',track:'drums',claps:/clap/.test(t)?true:undefined,snare:/snare/.test(t)?true:undefined}]};
   if(artist && /\b(vibe|like|style|sound|in the style)\b/.test(t) && !/\b(drums?|beat|bass|chords?|melody|hats|kick|groove)\b/.test(t)) return {actions:/\b(track|song|tune|start|make|build)\b/.test(t)&&!PROJ.tracks.some(x=>x.role==='drums')?[{type:'vibe',ref},{type:'add_drums',ref},{type:'transport',do:'play'}]:[{type:'vibe',ref}]};
   const iw=(INST_WORDS.find(([k,re])=>re.test(t))||[])[0];
   if(style&&!artist) A.push({type:'style',style,keepTempo:/bpm|tempo/.test(t)});
   if((m=t.match(/(\d{2,3}(?:\.\d)?)\s*bpm/)||t.match(/tempo (?:to |of |at )?(\d{2,3})/))) A.push({type:'tempo',bpm:+m[1]});
+  else if(/\b(faster|speed (it )?up|quicker|slower|slow (it )?down)\b/.test(t)&&!/\bhats\b/.test(t)&&PROJ.tracks.length) A.push({type:'tempo',bpm:Math.round(CTRL.bpm)+(/\b(slower|slow (it )?down)\b/.test(t)?-5:5)*(/\b(a lot|much|way)\b/.test(t)?2:1)});
   if((m=t.match(/\b(\d{1,2})\s*bars?\b/))) A.push({type:'bars',bars:+m[1]});
   if((m=t.match(/\b(?:in|key of|key)\s+([a-g](?:\s*(?:sharp|flat|#|b))?\s*(?:major|minor|maj|min|m)?)\b/)) && /major|minor|maj|min|\bkey\b|sharp|flat|#/.test(m[0])) A.push({type:'key',key:m[1]});
   if(/\b(new song|new project|start over)\b/.test(t)) return {actions:[{type:'new_project'}],reply:'Started a new song. Your last one is saved.'};
@@ -4138,7 +4156,7 @@ const ACT={
   add_drums(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a,true);
     const rec=grooveRecipe(s,artist,grooveOver(a,grooveRecipe(s,artist).swing)), seed=+a.seed||newSeed();
     const kit=resolveInst(a.kit||a.instrument,'drums')||(artist&&artist.sounds.kit)||STYLES[s].kit, I=loadI(kit);
-    const g=makeGroove(rec,L_(),seed);
+    const g=makeGroove(rec,L_(),seed); if(BATCH.swing!=null) BATCH.swingShown=true;
     addTrack({role:'drums',inst:kit,zone:'pads',gen:true,name:'Drums',events:g.events,recipe:rec,seed,style:s,ref:artist?artist.name:undefined,desc:g.desc},{replaceRole:'drums'});
     return `${artist?artist.name+'-style':STYLES[s].name} drums on ${I.name}: ${g.desc}`; },
   hats(a){ const kind=HAT_KIND[String(a.pattern||a.value||'8th').toLowerCase()]||String(a.pattern||a.value||'8th').toLowerCase();
@@ -4149,12 +4167,17 @@ const ACT={
     if(!t.recipe) return ACT.add_drums(a);
     const prev=+t.recipe.swing||0, over=grooveOver(a,prev); if(a.change!=null) over.energy=(t.recipe.energy||3)+Math.sign(+a.change);
     Object.keys(over).forEach(k=>over[k]===undefined&&delete over[k]);
-    regenTrack(t,{seed:a.fresh?undefined:t.seed,recipe:over});
+    /* the swing was already set and shown by vary or add_drums in this request: no second chip */
+    if(BATCH.swingShown&&Object.keys(over).join()==='swing'&&Math.abs(over.swing-prev)<0.001) return;
+    regenTrack(t,{seed:a.fresh?undefined:t.seed,recipe:over}); BATCH.swingShown=over.swing!==undefined||BATCH.swingShown;
     if(over.swing===undefined) return `Groove: ${t.desc}`;
     const sw=swingWords(+t.recipe.swing||0,prev); return Object.keys(over).length>1?`${sw}; ${t.desc}`:sw; },
   vary(a){ const t=findTrack(a.track||'drums'); if(!t) return;
     if(!t.gen){ return `${t.name} is your own part, so I left it as it is`; }
     if(t.role==='chords'&&a.progression!==false){ ensureProg(true); PROJ.tracks.filter(x=>x.gen&&(x.role==='bass'||x.role==='chords'||x.role==='melody')).forEach(x=>regenTrack(x)); return `New chord progression (${PROJ.prog.map(d=>['i','ii','iii','iv','v','vi','vii'][d]).join('–')}); bass and melody follow it`; }
+    /* "another one with less swing": the new take gets the new swing, so its chip shows the real amount (one chip, not two) */
+    if(t.role==='drums'&&t.recipe&&typeof swingSaid==='function'&&swingSaid(LAST_TEXT.text)!=null){ const prev=+t.recipe.swing||0, v=swingOver({},prev);
+      if(v!==undefined){ const d=regenTrack(t,{recipe:{swing:v}}); BATCH.swingShown=true; return d?`${swingWords(v,prev)}; ${t.name}: ${d}`:null; } }
     const d=regenTrack(t); return d?`${t.name}: ${d}`:null; },
   add_bass(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'bass')||(artist&&artist.sounds.bass)||STYLES[s].bass, I=loadI(id), seed=+a.seed||newSeed();
     addPart({role:'bass',inst:id,gen:true,name:'Bassline',events:genBass(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},Object.assign({},a,{replace:a.replace!==false&&!a.new})); return `Bassline on ${I.name} in ${keyName(projectKey())}`; },
