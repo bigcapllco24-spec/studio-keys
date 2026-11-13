@@ -51,15 +51,21 @@ function songUniqueName(base,S,except){ S=S||songSections(); base=String(base||'
   const root=base.replace(/\s+\d+$/,''); for(let i=2;i<99;i++){ const n=root+' '+i; if(!taken(n)) return n; } return base; }
 /* keep sections in step with the tracks: drop parts of deleted tracks, switch new tracks on, follow the loop length while
    the song is still one automatic section. Runs before every undo snapshot (edit.js) */
-let songFreshT=0;
+let songFreshT=0, songFreshIds=[];
+/* a sung take switches to Loop mode while you sing and comes back to Song mode after it (TAKE.backSong) */
+const songBackSoon=()=>typeof TAKE==='object'&&!!TAKE.backToSong;
 function songSync(){ const p=PROJ; migrateSong(p); const S=p.sections, ids=new Set(p.tracks.map(t=>t.id));
   S.forEach(s=>{ for(const k in s.parts) if(!ids.has(k)) delete s.parts[k]; if(s.auto) s.bars=p.bars; });
   const fresh=p.tracks.filter(t=>!S.some(s=>s.parts[t.id]));
   if(fresh.length){ const sel=songSel(), on=S.length===1||!sel?S:[sel];
     fresh.forEach(t=>S.forEach(s=>{ s.parts[t.id]={on:on.includes(s),variant:'A'}; }));
-    if(on.length<S.length&&songOn()){ const nm=fresh.map(t=>`“${t.name}”`).join(', '); clearTimeout(songFreshT);
-      songFreshT=setTimeout(()=>toast(`${nm} play${fresh.length>1?'':'s'} in ${on.map(s=>s.name).join(', ')}. Click its empty parts to add it elsewhere.`),900); } }
+    if(on.length<S.length&&(songOn()||songBackSoon())){ songFreshIds=fresh.map(t=>t.id); clearTimeout(songFreshT); songFreshT=setTimeout(songFreshToast,900); } }
   SONG.ver++; }
+/* "“Sung chords” plays in Intro. …", read from the parts as they are when it shows (after a take, back in Song mode) */
+function songFreshToast(){ const S=songSections(), ts=songFreshIds.map(id=>PROJ.tracks.find(t=>t.id===id)).filter(Boolean); songFreshIds=[]; if(!songOn()||!ts.length) return;
+  const on=S.filter(s=>ts.some(t=>s.parts[t.id]&&s.parts[t.id].on)); if(!on.length||on.length>=S.length) return;
+  toast(`${ts.map(t=>`“${t.name}”`).join(', ')} play${ts.length>1?'':'s'} in ${on.map(s=>s.name).join(', ')}. Click its empty parts to add it elsewhere.`); }
+function songFreshCancel(){ clearTimeout(songFreshT); songFreshIds=[]; }
 function songCopyParts(fromId,toId){ songSections().forEach(s=>{ if(s.parts[fromId]) s.parts[toId]=JSON.parse(JSON.stringify(s.parts[fromId])); }); }
 
 /* ----- patterns ----- */
