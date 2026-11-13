@@ -1,0 +1,31 @@
+{
+  "id": "UX-4",
+  "verdict": "good",
+  "score": 4,
+  "why": "The phone apps producers use (BandLab, Koala, GarageBand, Moises) all have a few bottom tabs or one main screen, one big primary button and transport in thumb reach. A spoken assistant on the first screen is something none of them has. The web app first, then TWA, then App Store order is the cheap, proven path. The main risk is that talking to Keys on an iPhone is currently broken by an open iOS 27 WebKit bug.",
+  "notes": [
+    "Keep the bottom tabs (decision 1a), Keys first with one big Keys button and the mini transport always visible. This matches BandLab's big '+' in a bottom tab bar, Suno's prompt-first create screen and Koala's three-tab, big-target design. No competitor puts voice first, so this is our hook.",
+    "Treat iPhone speech as broken in Safari as well as in home-screen apps. WebKit 321436 is still NEW and unassigned (last updated 11 Nov 2026), with reports on iOS 27.0, 27.0.1, 27.2, 27.3 beta 1 and iPadOS 27.2.1, some in plain Safari tabs with no audio playing. So the fallback to typing with dictation (decision 2a) and the watchdog should apply on every iOS 27 device, not only the installed app. Also try the reported workaround: play a short speechSynthesis line, start recognition after it ends, continuous=false, never stop() or abort() mid-session.",
+    "Ship the installable web app (UX-5) right after UX-4. Do the Play Store TWA only when the owner wants a store listing. Hold the iPhone App Store until we have real native features: Apple still rejects Capacitor apps for 'not different enough from web browsing' (a Jan 2026 forum case). A native Speech plugin (SFSpeechRecognizer, reported as reliable where Web Speech fails), CoreMIDI, background audio, Files import and the share sheet are the features that justify it.",
+    "Watch the scope. At L size the note editor on a phone is the weakest part (FL Mobile and GarageBand both push editing into landscape). Keep 'ask Keys to change the notes' as the main way to edit on a phone and stop adding gestures after the basics. Test on a mid-range Android before release."
+  ],
+  "answers": [
+    "Q1 layouts. BandLab: bottom tab bar with a big red '+' that opens Create (track types and tools); a design critique found its studio entry easy to miss. Koala Sampler: one portrait screen of 16 pads, tabs Sample / Sequence / Perform, with record and play always on the main screen. Suno: leads with a create/prompt box where you type or record audio. Its May 2026 update modernised Home/Explore and added memory of the last prompt; I couldn't confirm exact tab positions. GarageBand iPhone: an instrument browser first, then full-screen instruments, with transport (play/record) in a fixed top bar and editing in landscape. Moises: a portrait player with faders. Pattern producers like: one big primary button, transport always in view, portrait for playing and talking, landscape for editing. No app is voice-first; the AI apps are text or chat first.",
+    "Q2 iOS speech. Not fixed. WebKit bug 321436 ('SpeechRecognition stops producing results after audio/video plays') is NEW, unassigned and P2, last modified 11 Nov 2026. Comments say it started with iOS 27 (iOS 26.6 mostly worked) and still happens on 27.2 and 27.3 beta 1, in both home-screen apps and Safari tabs, sometimes with no media on the page. Web Speech in home-screen apps has also been unreliable for years (older bug 225298). WKWebView: no fix for Web Speech, but one report says a native WKWebView wrapper using Apple's SFSpeechRecognizer works reliably. Our mic/getUserMedia singing path is unaffected.",
+    "Q3 App Store 4.2. I found no public example of a Capacitor music app being approved or rejected. Closest case: a Capacitor plus Swift plugins app was rejected twice under 4.2 in Jan 2026, with Apple saying Core Location and sharing were not enough. Capgo's Oct 2026 guide (vendor-written) says bundling the app locally helps, along with one or two native features the reviewer can see quickly, such as offline mode, background audio or Bluetooth. Bundled offline sounds, native speech, CoreMIDI (Bluetooth MIDI keyboards), background audio and Files import give us a credible case, but approval is not guaranteed. Music-app precedent on the App Store (Koala, BandLab, Moises) is native, not web views."
+  ],
+  "similar": [
+    {"title": "BandLab mobile design critique (Sep 2025)", "url": "https://ixd.prattsi.org/2025/09/design-critique-bandlab-music-making-studio-mobile/"},
+    {"title": "Koala Sampler review, Sound On Sound", "url": "https://www.soundonsound.com/reviews/elf-audio-koala-sampler"},
+    {"title": "Suno for mobile", "url": "https://suno.com/blog/suno-for-mobile"},
+    {"title": "Suno mobile app improvements (May 2026)", "url": "https://suno.com/release-notes/mobile-app-improvements"}
+  ],
+  "sources": [
+    {"title": "WebKit bug 321436", "url": "https://bugs.webkit.org/show_bug.cgi?id=321436"},
+    {"title": "times-tables issue 44, speech in installed app (Sep 2026)", "url": "https://github.com/tanem/times-tables/issues/44"},
+    {"title": "Apple Developer Forums, Capacitor app 4.2 rejection (Jan 2026)", "url": "https://developer.apple.com/forums/thread/812889"},
+    {"title": "Capgo, How to pass App Store review 2026 (vendor, Oct 2026)", "url": "https://capgo.app/blog/how-to-pass-app-store-review-2026/"},
+    {"title": "RES-5 phone findings", "url": "file:///home/claude/research/RES-5.md"}
+  ],
+  "at": "2026-11-13"
+}

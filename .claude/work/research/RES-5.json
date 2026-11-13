@@ -1,0 +1,258 @@
+{
+ "id": "RES-5",
+ "title": "Split a song into parts: karaoke and remix in the browser (+ phone app notes for UX-4)",
+ "for": [
+  "lead",
+  "sound-engine-dev",
+  "studio-ux-dev",
+  "assistant-dev"
+ ],
+ "question": "How do other tools split songs into stems, can Studio Keys do it in the browser on a laptop and a phone, what are the server, cost, privacy and rights trade-offs, and what should our first version be? Plus: phone layouts of comparable apps and PWA vs Capacitor vs TWA.",
+ "bottomLine": "Doable in the browser on a laptop now: the open HTDemucs model (vocals, drums, bass, other) runs through ONNX Runtime Web with WebGPU, roughly 10-60 s for a 3-minute song (about the song's length on WASM without WebGPU), after a one-time ~80-130 MB download that must be opt-in and cannot live inside index.html. Phones work but slowly (iPhone 17 Pro estimate ~5-8 min, 2 GB tab memory limit). First version: 'Split into parts' gives a group of 4 stem tracks with the original muted, plus 'Keys, play the background' karaoke (vocal slider) and remix by keeping stems and asking for new parts, all on-device. Kick/snare/hats: open models are non-commercial, so use our own DSP on the drum stem (Re-drum). Server options exist (Replicate Demucs ~$0.013/song; LALAL/Moises ~$0.10-0.15/min) but send songs off the device and cost money: owner approval. Owner decisions: model hosting (own Cloudflare storage vs Hugging Face), the Demucs weights licence (code MIT, weights status disputed; Spleeter is the clean-MIT, weaker fallback), and the rights text.",
+ "findings": [
+  "Every major DAW now ships stem separation, running on the computer: Ableton Live 12.3 Suite (4 stems, Fast/HQ modes, ~2 GB of models), Logic Pro 11.2 (6 stems; MusicRadar's Jan 2026 test winner), FL Studio 2025 (4 stems). Cloud tools: Moises (Pro splits drums into kick/snare/toms/hi-hat/cymbals), LALAL.AI (up to 10 types, billed as minutes x number of stems), Fadr (kick/snare split on Plus).",
+  "User expectations: one click on a clip, choose parts, stems land as a group with the original muted not deleted; fast vs quality modes; for karaoke a vocal level slider (Apple Music Sing keeps a faint guide vocal).",
+  "Browser ports of HTDemucs exist (MIT/Apache code): demucs-web (ONNX Runtime Web, WebGPU then WASM, ~172 MB), monteslu mixed-precision (126 MB, 21 small GPU steps, ~8-22x real time on a desktop GPU), demucs-rs (84 MB WebGPU), 6-stem WebGPU builds.",
+  "Speed estimates for a 3-min song (hobby projects, unverified): desktop GPU ~8-25 s; laptop integrated GPU ~30-60 s; WASM single thread ~2.5-4 min; iPhone 17 Pro WebGPU ~5-8 min. iOS kills a tab above ~2 GB; chunked streaming plus fp16 kept the peak at ~0.8-1.5 GB.",
+  "WebGPU: Chrome/Edge desktop, Safari 26 (macOS/iOS/iPadOS), Chrome Android 12+ on Qualcomm/ARM GPUs, Firefox Windows/Apple-silicon Mac. Not in Firefox Android or Chrome on Linux yet.",
+  "Demucs code is MIT and its repo has been archived since Jan 2025. The weights' licence is disputed (earlier issues said research use; the HF card says MIT; the question is unanswered). Spleeter's models are plainly MIT but weaker. Newer small models (Moises-Light, ~5M params) have no public weights.",
+  "Drum sub-split models are non-commercial (LarsNet CC BY-NC, Timbrica CC BY-NC-SA) or server-only with an unclear licence (MVSEP DrumSep). Studio Keys' Sound Lab already has kick/snare/hat band recipes and a SEPARATION_ENGINES registry meant for ML engines.",
+  "Workers AI has no stem or music model. Replicate Demucs ~$0.013 per run (T4, under 1 min). LALAL.AI Pro $15/mo for 250 fast minutes. Moises/Music.ai ~$0.12/min and StemSplit ~$0.10/min (from a biased source). All upload the user's song.",
+  "Rights: Moises refuses streaming links (an unauthorised derivative work, and DRM) and asks for audio you own or have permission to use; commercial use only with rights to everything in the project. Legal commentary: stems stay derived works and some remix contests ban AI-split stems.",
+  "Our import downmixes to mono before storing; stems need the stereo original. TAKE_GUIDE already plays only the drums during takes, and karaoke is the same idea with everything except vocals."
+ ],
+ "recommendations": [
+  "sound-engine-dev (S, spike first): benchmark HTDemucs 4-stem fp16 via ONNX Runtime Web (WebGPU, then WASM) on the owner's laptop, an iPhone and an Android phone: seconds per 3-min song, peak memory, download size, plus a listening check on 3 owned melodic house tracks.",
+  "sound-engine-dev (M): register an 'htdemucs' engine in SEPARATION_ENGINES (src/lab.js): Worker, 7.8 s chunks with overlap, per-chunk progress and cancel, stereo stems cached in IndexedDB by file hash, DSP fallback when the model can't load.",
+  "studio-ux-dev (M): 'Split into parts' on audio clips (Vocals/Drums/Bass/Other, Fast/Good), result as a group of stem tracks with the original muted and kept, one-time download notice (~110 MB), progress and cancel, karaoke vocal-level slider (default ~15% guide); keep the stereo original on import.",
+  "assistant-dev (S-M): actions splitStems and karaoke, plus stem mute/solo by name ('just drums and bass'); 'play the background' arms karaoke with a vocal take; 'remix this' keeps stems and runs the one-element flow in the detected key and tempo; ask before the first model download; never split streaming links. Each action in the Worker prompt, actions.js, maker.js and the smoke test.",
+  "lead/owner: decide (a) model hosting (recommend our own Cloudflare storage over Hugging Face; both need approval), (b) Demucs (better, licence disputed) vs Spleeter (MIT, weaker), recommend Demucs with the owner informed, (c) the rights text, (d) no server fallback for now.",
+  "Later: Re-drum (drum stem to MIDI on our kits, own DSP), Bass to notes (bass stem through audioToNotes), 6-stem mode, a server fallback for weak phones only with approval of the cost and privacy change.",
+  "UX-4: ship a proper PWA first (works on iPhone and Android now, no Web MIDI on iPhone), add a Play Store TWA cheaply when wanted, Capacitor iOS only if the App Store or MIDI on iPhone is wanted (needs a native CoreMIDI bridge and enough native value to pass Apple guideline 4.2)."
+ ],
+ "ideas": [
+  {
+   "name": "Sing over it (karaoke)",
+   "hook": "'Keys, play the background': any song you drop in becomes a backing track you can sing on, with a faint guide vocal.",
+   "loop": "Drop a song, split once, sing a take, listen back, keep the best take.",
+   "why": "Singers and toplines practise and write over references; Apple Music Sing and Moises prove the demand. Ours records the take into a real project, by voice.",
+   "scope": "M",
+   "reuse": "TAKE_GUIDE, voice-note recording, IndexedDB audio, the new stem engine",
+   "risks": "Phone speed, ~110 MB model download, rights wording",
+   "similar": "Apple Music Sing, Moises, Spotify karaoke, Smule"
+  },
+  {
+   "name": "Flip it (remix from stems)",
+   "hook": "'Keep the drums and bass, give me a new melody': a song becomes the start of your own track.",
+   "loop": "Split, mute or solo parts, ask Keys for one new part in the detected key and tempo, repeat.",
+   "why": "Producers do this by hand in Ableton, Logic and Fadr; one voice request is new.",
+   "scope": "M",
+   "reuse": "AI-3 key/tempo detection, the one-element assistant flow, roleFx",
+   "risks": "Users releasing remixes of commercial songs (clear text needed), stem bleed",
+   "similar": "Fadr, Ableton 12.3 Stem Separation, Logic Stem Splitter, Moises Studio"
+  },
+  {
+   "name": "Re-drum (drums to MIDI on our kits)",
+   "hook": "'Swap the kick for a deeper one': the song's drum hits become an editable drum track on Studio Keys kits.",
+   "loop": "Split, Keys finds kick/snare/hat hits in the drum stem, makes a MIDI drum track, the user swaps the kit or edits notes.",
+   "why": "Producers want a groove but their own sounds; Ableton's drums-to-MIDI is well loved. Our own DSP avoids non-commercial models.",
+   "scope": "S-M",
+   "reuse": "Sound Lab kick/snare/hat bands, audioToNotes, the groove engine kits",
+   "risks": "Accuracy on dense mixes; copies a pattern, so keep it for private sketches",
+   "similar": "Ableton Convert Drums to MIDI, Fadr MIDI, Moises drum split"
+  }
+ ],
+ "phoneApp": {
+  "layouts": "GarageBand: instrument browser, full-screen touch instruments, a separate Tracks timeline, landscape for editing. Koala: 16 pads x 4 banks, three tabs (Sample, Sequence, Perform). FL Studio Mobile: a dense landscape version of the desktop. BandLab: bottom tabs with a big red '+' for Create (a critique found 'open studio' easy to miss). Moises: a portrait player with stem faders, chords, metronome, speed and pitch. Suno: a prompt box first (text, or record audio). Google Flow Music (formerly Producer.ai): chat-first. None found leads with a spoken assistant, so voice-first is distinctive.",
+  "wrappers": "PWA: mic works on iOS since 13; iOS 26 opens home-screen sites as web apps and supports WebGPU; installed web apps get Web Push; Web MIDI does not work on any iPhone browser (Safari never shipped it) but works in Chrome and Samsung Internet on Android. Latency depends on settings (one Mac test: ~67 ms default vs ~19 ms tuned), so use latencyHint interactive and turn mic processing off for takes. TWA: runs in the user's Chrome (same APIs, incl. Web MIDI), verified with Digital Asset Links, fine on Play for your own site. Capacitor: needed for the App Store, but WKWebView has no Web MIDI (needs a native CoreMIDI bridge), and Apple 4.2 rejects 'repackaged websites', so it needs native value. Recommend PWA first, then TWA, then Capacitor iOS only if the App Store or MIDI on iPhone is wanted."
+ },
+ "market": {
+  "verdict": "good",
+  "score": 4,
+  "why": "Stem splitting is standard in Ableton, Logic and FL, so on its own it won't wow producers. The edge is free, on-device and by voice, feeding straight into making parts."
+ },
+ "sources": [
+  {
+   "title": "Ableton, Stem Separation FAQ",
+   "url": "https://help.ableton.com/hc/en-us/articles/23730994755996"
+  },
+  {
+   "title": "Ableton Live 12 manual, Stem Separation",
+   "url": "https://www.ableton.com/en/live-manual/12/stem-separation/"
+  },
+  {
+   "title": "MusicRadar, I tested 11 stem separation tools (7 Jan 2026)",
+   "url": "https://www.musicradar.com/music-tech/i-tested-11-of-the-best-stem-separation-tools-and-you-might-already-have-the-winner-in-your-daw"
+  },
+  {
+   "title": "Sound On Sound, Logic Pro 11.2 review (Aug 2025)",
+   "url": "https://www.soundonsound.com/reviews/apple-logic-pro-11-2"
+  },
+  {
+   "title": "Editors Keys, Stem separation in 2026, which DAW (Jun 2026)",
+   "url": "https://www.editorskeys.com/blogs/news/stem-separation-in-2026-which-daw-does-it-best"
+  },
+  {
+   "title": "Piano and Synth, FL Studio 21.2 stem separation (Oct 2023)",
+   "url": "https://pianoandsynth.com/fl-studio-21-2-upgrade-includes-stem-separation-and-ai-mastering/"
+  },
+  {
+   "title": "Moises Pro plan",
+   "url": "https://help.moises.ai/hc/articles/10523828567196-What-is-the-Pro-plan"
+  },
+  {
+   "title": "Moises, who owns the output",
+   "url": "https://help.moises.ai/hc/en-us/articles/23877386138140-Who-owns-the-output-and-music-I-create-with-Moises"
+  },
+  {
+   "title": "Moises, why no streaming links",
+   "url": "https://help.moises.ai/hc/en-us/articles/18322457396508-How-do-streaming-services-work-and-why-can-t-we-accept-their-URL-links-on-Moises"
+  },
+  {
+   "title": "Moises App Store listing",
+   "url": "https://apps.apple.com/us/app/1515796612"
+  },
+  {
+   "title": "LALAL.AI pricing",
+   "url": "https://lalal.ai/pricing"
+  },
+  {
+   "title": "Fadr drum stems",
+   "url": "https://www.fadr.com/drum-stems"
+  },
+  {
+   "title": "DJ.Studio, DJ software stem benchmark (Apr 2026, vendor-written)",
+   "url": "https://dj.studio/blog/dj-software-stem-separation-benchmark"
+  },
+  {
+   "title": "TechCrunch, Apple Music Sing (Dec 2022)",
+   "url": "https://techcrunch.com/2022/12/06/apple-music-is-getting-a-new-karaoke-like-feature-apple-sing/"
+  },
+  {
+   "title": "facebookresearch/demucs (archived)",
+   "url": "https://github.com/facebookresearch/demucs"
+  },
+  {
+   "title": "HF discussion on HTDemucs weights licence",
+   "url": "https://huggingface.co/adefossez/HTDemucs/discussions/1"
+  },
+  {
+   "title": "demucs-web",
+   "url": "https://github.com/timcsy/demucs-web"
+  },
+  {
+   "title": "monteslu htdemucs-web-onnx",
+   "url": "https://huggingface.co/monteslu/htdemucs-web-onnx"
+  },
+  {
+   "title": "kramp htdemucs 6s WebGPU",
+   "url": "https://huggingface.co/kramp/htdemucs-6s-webgpu-onnx"
+  },
+  {
+   "title": "webnn stem-separator",
+   "url": "https://huggingface.co/webnn/stem-separator"
+  },
+  {
+   "title": "demucs-rs",
+   "url": "https://github.com/nikhilunni/demucs-rs"
+  },
+  {
+   "title": "freemusicdemixer releases",
+   "url": "https://github.com/sevagh/freemusicdemixer.com/releases"
+  },
+  {
+   "title": "Aral Roca, a neural network in a browser tab",
+   "url": "https://dev.to/aralroca/i-ran-a-neural-network-in-a-browser-tab-to-split-a-song-into-stems-10mk"
+  },
+  {
+   "title": "stemyla PR 39 (iPhone memory, Oct 2026)",
+   "url": "https://github.com/lloydmeta/stemyla/pull/39"
+  },
+  {
+   "title": "musicalia PR 12 (browser estimates, Sep 2026)",
+   "url": "https://github.com/robert-dm/musicalia/pull/12"
+  },
+  {
+   "title": "Moises-Light paper (Oct 2025)",
+   "url": "https://arxiv.org/html/2510.06785v1"
+  },
+  {
+   "title": "LARS / LarsNet",
+   "url": "https://github.com/EdoardoMor/LARS"
+  },
+  {
+   "title": "Timbrica drum separator",
+   "url": "https://huggingface.co/Faridzar/timbrica-drum-separator"
+  },
+  {
+   "title": "MVSEP DrumSep",
+   "url": "https://mvsep.com/algorithms/29"
+  },
+  {
+   "title": "Workers AI model catalog",
+   "url": "https://developers.cloudflare.com/workers-ai/models/index.md"
+  },
+  {
+   "title": "Replicate cjwbw/demucs",
+   "url": "https://replicate.com/cjwbw/demucs"
+  },
+  {
+   "title": "StemSplit API comparison (biased)",
+   "url": "https://dev.to/stevecase430/ai-stem-splitter-api-comparison-2026-stemsplit-vs-lalalai-vs-moises-with-benchmarks-372l"
+  },
+  {
+   "title": "Music Scientists, who owns AI-split stems (May 2026)",
+   "url": "https://musicscientists.beehiiv.com/p/who-owns-audio-ai-stem-separation"
+  },
+  {
+   "title": "web.dev, WebGPU in major browsers (Nov 2025)",
+   "url": "https://web.dev/blog/webgpu-supported-major-browsers?hl=en"
+  },
+  {
+   "title": "caniuse, Web MIDI",
+   "url": "https://caniuse.com/webmidi"
+  },
+  {
+   "title": "firt.dev iOS PWA notes (Oct 2026)",
+   "url": "https://firt.dev/notes/pwa-ios/"
+  },
+  {
+   "title": "Jeff Kaufman, browser audio latency (2021)",
+   "url": "https://www.jefftk.com/p/browser-audio-latency"
+  },
+  {
+   "title": "Chrome 136 WebAudio lower latency",
+   "url": "https://groups.google.com/a/chromium.org/g/fugu-dev/c/AavLqm3hk0Y"
+  },
+  {
+   "title": "Chrome, Trusted Web Activity",
+   "url": "https://developer.chrome.com/docs/android/trusted-web-activity"
+  },
+  {
+   "title": "MobiLoud, App Store 4.2 for webview apps (vendor-written)",
+   "url": "https://www.mobiloud.com/blog/app-store-review-guidelines-webview-wrapper"
+  },
+  {
+   "title": "MIDIWebView (Web MIDI in WKWebView)",
+   "url": "https://swiftpackageregistry.com/bloxidge/MIDIWebView"
+  },
+  {
+   "title": "Pratt IXD, BandLab mobile critique (Sep 2025)",
+   "url": "https://ixd.prattsi.org/2025/09/design-critique-bandlab-music-making-studio-mobile/"
+  },
+  {
+   "title": "Sound On Sound, Koala Sampler (Oct 2022)",
+   "url": "https://www.soundonsound.com/reviews/elf-audio-koala-sampler"
+  },
+  {
+   "title": "Suno for mobile (Jul 2024)",
+   "url": "https://suno.com/blog/suno-for-mobile"
+  },
+  {
+   "title": "Producer AI / Flow Music review (Jun 2026)",
+   "url": "https://fast.io/resources/producer-ai-review-2026/"
+  }
+ ],
+ "status": "done",
+ "at": "2026-11-13T15:30:00+05:30"
+}
