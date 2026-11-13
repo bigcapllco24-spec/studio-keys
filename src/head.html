@@ -586,5 +586,103 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 .themes button{width:20px;height:20px;border-radius:50%;border:0;cursor:pointer;padding:0;box-shadow:inset 0 0 0 5px var(--sw,#333);outline:2px solid transparent;outline-offset:2px;transition:outline-color .15s}
 .themes button[aria-pressed="true"]{outline-color:var(--ink)}
 .themes button span{display:none}
+/* ---------- Song view (UX-1): Loop / Song switch, section strip, part lanes, song map ---------- */
+.songseg{margin-left:0}
+.songseg button{font-weight:600}
+.pos{white-space:nowrap}
+/* one fixed width in Loop and Song, so switching modes or playing past bar 9 never moves the row (QA, 13 Nov) */
+#posDisp{width:92px;min-width:0;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis}
+#posDisp.cnt{font-size:14px}
+#posDisp.songpos{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 6px;line-height:1.15}
+#posDisp.songpos b{font-weight:inherit;font-size:16px}
+#posDisp.songpos small{font:600 10px var(--body);color:var(--ink2);max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.song-head{display:grid;grid-template-columns:300px minmax(0,1fr);gap:10px;align-items:end;padding:0 7px 0 10px}
+.sh-corner{display:flex;flex-direction:column;gap:6px;min-width:0;padding-bottom:6px}
+.sh-l1,.sh-l2{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.sh-l1{flex-wrap:nowrap;min-height:26px}/* a long Undo chip stays on one line (ellipsis, full text in its title) so the strip doesn't jump */
+.sh-l1>.sh-len{flex:none}
+.sh-l2 .seg{margin-left:0}
+.sh-len{font-size:13px;color:var(--ink2);white-space:nowrap}
+.song-chip{display:inline-flex;gap:8px;align-items:center;max-width:100%;min-width:0;flex:0 1 auto;white-space:nowrap;padding:2px 4px 2px 10px;border:1px solid var(--accent);border-radius:999px;font-size:12px;color:var(--ink);background:var(--t2)}
+.song-chip>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.song-chip .lk{color:var(--accent);font-weight:700;flex:none}
+.sh-time{min-width:0;display:flex;flex-direction:column}
+#songRuler{display:block;width:100%;height:22px;cursor:pointer;border-radius:8px 8px 0 0;border:1px solid var(--line);border-bottom:0}
+.sviewport{overflow-x:auto;overflow-y:hidden;background:var(--t1);border:1px solid var(--line);border-top:0;border-radius:0 0 8px 8px}
+.sstrip{position:relative;height:44px}
+.sec{position:absolute;top:4px;bottom:4px;display:flex;align-items:center;gap:2px;padding:0 9px 0 1px;border-radius:7px;background:var(--sc,var(--t5));border:1px solid color-mix(in srgb,var(--ink) 16%,transparent);color:var(--ink);overflow:hidden;cursor:grab;user-select:none;touch-action:pan-y}
+.sec .sname{flex:1 1 auto;min-width:0;background:transparent;border:0;color:inherit;font:700 12.5px var(--body);text-align:left;padding:4px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:inherit;border-radius:5px}
+.sec .sbars{font-size:10.5px;color:color-mix(in srgb,var(--ink) 72%,transparent);flex:none}
+.sec .smore{display:none;flex:none;background:transparent;border:0;color:inherit;font:700 15px/1 var(--body);padding:4px 6px;border-radius:6px;cursor:pointer}
+.sec .smore:hover{background:color-mix(in srgb,var(--ink) 12%,transparent)}
+.sec .rz{position:absolute;right:0;top:0;bottom:0;width:9px;cursor:ew-resize;touch-action:none}
+.sec .rz::after{content:"";position:absolute;right:3px;top:28%;bottom:28%;width:2px;border-radius:1px;background:color-mix(in srgb,var(--ink) 40%,transparent)}
+.sec .send{flex:none;width:0;height:0;border-left:7px solid var(--ink);border-top:5px solid transparent;border-bottom:5px solid transparent;opacity:.7}
+.sec.cur{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.sec.looped{box-shadow:inset 0 -4px 0 var(--ink)}
+.sec.cur.looped{box-shadow:inset 0 0 0 1px var(--ink),inset 0 -4px 0 var(--ink)}
+.sec.now .sname::before{content:"▶";font-size:9px;margin-right:4px;color:var(--ink)}
+.sec.dragging{z-index:3;cursor:grabbing;opacity:.88}
+.sec.sizing{z-index:3}
+.sec.tiny{padding-right:6px}.sec.tiny .sbars,.sec.tiny .smore,.sec.tiny .send{display:none}.sec.tiny .sname{padding:4px 2px;font-size:11px}
+.sec.narrow .sbars{display:none}
+.k-intro{--sc:color-mix(in srgb,var(--signal) 26%,var(--t4))}
+.k-build,.k-verse{--sc:color-mix(in srgb,var(--accent) 30%,var(--t4))}
+.k-drop,.k-chorus,.k-hook{--sc:color-mix(in srgb,var(--accent) 55%,var(--t3))}
+.k-break,.k-bridge{--sc:color-mix(in srgb,var(--signal) 12%,var(--t6))}
+.k-outro{--sc:color-mix(in srgb,var(--signal) 18%,var(--t3))}
+.k-other{--sc:var(--t6)}
+.sadd{position:absolute;top:8px}
+.slane{position:relative;height:78px;overflow:hidden;border-radius:8px;background:var(--t1);border:1px solid var(--line);align-self:center;touch-action:pan-y}
+.sl-in{position:absolute;left:0;top:0;bottom:0;transform:translateX(calc(-1 * var(--sx,0px)))}
+.part{position:absolute;top:5px;bottom:5px;border-radius:6px;border:1px dashed var(--t6);background:transparent;padding:0;margin:0;cursor:pointer;color:var(--ink);overflow:hidden}
+.part:hover{border-color:var(--t9)}
+.part.on{border:1px solid color-mix(in srgb,var(--c) 60%,transparent);background-color:color-mix(in srgb,var(--c) 15%,var(--t2));background-image:var(--pv);background-size:var(--pw) calc(100% - 10px);background-position:var(--po) 5px;background-repeat:repeat-x}
+.part.on:hover{border-color:var(--c)}
+.part:focus-visible{outline:2px solid var(--signal);outline-offset:-2px}
+.pbadge{position:absolute;left:4px;top:3px;font:700 10px/1.4 var(--mono);font-style:normal;padding:0 4px;border-radius:4px;background:var(--ink);color:var(--t2)}
+.pwo{position:absolute;right:4px;bottom:3px;font:600 9.5px/1.4 var(--body);font-style:normal;color:var(--ink2);background:var(--t2);padding:0 4px;border-radius:4px;white-space:nowrap}
+.part.tiny .pwo{display:none}
+.sec.flash,.part.flash,.smb.flash{animation:sflash 1.25s ease-out}
+@keyframes sflash{0%,45%{outline:2px solid var(--signal);outline-offset:1px}100%{outline:2px solid transparent;outline-offset:1px}}
+.playlist.song:focus{outline:none}
+.playlist.song:focus-within{outline:1px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:6px;border-radius:12px}
+.song-hint{font-size:12px;padding:0 10px}
+.song-map{display:none}
+.smb{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;flex:1 1 0;min-width:64px;min-height:58px;padding:6px 10px;border-radius:10px;border:1px solid color-mix(in srgb,var(--ink) 16%,transparent);background:var(--sc,var(--t5));color:var(--ink);cursor:pointer;text-align:left}
+.smb b{font:700 13px var(--body)}.smb span{font:500 11px var(--mono);color:color-mix(in srgb,var(--ink) 75%,transparent)}
+.smb.looped{box-shadow:inset 0 -4px 0 var(--ink);border-color:var(--ink)}
+.smb.looped b::after{content:" · looping";font-weight:500;font-size:11px}
+.smb.now{border-color:var(--ink)}
+.smap-hint{flex-basis:100%;font-size:12px}
+.song-menu{position:fixed;z-index:60;min-width:230px;max-width:360px;padding:6px;background:var(--t3);border:1px solid var(--t6);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:2px}
+.song-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;background:transparent;border:0;border-radius:8px;padding:8px 10px;color:var(--ink);cursor:pointer}
+.song-menu button b{font:600 13px var(--body)}
+.song-menu button span{font:500 11.5px var(--body);color:var(--muted)}
+.song-menu button:hover,.song-menu button:focus-visible{background:var(--t5);outline:none}
+.song-menu button[disabled]{opacity:.45;cursor:default}
+.song-menu button.danger b{color:var(--bad)}
+.song-menu hr{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
+.smi-k{display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:13px;color:var(--muted)}
+.srename{width:100%;min-width:60px;font-size:12.5px;padding:3px 6px;margin:0 2px}
+.ed-pat{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 2px 2px;border-top:1px dashed var(--line);font-size:12.5px}
+.ed-pat .seg{margin-left:0}.ed-pat .seg button{min-width:30px;font-weight:700}
+.ed-plays{color:var(--ink2)}
+@media (max-width:1100px){
+  .sec .smore{display:inline-flex;padding:4px 3px}.sstrip{height:52px}
+  .playlist.song .sh-l2 .btn,.playlist.song .sh-l2 .seg button,.songseg button,#songMake{min-height:44px;min-width:44px}
+  .sec .rz{width:14px}
+}
+@media (pointer:coarse){
+  .sstrip{height:52px}.sec{padding-right:14px}.sec .rz{width:14px}
+  .sec .smore{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0;margin:-4px 0}
+  .sec.slim .smore{display:none} /* narrow blocks: long-press opens the same menu */
+  .sec.slim .sname{padding:4px 3px}
+}
+@media (max-width:860px){.song-head{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:600px){
+  .playlist.song .sh-time,.playlist.song .slane,.playlist.song .song-hint,.playlist.song #songAddSec,.playlist.song .sh-l2 .seg,.playlist.song .playhead{display:none!important}
+  .playlist.song .song-map:not([hidden]){display:flex;flex-wrap:wrap;gap:6px}
+}
 </style>
 </head>
