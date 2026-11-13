@@ -1,0 +1,7 @@
+(Read /home/claude/briefs/2026-11-13-QA-branch-brief.md first.)
+# SE-3 · Real drummer feel · branch check
+Worktree `/home/claude/wt/se-3`, branch `preview-se-3` (pushed). Approved design: `.claude/work/proposals/SE-3.md` (owner chose full triplet swing 66% for "more swing" and the hat feel in every style; his note: users must be able to lighten the swing). Developer's report: `/home/claude/studio-keys-repo/.claude/work/reports/SE-3-build.md`.
+1. Run `bash .claude/tools/check.sh` (any FAIL blocks). Review the 4 new smoke checks the developer added in `tests/smoke.mjs`; tighten them if they'd pass on main by accident.
+2. Use it like a producer with the offline parser: house, melodic house, techno, UK garage, boom bap, lo-fi beats; "more swing", "less swing" several times, "a bit more swing", "swing 58%", "no swing", "another one" five times (each must differ), "another one with less swing". Check replies and chips say the amount in musician words. Check nothing clips (render peak) and hats aren't buried or harsh vs main. Check sung parts still land in time over a human-feel beat (fake mic from `tests/fixtures/sing.wav`).
+3. Check `cloudflare/worker.js` still has no backticks and no `${` and that the prompt's swing lines match the engine.
+4. Verdict: **ready** or **not ready**, with bugs (steps, expected, actual, severity). Save it to `/home/claude/reports/SE-3-test.md` and return the full text.
