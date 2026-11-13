@@ -428,13 +428,26 @@
   <section class="panel ph-page" id="phPageTaste" data-page="taste" aria-label="Your sound"></section>
   <section class="panel ph-page" id="phPageTheme" data-page="theme" aria-label="Colour theme"><p class="hint">Pick the colours of your studio.</p><div id="phThemeSlot"></div></section>
   <section class="panel ph-page" id="phPageInstall" data-page="install" aria-label="Add to Home Screen">
-    <p><b>iPhone:</b> tap the Share button in Safari, then <b>Add to Home Screen</b>.</p>
-    <p><b>Android:</b> open Chrome’s menu (⋮), then <b>Add to Home screen</b> or <b>Install app</b>.</p>
-    <p class="hint">Your songs stay on this phone. Talking to Keys works best in the browser; in the home-screen app, use the mic on your keyboard if talking doesn’t start.</p>
+    <p id="phInstDone" hidden><b>Studio Keys is on your home screen.</b> Open it from the Keys icon.</p>
+    <button class="btn primary ph-inst-go" type="button" id="phInstallGo" hidden>Install Studio Keys</button>
+    <ol class="ph-steps" id="phInstIos" hidden aria-label="On iPhone">
+      <li><span class="ph-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M8 11H6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-2"/></svg></span><span>In Safari, tap <b>Share</b> (on newer iPhones it’s inside the <b>⋯</b> menu).</span></li>
+      <li><span class="ph-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg></span><span>Scroll down and tap <b>Add to Home Screen</b>.</span></li>
+      <li><span class="ph-ico"><div class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></span><span>Tap <b>Add</b>. Studio Keys opens full screen from its icon, even offline.</span></li>
+    </ol>
+    <p id="phInstAndroid"><b>Android:</b> open Chrome’s menu (⋮), then <b>Add to Home screen</b> or <b>Install app</b>.</p>
+    <p class="hint">Your songs stay on this phone. Talking to Keys works best in the browser; in the home-screen app, use the mic on your keyboard if talking doesn’t start. Keys’ AI and Spotify need the internet; offline, Keys understands simple requests.</p>
   </section>
   <section class="panel ph-page" id="phPageCredits" data-page="credits" aria-label="Sound credits"></section>
 </main>
 <footer class="credits"><p>Sound credits: Grand Piano from the Salamander Grand Piano V2 by Alexander Holm (CC BY 3.0). Sampled melodic instruments and basses from the FluidR3 GM SoundFont by Frank Wen (CC BY 3.0), via midi-js-soundfonts by Benjamin Gleitzman. Sampled drum kits and the hall reverb from the Tone.js audio collection (originally from Chris Wilson's web-audio-samples). 808, 909 and Trap kits and the synth basses are generated in the browser.</p></footer>
+<!-- PHONE: one-time "Add to Home Screen" tip (UX-6) -->
+<div class="ph-tip" id="phInstTip" role="status" hidden>
+  <div class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <p><b>Put Studio Keys on your home screen</b><span id="phInstTipSub">It opens full screen, even offline.</span></p>
+  <button class="btn primary" type="button" id="phInstTipGo">How</button>
+  <button class="btn ghost ph-tip-x" type="button" id="phInstTipX" aria-label="Close the tip">✕</button>
+</div>
 <!-- PHONE: mini transport + tabs (always in thumb reach) -->
 <div class="ph-bottom ph-only" id="phBottom">
   <div class="ph-tr" id="phTr" aria-label="Transport">

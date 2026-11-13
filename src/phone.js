@@ -124,6 +124,33 @@ function phPlayUI(){ const o=instOptions(); ['keys','pads'].forEach(z=>{ const s
 function phOct(d){ PH.oct=clamp(PH.oct+d,-3,2); phKeybed(); }
 
 /* ----- the iPhone silent switch mutes web audio: say so once ----- */
+/* ----- Add to Home Screen (UX-6): Android gets a real Install button (beforeinstallprompt), iPhone a picture guide;
+   a one-time tip offers it once the user has made something; everything hides once Studio Keys runs from its icon ----- */
+var PH_TIP_KEY='studiokeys.installTip';
+function phInstalled(){ try{ return navigator.standalone===true||(!!window.matchMedia&&matchMedia('(display-mode: standalone)').matches); }catch(e){ return false; } }
+function phInstUI(){ const done=phInstalled(), e=document.querySelector('[data-phmore="install"]'); if(e) e.hidden=done;
+  $('#phInstDone').hidden=!done; $('#phInstallGo').hidden=done||!PH.bip; $('#phInstIos').hidden=done||!IS_IOS; $('#phInstAndroid').hidden=done||IS_IOS;
+  $('#phInstTipGo').textContent=PH.bip?'Install':'How'; if(done) $('#phInstTip').hidden=true; }
+async function phInstallGo(){ const e=PH.bip; if(!e){ phMoreOpen('install'); return; } PH.bip=null; phInstUI();
+  try{ await e.prompt(); const c=await e.userChoice; if(c&&c.outcome==='accepted') toast('Adding Studio Keys to your home screen…'); }catch(err){} }
+function phInstTipClose(){ $('#phInstTip').hidden=true; }
+function phInstTipCheck(){ if(PH.tipDone||!PH.on||phInstalled()||!/^https?:$/.test(location.protocol)||!(IS_IOS||PH.bip)) return;
+  const busy=PH.sheet||PH.sec||PH.tab==='more'||!$('#editor').hidden||document.documentElement.classList.contains('ph-typing')||PLAYING.has(LOOP.state)||LOOP.state==='counting'||LOOP.state==='recording';
+  if(!PROJ.tracks.length||busy) return;
+  PH.tipDone=true; try{ if(localStorage.getItem(PH_TIP_KEY)) return; localStorage.setItem(PH_TIP_KEY,'1'); }catch(e){ return; }
+  $('#phInstTipSub').textContent=PH.bip?'One tap. It opens full screen, even offline.':'It opens full screen, even offline.'; $('#phInstTip').hidden=false; }
+function phInstInit(){
+  window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); PH.bip=e; phInstUI(); });
+  window.addEventListener('appinstalled',()=>{ PH.bip=null; phInstTipClose(); try{ localStorage.setItem(PH_TIP_KEY,'1'); }catch(e){} phInstUI(); toast('Studio Keys is on your home screen.');
+    try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist(); }catch(e){} });
+  try{ const mq=matchMedia('(display-mode: standalone)'); if(mq.addEventListener) mq.addEventListener('change',phInstUI); }catch(e){}
+  $('#phInstallGo').onclick=phInstallGo;
+  $('#phInstTipGo').onclick=()=>{ phInstTipClose(); phInstallGo(); };
+  $('#phInstTipX').onclick=phInstTipClose;
+  /* running from the home screen: ask the browser to keep the songs safe (granted for installed apps) */
+  if(phInstalled()) try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist().catch(()=>{}); }catch(e){}
+  phInstUI(); setInterval(phInstTipCheck,4000);
+}
 function phIosTip(){ if(!IS_IOS||PH.iosTip) return; PH.iosTip=true; setTimeout(()=>toast('No sound? Flip the silent switch on the side of your iPhone, and turn the volume up.'),600); }
 
 /* typing with the phone keyboard (its own dictation mic works here too); the assistant opens it when talking isn't available */
@@ -230,6 +257,7 @@ function phoneInit(){
   $('#edPlayB').onclick=()=>{ ensureAudio(); if(PLAYING.has(LOOP.state)) loopStop(); else loopPlay(); phEdUI(); };
   $('#edUndoB').onclick=()=>{ undo(); if(ED.tid) drawEditor(); };
   phEdGestures();
+  phInstInit();
   /* the first tap anywhere turns the sound on (a phone has no "click to start" pill) */
   document.addEventListener('pointerdown',e=>{ if(PH.on&&!A.ctx&&!e.target.closest('#asOrb')) ensureAudio(); },true);
   /* the status bar takes the theme's background */

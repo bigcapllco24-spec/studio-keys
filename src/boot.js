@@ -12,3 +12,9 @@ initMIDI(false);
 let rsz=0; window.addEventListener('resize',()=>{ clearTimeout(rsz); rsz=setTimeout(()=>{ drawWave(); drawIso(); drawHarm(); drawRolls(); drawRuler(); if(ED.tid) drawEditor(); drawRoll((performance.now()-MIC.t0)/1000); },120); });
 setTimeout(()=>loadDemo(false),400);
 phoneInit(); /* phone layout (UX-4): after every file has loaded */
+/* installable web app (UX-6): the service worker sits next to the page, so its scope is the page's own folder
+   ("/" on the main site, "/p/preview-<id>/" on a test link). Only on the website, never on a local file. */
+if('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && window.isSecureContext){
+  const swReg=()=>navigator.serviceWorker.register('sw.js').catch(()=>{});
+  if(document.readyState==='complete') setTimeout(swReg,0); else window.addEventListener('load',swReg);
+}

@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#07120e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Keys">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="color-scheme" content="dark">
 <title>Studio Keys</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -868,6 +874,21 @@ html[data-phone] .keyboard{min-width:0;height:220px}
 .ph-list button span{font:500 12.5px var(--body);color:var(--muted)}
 .ph-list button:hover,.ph-list button:focus-visible{background:var(--t4)}
 .ph-page p{margin:0}
+/* Add to Home Screen (UX-6): the page's picture steps and the one-time tip above the mini transport */
+.ph-inst-go{align-self:flex-start;min-height:48px;padding:0 22px;font-size:15px}
+.ph-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;counter-reset:st}
+.ph-steps li{display:flex;align-items:center;gap:14px;padding:10px 12px;background:var(--t3);border:1px solid var(--t6);border-radius:12px;font-size:14.5px;line-height:1.4;counter-increment:st}
+.ph-steps li::before{content:counter(st);flex:none;width:22px;font:700 13px var(--body);color:var(--muted2);text-align:center}
+.ph-ico{flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:10px;background:var(--t5);color:var(--accent)}
+.ph-ico svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ph-ico .mark{width:30px;height:30px;padding:5px;border-radius:7px}
+.ph-tip{position:fixed;left:var(--phSide,12px);right:var(--phSide,12px);bottom:calc(var(--phB,0px) + 10px);z-index:45;display:flex;align-items:center;gap:12px;padding:10px 10px 10px 12px;background:var(--t3);border:1px solid var(--t6);border-left:3px solid var(--accent);border-radius:12px;color:var(--ink)}
+.ph-tip .mark{flex:none}
+.ph-tip p{flex:1;margin:0;font-size:14px;line-height:1.35}
+.ph-tip p span{display:block;font-size:12.5px;color:var(--muted)}
+.ph-tip .btn{min-height:44px;flex:none}
+.ph-tip .ph-tip-x{min-width:44px;justify-content:center;padding:0}
+html:not([data-phone]) .ph-tip{display:none!important}
 #phThemeSlot .themes{padding:10px 14px;gap:16px}
 #phThemeSlot .themes button{width:40px;height:40px;box-shadow:inset 0 0 0 10px var(--sw,var(--t6))}
 html[data-phone] .modal{padding:0;place-items:end stretch}
@@ -1369,13 +1390,26 @@ html[data-phone] .ed-wrap{flex:1 1 auto;min-height:0}
   <section class="panel ph-page" id="phPageTaste" data-page="taste" aria-label="Your sound"></section>
   <section class="panel ph-page" id="phPageTheme" data-page="theme" aria-label="Colour theme"><p class="hint">Pick the colours of your studio.</p><div id="phThemeSlot"></div></section>
   <section class="panel ph-page" id="phPageInstall" data-page="install" aria-label="Add to Home Screen">
-    <p><b>iPhone:</b> tap the Share button in Safari, then <b>Add to Home Screen</b>.</p>
-    <p><b>Android:</b> open Chrome’s menu (⋮), then <b>Add to Home screen</b> or <b>Install app</b>.</p>
-    <p class="hint">Your songs stay on this phone. Talking to Keys works best in the browser; in the home-screen app, use the mic on your keyboard if talking doesn’t start.</p>
+    <p id="phInstDone" hidden><b>Studio Keys is on your home screen.</b> Open it from the Keys icon.</p>
+    <button class="btn primary ph-inst-go" type="button" id="phInstallGo" hidden>Install Studio Keys</button>
+    <ol class="ph-steps" id="phInstIos" hidden aria-label="On iPhone">
+      <li><span class="ph-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M8 11H6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-2"/></svg></span><span>In Safari, tap <b>Share</b> (on newer iPhones it’s inside the <b>⋯</b> menu).</span></li>
+      <li><span class="ph-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg></span><span>Scroll down and tap <b>Add to Home Screen</b>.</span></li>
+      <li><span class="ph-ico"><div class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></span><span>Tap <b>Add</b>. Studio Keys opens full screen from its icon, even offline.</span></li>
+    </ol>
+    <p id="phInstAndroid"><b>Android:</b> open Chrome’s menu (⋮), then <b>Add to Home screen</b> or <b>Install app</b>.</p>
+    <p class="hint">Your songs stay on this phone. Talking to Keys works best in the browser; in the home-screen app, use the mic on your keyboard if talking doesn’t start. Keys’ AI and Spotify need the internet; offline, Keys understands simple requests.</p>
   </section>
   <section class="panel ph-page" id="phPageCredits" data-page="credits" aria-label="Sound credits"></section>
 </main>
 <footer class="credits"><p>Sound credits: Grand Piano from the Salamander Grand Piano V2 by Alexander Holm (CC BY 3.0). Sampled melodic instruments and basses from the FluidR3 GM SoundFont by Frank Wen (CC BY 3.0), via midi-js-soundfonts by Benjamin Gleitzman. Sampled drum kits and the hall reverb from the Tone.js audio collection (originally from Chris Wilson's web-audio-samples). 808, 909 and Trap kits and the synth basses are generated in the browser.</p></footer>
+<!-- PHONE: one-time "Add to Home Screen" tip (UX-6) -->
+<div class="ph-tip" id="phInstTip" role="status" hidden>
+  <div class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <p><b>Put Studio Keys on your home screen</b><span id="phInstTipSub">It opens full screen, even offline.</span></p>
+  <button class="btn primary" type="button" id="phInstTipGo">How</button>
+  <button class="btn ghost ph-tip-x" type="button" id="phInstTipX" aria-label="Close the tip">✕</button>
+</div>
 <!-- PHONE: mini transport + tabs (always in thumb reach) -->
 <div class="ph-bottom ph-only" id="phBottom">
   <div class="ph-tr" id="phTr" aria-label="Transport">
@@ -4278,6 +4312,33 @@ function phPlayUI(){ const o=instOptions(); ['keys','pads'].forEach(z=>{ const s
 function phOct(d){ PH.oct=clamp(PH.oct+d,-3,2); phKeybed(); }
 
 /* ----- the iPhone silent switch mutes web audio: say so once ----- */
+/* ----- Add to Home Screen (UX-6): Android gets a real Install button (beforeinstallprompt), iPhone a picture guide;
+   a one-time tip offers it once the user has made something; everything hides once Studio Keys runs from its icon ----- */
+var PH_TIP_KEY='studiokeys.installTip';
+function phInstalled(){ try{ return navigator.standalone===true||(!!window.matchMedia&&matchMedia('(display-mode: standalone)').matches); }catch(e){ return false; } }
+function phInstUI(){ const done=phInstalled(), e=document.querySelector('[data-phmore="install"]'); if(e) e.hidden=done;
+  $('#phInstDone').hidden=!done; $('#phInstallGo').hidden=done||!PH.bip; $('#phInstIos').hidden=done||!IS_IOS; $('#phInstAndroid').hidden=done||IS_IOS;
+  $('#phInstTipGo').textContent=PH.bip?'Install':'How'; if(done) $('#phInstTip').hidden=true; }
+async function phInstallGo(){ const e=PH.bip; if(!e){ phMoreOpen('install'); return; } PH.bip=null; phInstUI();
+  try{ await e.prompt(); const c=await e.userChoice; if(c&&c.outcome==='accepted') toast('Adding Studio Keys to your home screen…'); }catch(err){} }
+function phInstTipClose(){ $('#phInstTip').hidden=true; }
+function phInstTipCheck(){ if(PH.tipDone||!PH.on||phInstalled()||!/^https?:$/.test(location.protocol)||!(IS_IOS||PH.bip)) return;
+  const busy=PH.sheet||PH.sec||PH.tab==='more'||!$('#editor').hidden||document.documentElement.classList.contains('ph-typing')||PLAYING.has(LOOP.state)||LOOP.state==='counting'||LOOP.state==='recording';
+  if(!PROJ.tracks.length||busy) return;
+  PH.tipDone=true; try{ if(localStorage.getItem(PH_TIP_KEY)) return; localStorage.setItem(PH_TIP_KEY,'1'); }catch(e){ return; }
+  $('#phInstTipSub').textContent=PH.bip?'One tap. It opens full screen, even offline.':'It opens full screen, even offline.'; $('#phInstTip').hidden=false; }
+function phInstInit(){
+  window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); PH.bip=e; phInstUI(); });
+  window.addEventListener('appinstalled',()=>{ PH.bip=null; phInstTipClose(); try{ localStorage.setItem(PH_TIP_KEY,'1'); }catch(e){} phInstUI(); toast('Studio Keys is on your home screen.');
+    try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist(); }catch(e){} });
+  try{ const mq=matchMedia('(display-mode: standalone)'); if(mq.addEventListener) mq.addEventListener('change',phInstUI); }catch(e){}
+  $('#phInstallGo').onclick=phInstallGo;
+  $('#phInstTipGo').onclick=()=>{ phInstTipClose(); phInstallGo(); };
+  $('#phInstTipX').onclick=phInstTipClose;
+  /* running from the home screen: ask the browser to keep the songs safe (granted for installed apps) */
+  if(phInstalled()) try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist().catch(()=>{}); }catch(e){}
+  phInstUI(); setInterval(phInstTipCheck,4000);
+}
 function phIosTip(){ if(!IS_IOS||PH.iosTip) return; PH.iosTip=true; setTimeout(()=>toast('No sound? Flip the silent switch on the side of your iPhone, and turn the volume up.'),600); }
 
 /* typing with the phone keyboard (its own dictation mic works here too); the assistant opens it when talking isn't available */
@@ -4384,6 +4445,7 @@ function phoneInit(){
   $('#edPlayB').onclick=()=>{ ensureAudio(); if(PLAYING.has(LOOP.state)) loopStop(); else loopPlay(); phEdUI(); };
   $('#edUndoB').onclick=()=>{ undo(); if(ED.tid) drawEditor(); };
   phEdGestures();
+  phInstInit();
   /* the first tap anywhere turns the sound on (a phone has no "click to start" pill) */
   document.addEventListener('pointerdown',e=>{ if(PH.on&&!A.ctx&&!e.target.closest('#asOrb')) ensureAudio(); },true);
   /* the status bar takes the theme's background */
@@ -6263,6 +6325,12 @@ initMIDI(false);
 let rsz=0; window.addEventListener('resize',()=>{ clearTimeout(rsz); rsz=setTimeout(()=>{ drawWave(); drawIso(); drawHarm(); drawRolls(); drawRuler(); if(ED.tid) drawEditor(); drawRoll((performance.now()-MIC.t0)/1000); },120); });
 setTimeout(()=>loadDemo(false),400);
 phoneInit(); /* phone layout (UX-4): after every file has loaded */
+/* installable web app (UX-6): the service worker sits next to the page, so its scope is the page's own folder
+   ("/" on the main site, "/p/preview-<id>/" on a test link). Only on the website, never on a local file. */
+if('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && window.isSecureContext){
+  const swReg=()=>navigator.serviceWorker.register('sw.js').catch(()=>{});
+  if(document.readyState==='complete') setTimeout(swReg,0); else window.addEventListener('load',swReg);
+}
 
 </script>
 </body>
