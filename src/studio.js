@@ -11,7 +11,9 @@ dropTakeVoices(PROJ); if(LAST_PROJ) dropTakeVoices(LAST_PROJ);
 const AUD=new Map();
 let projSaveT=0;
 function serialize(p){ return JSON.parse(JSON.stringify(p)); }
-function saveProject(){ clearTimeout(projSaveT); projSaveT=setTimeout(()=>store.set('project',serialize(PROJ)),250); if(typeof autoSaveNamed==='function'){ $('#saveState').textContent='Saving…'; autoSaveNamed(); } }
+function saveProject(){ clearTimeout(projSaveT); projSaveT=setTimeout(()=>{ projSaveT=0; store.set('project',serialize(PROJ)); },250); if(typeof autoSaveNamed==='function'){ $('#saveState').textContent='Saving…'; autoSaveNamed(); } }
+/* closing or reloading the page inside that quarter second still keeps the last change (a late rename came back as the old name) */
+addEventListener('pagehide',()=>{ if(projSaveT){ clearTimeout(projSaveT); projSaveT=0; store.set('project',serialize(PROJ)); } });
 const roleOfInst=inst=>{ const I=INST.get(inst)||{}; return I.drums?'drums':I.cat==='Bass'?'bass':'free'; };
 function makeTrack(o){
   const role=o.role||'free', mix=ROLE_MIX[role]||ROLE_MIX.free, I=INST.get(o.inst);
