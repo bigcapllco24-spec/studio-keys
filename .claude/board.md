@@ -1,11 +1,13 @@
 # Studio Keys board (mirror of Studio Keys HQ)
-Last updated: 13 Nov 2026, 03:15 IST
+Last updated: 13 Nov 2026, 09:30 IST
+
+## Awaiting build OK (owner tries the test link, in HQ)
+- UX-1 · studio-ux-dev · L · Song view (Loop/Song switch, Make it a song, sections, parts, patterns). Round 2. https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-1/ · head 067a214 · tester READY (`.claude/work/reports/UX-1-test-c.md`, fix2).
+- SE-3 · sound-engine-dev · S · Real drummer feel + swing ladder. Round 2. https://studio-keys.bigcapllco24.workers.dev/p/preview-se-3/ · head adcf6db · tester READY (`SE-3-test-d.md`). Changes `cloudflare/worker.js`: deploy the Worker on release.
 
 ## Awaiting design OK (owner, in HQ)
 - AI-1 · assistant-dev · L · Song sections by voice. Round 1. Market: great 5/5. Proposal `.claude/work/proposals/AI-1.md`. Builds together with UX-1.
-- SE-3 · sound-engine-dev (+ assistant-dev for "more swing") · S · Real drummer feel from the owner's Drum Essentials grooves (RES-3). Round 1. Proposal `.claude/work/proposals/SE-3.md`. Market check not run (S item).
 - SE-4 · sound-engine-dev · S-M · Producer chords (open voicings, more progressions) and organic house percussion feel, from the owner's PML packs (RES-4). Round 1. Proposal `.claude/work/proposals/SE-4.md`. Builds right after SE-3.
-- UX-1 · studio-ux-dev · L · Arrangement / Song view. Round 1. Market: good 4/5. Proposal `.claude/work/proposals/UX-1.md`.
 
 ## Top priority (owner feedback, 13 Nov)
 - SE-1 · sound-engine-dev · M · Club-ready melodic house/techno sound, professional mix (first pass shipped: per-track FX, sidechain, sends, master chain).
@@ -14,6 +16,7 @@ Last updated: 13 Nov 2026, 03:15 IST
 
 ## Up next (the team designs these first; the owner approves in HQ)
 - AI-2 · assistant-dev · M · The assistant remembers what you like ("softer claps", "always Rolling Bass") and uses it next time. Done when: preferences said once are applied in later songs.
+- SE-5 · sound-engine-dev + studio-ux-dev · S · Sung and generated parts follow the drums' swing (tester finding B4). Done when: off-16th notes sit on the swung grid within 5 ms.
 - RES-1 · music-researcher · S · How AI music tools and DAWs turn voice and humming into parts; ideas for Studio Keys.
 
 ## Research
