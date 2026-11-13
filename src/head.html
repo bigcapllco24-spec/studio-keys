@@ -598,11 +598,13 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 .song-head{display:grid;grid-template-columns:300px minmax(0,1fr);gap:10px;align-items:end;padding:0 7px 0 10px}
 .sh-corner{display:flex;flex-direction:column;gap:6px;min-width:0;padding-bottom:6px}
 .sh-l1,.sh-l2{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.sh-l1{flex-wrap:nowrap;min-height:26px}/* a long Undo chip stays on one line (ellipsis, full text in its title) so the strip doesn't jump */
+.sh-l1>.sh-len{flex:none}
 .sh-l2 .seg{margin-left:0}
 .sh-len{font-size:13px;color:var(--ink2);white-space:nowrap}
-.song-chip{display:inline-flex;gap:8px;align-items:center;max-width:100%;min-width:0;padding:2px 4px 2px 10px;border:1px solid var(--accent);border-radius:999px;font-size:12px;color:var(--ink);background:var(--t2)}
+.song-chip{display:inline-flex;gap:8px;align-items:center;max-width:100%;min-width:0;flex:0 1 auto;white-space:nowrap;padding:2px 4px 2px 10px;border:1px solid var(--accent);border-radius:999px;font-size:12px;color:var(--ink);background:var(--t2)}
 .song-chip>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.song-chip .lk{color:var(--accent);font-weight:700}
+.song-chip .lk{color:var(--accent);font-weight:700;flex:none}
 .sh-time{min-width:0;display:flex;flex-direction:column}
 #songRuler{display:block;width:100%;height:22px;cursor:pointer;border-radius:8px 8px 0 0;border:1px solid var(--line);border-bottom:0}
 .sviewport{overflow-x:auto;overflow-y:hidden;background:var(--t1);border:1px solid var(--line);border-top:0;border-radius:0 0 8px 8px}

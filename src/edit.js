@@ -13,16 +13,22 @@ function undoNote(){
   if(typeof songChipNote==='function') songChipNote(prev,j,pushed); /* a newer change makes the Undo chip's label stale */
 }
 /* a song was opened or a new one started: its history starts here (QA, 13 Nov: the first Undo went back to the song before) */
-function undoReset(){ UNDO.stack=[]; UNDO.redo=[]; UNDO.t=0; UNDO.busy=false; UNDO.last=snapState(); undoButtons(); if(typeof songChipHide==='function') songChipHide(); }
+function undoReset(){ UNDO.stack=[]; UNDO.redo=[]; UNDO.t=0; UNDO.busy=false; UNDO.leftSong=false; UNDO.last=snapState(); undoButtons(); if(typeof songChipHide==='function') songChipHide(); }
 const _saveProject=saveProject;
 saveProject=function(){ if(typeof songSync==='function') songSync(); undoNote(); _saveProject(); };
+/* Undo of "Make it a song" also leaves Song mode (one 4-bar section would play once and stop); Redo goes back to Song.
+   The view mode isn't part of the history, so remember that this Undo switched it (QA, 13 Nov) */
 function applyState(j){
+  const wasArr=typeof songArranged==='function'&&songArranged();
   UNDO.busy=true; const o=JSON.parse(j);
   PROJ=migrateSong(Object.assign(newProject(),o.p)); SONG.ver++; if(o.bpm&&o.bpm!==CTRL.bpm) setTempo(o.bpm);
   if(ED.tid&&!PROJ.tracks.find(t=>t.id===ED.tid)) closeEditor(); ED.sel=new Set();
   if(!PROJ.tracks.length&&LOOP.state!=='empty'){ loopStop(); LOOP.state='empty'; } else if(PROJ.tracks.length&&LOOP.state==='empty') LOOP.state='stopped';
   loadAudioFor(PROJ).then(()=>drawRolls()); refreshTrackGains(); renderTracks(); uiLoop(); _saveProject(); UNDO.last=j; UNDO.busy=false; undoButtons();
   if(typeof songChipHide==='function') songChipHide();
+  if(typeof songArranged!=='function') return; const nowArr=songArranged();
+  if(wasArr&&!nowArr&&songOn()){ songMode('loop',{force:true}); UNDO.leftSong=true; toast('Back to the plain loop (Loop mode). Redo brings the song back.'); }
+  else if(!wasArr&&nowArr&&UNDO.leftSong&&!songOn()){ UNDO.leftSong=false; songMode('song',{force:true}); songChip('Song layout back · Song mode',{undo:false}); }
 }
 function undo(){ if(!UNDO.stack.length){ toast('Nothing to undo'); return false; } UNDO.redo.push(UNDO.last); applyState(UNDO.stack.pop()); return true; }
 function redo(){ if(!UNDO.redo.length){ toast('Nothing to redo'); return false; } UNDO.stack.push(UNDO.last); applyState(UNDO.redo.pop()); return true; }

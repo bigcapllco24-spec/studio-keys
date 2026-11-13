@@ -598,11 +598,13 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 .song-head{display:grid;grid-template-columns:300px minmax(0,1fr);gap:10px;align-items:end;padding:0 7px 0 10px}
 .sh-corner{display:flex;flex-direction:column;gap:6px;min-width:0;padding-bottom:6px}
 .sh-l1,.sh-l2{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.sh-l1{flex-wrap:nowrap;min-height:26px}/* a long Undo chip stays on one line (ellipsis, full text in its title) so the strip doesn't jump */
+.sh-l1>.sh-len{flex:none}
 .sh-l2 .seg{margin-left:0}
 .sh-len{font-size:13px;color:var(--ink2);white-space:nowrap}
-.song-chip{display:inline-flex;gap:8px;align-items:center;max-width:100%;min-width:0;padding:2px 4px 2px 10px;border:1px solid var(--accent);border-radius:999px;font-size:12px;color:var(--ink);background:var(--t2)}
+.song-chip{display:inline-flex;gap:8px;align-items:center;max-width:100%;min-width:0;flex:0 1 auto;white-space:nowrap;padding:2px 4px 2px 10px;border:1px solid var(--accent);border-radius:999px;font-size:12px;color:var(--ink);background:var(--t2)}
 .song-chip>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.song-chip .lk{color:var(--accent);font-weight:700}
+.song-chip .lk{color:var(--accent);font-weight:700;flex:none}
 .sh-time{min-width:0;display:flex;flex-direction:column}
 #songRuler{display:block;width:100%;height:22px;cursor:pointer;border-radius:8px 8px 0 0;border:1px solid var(--line);border-bottom:0}
 .sviewport{overflow-x:auto;overflow-y:hidden;background:var(--t1);border:1px solid var(--line);border-top:0;border-radius:0 0 8px 8px}
@@ -3590,11 +3592,15 @@ function uiLoop(){
   const st=LOOP.state, btn=$('#loopBtn');
   btn.dataset.state=st;
   const lbl={empty:'Record loop',counting:'Count-in…',recording:LOOP.fixed?'Recording…':'Recording · press to close',playing:'Overdub',overdub:'Overdubbing · press to keep',stopped:'Play loop',take:'Recording take…'}[st];
-  $('#loopLbl').textContent=songOn()&&(st==='playing'||st==='stopped')?(st==='playing'?'Record in the loop':'Play song'):lbl;
+  /* Song mode: a short label so the button keeps its width when Play starts (QA N1: "Record in the loop" pushed the readout, BPM and key 78 px) */
+  const songLbl=songOn()&&(st==='playing'||st==='stopped');
+  $('#loopLbl').textContent=songLbl?(st==='playing'?'Rec in loop':'Play song'):lbl;
+  btn.title=songLbl&&st==='playing'?'Record in the loop: switches to Loop mode and records what you play':'';
   const ledCls='led'+(st==='recording'||st==='overdub'||st==='take'?' rec':st==='playing'?' on':st==='counting'?' warn':'');
   $('#loopLed').className=ledCls;
-  const bars=songOn()?'song · '+songLenText():PROJ.bars+' bar'+(PROJ.bars>1?'s':'');
-  const pill={empty:'Studio empty',counting:'Count-in',recording:'Recording',playing:`Playing · ${bars}`,overdub:'Overdubbing',stopped:`Song ready · ${bars}`,take:'Recording take'}[st];
+  /* Song mode: "Playing song · 96 bars · 3:06" and "Song ready · 96 bars · 3:06" are the same length, so the top bar doesn't rewrap when Play starts */
+  const bars=songOn()?songLenText():PROJ.bars+' bar'+(PROJ.bars>1?'s':'');
+  const pill={empty:'Studio empty',counting:'Count-in',recording:'Recording',playing:`Playing${songOn()?' song':''} · ${bars}`,overdub:'Overdubbing',stopped:`Song ready · ${bars}`,take:'Recording take'}[st];
   $('#loopPill').innerHTML=`<span class="${ledCls}"></span><span>${pill}</span>`;
   lcd({counting:'COUNT-IN',recording:'REC',playing:'PLAY',overdub:'OVERDUB',stopped:'STOP',empty:'READY',take:'TAKE'}[st]);
   const has=PROJ.tracks.length>0;
@@ -4010,7 +4016,7 @@ function songApplyFlash(){ const F=SONG.flash; if(!F||performance.now()>F.until)
 /* the chip names one change and its Undo undoes exactly that change: it remembers the undo state right after the change,
    and any newer change hides it (songChipNote, called by the undo history). o.undo:false = a note with no Undo (looping is not a change) */
 let songChipT=0, songChipTok=null;
-function songChip(text,o={}){ const c=$('#songChip'); if(!c) return; $('#songChipT').textContent=text;
+function songChip(text,o={}){ const c=$('#songChip'); if(!c) return; $('#songChipT').textContent=text; c.title=text;
   songChipTok=o.undo===false||typeof UNDO==='undefined'?null:UNDO.last; const u=$('#songChipU'); if(u) u.hidden=!songChipTok;
   c.hidden=false; clearTimeout(songChipT); songChipT=setTimeout(songChipHide,7000); }
 function songChipHide(){ const c=$('#songChip'); if(c) c.hidden=true; songChipTok=null; clearTimeout(songChipT); }
@@ -4835,16 +4841,22 @@ function undoNote(){
   if(typeof songChipNote==='function') songChipNote(prev,j,pushed); /* a newer change makes the Undo chip's label stale */
 }
 /* a song was opened or a new one started: its history starts here (QA, 13 Nov: the first Undo went back to the song before) */
-function undoReset(){ UNDO.stack=[]; UNDO.redo=[]; UNDO.t=0; UNDO.busy=false; UNDO.last=snapState(); undoButtons(); if(typeof songChipHide==='function') songChipHide(); }
+function undoReset(){ UNDO.stack=[]; UNDO.redo=[]; UNDO.t=0; UNDO.busy=false; UNDO.leftSong=false; UNDO.last=snapState(); undoButtons(); if(typeof songChipHide==='function') songChipHide(); }
 const _saveProject=saveProject;
 saveProject=function(){ if(typeof songSync==='function') songSync(); undoNote(); _saveProject(); };
+/* Undo of "Make it a song" also leaves Song mode (one 4-bar section would play once and stop); Redo goes back to Song.
+   The view mode isn't part of the history, so remember that this Undo switched it (QA, 13 Nov) */
 function applyState(j){
+  const wasArr=typeof songArranged==='function'&&songArranged();
   UNDO.busy=true; const o=JSON.parse(j);
   PROJ=migrateSong(Object.assign(newProject(),o.p)); SONG.ver++; if(o.bpm&&o.bpm!==CTRL.bpm) setTempo(o.bpm);
   if(ED.tid&&!PROJ.tracks.find(t=>t.id===ED.tid)) closeEditor(); ED.sel=new Set();
   if(!PROJ.tracks.length&&LOOP.state!=='empty'){ loopStop(); LOOP.state='empty'; } else if(PROJ.tracks.length&&LOOP.state==='empty') LOOP.state='stopped';
   loadAudioFor(PROJ).then(()=>drawRolls()); refreshTrackGains(); renderTracks(); uiLoop(); _saveProject(); UNDO.last=j; UNDO.busy=false; undoButtons();
   if(typeof songChipHide==='function') songChipHide();
+  if(typeof songArranged!=='function') return; const nowArr=songArranged();
+  if(wasArr&&!nowArr&&songOn()){ songMode('loop',{force:true}); UNDO.leftSong=true; toast('Back to the plain loop (Loop mode). Redo brings the song back.'); }
+  else if(!wasArr&&nowArr&&UNDO.leftSong&&!songOn()){ UNDO.leftSong=false; songMode('song',{force:true}); songChip('Song layout back · Song mode',{undo:false}); }
 }
 function undo(){ if(!UNDO.stack.length){ toast('Nothing to undo'); return false; } UNDO.redo.push(UNDO.last); applyState(UNDO.stack.pop()); return true; }
 function redo(){ if(!UNDO.redo.length){ toast('Nothing to redo'); return false; } UNDO.stack.push(UNDO.last); applyState(UNDO.redo.pop()); return true; }
