@@ -47,6 +47,14 @@ try {
   ok('"the mix is muddy" changes the mix FX', mud.mix.ch > mud.mix.ch0 && /track_fx/.test(mud.mix.types), `chords low cut ${mud.mix.ch0}→${mud.mix.ch} Hz`);
   const still = await E(() => ['add a bassline', 'let me sing the bassline', 'record a voice note', 'another one'].map(s => localBrain(s).actions.map(a => a.type + (a.part ? ':' + a.part : '')).join('+')).join(' | '));
   ok('"add a bassline", "sing the bassline", "voice note", "another one" unchanged', still === 'add_bass | sing:bass | sing:voice | vary', still);
+  const tone = await E(() => { const t = PROJ.tracks.find(t => t.role === 'bass'), n0 = JSON.stringify(t.events), lo0 = t.lo || 0;
+    runActions(localBrain('boost the lows on the bass').actions); const boost = { lo0, lo: t.lo || 0, same: JSON.stringify(t.events) === n0 };
+    runActions(localBrain('the bass is muddy').actions); const hp1 = t.fx.hp; const S = localBrain('still muddy'); runActions(S.actions);
+    const add = localBrain('add brighter chords').actions.map(a => a.type).join(), another = localBrain('another one with more low end').actions.map(a => a.type).join();
+    return { boost, hp1, hp2: t.fx.hp, stillBass: S.actions.length > 0 && S.actions.every(a => a.track === t.id), add, another }; });
+  ok('"boost the lows on the bass" raises the bass low EQ', tone.boost.lo > tone.boost.lo0 && tone.boost.same, `low ${tone.boost.lo0}→${tone.boost.lo} dB`);
+  ok('"still muddy" after "the bass is muddy" goes further on the bass', tone.stillBass && tone.hp2 > tone.hp1, `low cut ${tone.hp1}→${tone.hp2} Hz`);
+  ok('"add brighter chords" adds chords; "another one with more low end" makes a new groove', tone.add === 'add_chords' && tone.another === 'vary', `${tone.add} | ${tone.another}`);
   const ms = await E(() => { SEL.clear(); PROJ.tracks.slice(0, 2).forEach(t => SEL.add(t.id)); renderTracks(); document.querySelector('[data-sel="play"]').click(); const n = PROJ.tracks.filter(trackAudible).length; loopStop(); SEL.clear(); renderTracks(); return n; });
   ok('select two tracks and play them together', ms === 2, `${ms} audible`);
   const one = await E(() => JSON.stringify(localBrain('make a track like stephan bodzin').actions.map(a => a.type)));
