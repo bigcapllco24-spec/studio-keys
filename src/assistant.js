@@ -22,7 +22,7 @@ function addBubble(who,text,chips){
   box.appendChild(d); while(box.children.length>14) box.firstChild.remove(); box.scrollTop=box.scrollHeight;
 }
 function setOrb(state,text){ const o=$('#asOrb'); o.dataset.state=state; $('#asStatus').textContent=text; }
-function idleText(){ return ASSIST.listening?`Listening. Say “${ASSIST.name}” and what you want, or hum a melody.`:`Press the orb and speak, or type below. Turn on “Always listening” to just say “${ASSIST.name}”.`; }
+function idleText(){ if(PH.on&&!ASSIST.listening) return 'Tap Keys and talk, or type. Sing a part with Sing.'; return ASSIST.listening?`Listening. Say “${ASSIST.name}” and what you want, or hum a melody.`:`Press the orb and speak, or type below. Turn on “Always listening” to just say “${ASSIST.name}”.`; }
 function speak(msg){
   if(!('speechSynthesis' in window)) return; try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(msg.replace(/[“”]/g,'')); u.rate=1.05; u.pitch=1;
     const v=speechSynthesis.getVoices().find(x=>/en-(IN|GB|US)/.test(x.lang)&&/female|natural|google/i.test(x.name))||speechSynthesis.getVoices().find(x=>/^en/.test(x.lang)); if(v) u.voice=v;
@@ -90,7 +90,7 @@ function startListening(){
     else if(e.error==='network'){ stopListening(); ASSIST.say('Voice recognition needs an internet connection. You can type instead.',{speak:false}); } };
   rec.onend=()=>{ if(ASSIST.listening) setTimeout(()=>{ try{ rec.start(); }catch(_){} },250); };
   try{ rec.start(); }catch(e){}
-  if(ASSIST.hum && !MIC.on) micStart();
+  if(ASSIST.hum && !MIC.on && !IS_IOS) micStart(); /* iPhone: an open mic stops speech recognition, so no hum capture while listening there (UX-4) */
   setOrb('listening',idleText()); store.set('asListen',true);
 }
 function stopListening(){ ASSIST.listening=false; $('#asListen').checked=false; try{ ASSIST.rec&&ASSIST.rec.stop(); }catch(e){} ASSIST.rec=null; setOrb('idle',idleText()); store.set('asListen',false); }
@@ -101,16 +101,68 @@ function onFinal(txt){
   if(now<ASSIST.awakeUntil){ ASSIST.awakeUntil=0; handleRequest(txt); return; }
   $('#asStatus').textContent=`Heard “${txt.trim()}”. Start with “${ASSIST.name}” when you’re talking to me.`;
 }
-/* one request without the wake name: tap the orb */
-$('#asOrb').addEventListener('click',()=>{
-  ensureAudio(); if(!SRc){ $('#asIn').focus(); return; }
-  if(ASSIST.listening){ ASSIST.awakeUntil=performance.now()+9000; setOrb('listening','Go ahead, I’m listening…'); return; }
-  const rec=new SRc(); rec.lang=navigator.language||'en-IN'; rec.interimResults=true; rec.continuous=false;
+/* one request without the wake name: tap the orb (the big Keys button on a phone).
+   UX-4, iPhone: talking stopped working there. What could stop Safari's recognition, and what this does about it:
+   - spoken replies: recognition started while Keys was still speaking hears nothing, so speech is cancelled first;
+   - the microphone: a mic left open (Sing to play, or the hum mic) blocks recognition on iPhone, so it is let go while
+     Keys listens and comes back after;
+   - audio: WebKit stops giving results once the page plays audio (WebKit bug 321436, iOS 27), so on iPhone the sound
+     engine pauses while Keys listens if no song is playing, and resumes right after;
+   - recognition starts first, inside the tap; the sound is unlocked after it in the same tap;
+   - iPhone often never marks a result "final": the words heard so far are sent after a short pause, or when it ends;
+   - a watchdog: no words in 6 s → one fresh try; still nothing → typing opens, with the keyboard's own dictation mic.
+   After two silent tries in a row the button opens typing straight away, with a "Try talking again" link. */
+const TALK={rec:null,dog:0,quiet:0,safety:0,heard:'',sent:false,got:false,tries:0,fails:0,micWas:false,ctxPaused:false};
+function talkFallback(why){
+  const msg=why==='noapi'?(IS_IOS?'Talking isn’t available here. Type below, or tap the 🎤 on your keyboard and speak.':'Talking needs Chrome, Edge or Safari. You can type here.')
+    :why==='blocked'?(IS_IOS?'I need the microphone and speech recognition. Allow them for this site (aA in the address bar › Website Settings), or type and use the 🎤 on your keyboard.':'I need microphone permission to listen. Allow it from the icon left of the address bar, or type here.')
+    :why==='network'?'Voice recognition needs an internet connection. Type instead.'
+    :'I couldn’t hear you through the browser. Type below, or tap the 🎤 on your keyboard to talk.';
+  setOrb('idle',msg);
+  if(TALK.fails>=2&&why!=='noapi'){ const b=document.createElement('button'); b.type='button'; b.className='lk'; b.textContent='Try talking again'; b.onclick=()=>{ TALK.fails=0; TALK.tries=0; setOrb('idle',idleText()); }; $('#asStatus').append(' ',b); }
+  if(typeof phOpenType==='function') phOpenType(); else $('#asIn').focus();
+}
+function talkPause(){ /* iPhone only: let go of the mic, and pause the sound engine when nothing is playing */
+  if(!IS_IOS) return;
+  if(MIC.on&&LOOP.state!=='take'&&LOOP.state!=='counting'){ TALK.micWas=true; micStop(); }
+  if(A.ctx&&A.ctx.state==='running'&&!TR.running){ TALK.ctxPaused=true; A.ctx.suspend().catch(()=>{}); }
+}
+function talkResume(){
+  if(TALK.ctxPaused){ TALK.ctxPaused=false; if(A.ctx) A.ctx.resume().catch(()=>{}); setTimeout(()=>{ if(A.ctx&&A.ctx.state!=='running') toast('Tap anywhere to turn the sound back on.'); },900); }
+  if(TALK.micWas){ TALK.micWas=false; setTimeout(()=>{ if(!MIC.on&&!TALK.rec) micStart(); },400); }
+}
+function talkEnd(){ clearTimeout(TALK.dog); clearTimeout(TALK.quiet); clearTimeout(TALK.safety); TALK.rec=null; talkResume(); }
+function talkSend(){ if(TALK.sent) return; const t=TALK.heard.trim(); if(!t) return; TALK.sent=true; TALK.tries=0; TALK.fails=0;
+  const r=TALK.rec; talkEnd(); try{ r&&r.abort(); }catch(e){} const w=findWake(t); handleRequest(w!==null&&w.length>1?w:t); }
+function talkStart(fromTap){
+  try{ if('speechSynthesis' in window) speechSynthesis.cancel(); }catch(e){} ASSIST.speaking=false; clearTimeout(ASSIST.speakT);
+  let rec; try{ rec=new SRc(); }catch(e){ talkFallback('noapi'); return; }
+  TALK.rec=rec; TALK.heard=''; TALK.sent=false; TALK.got=false;
+  rec.lang=navigator.language||'en-IN'; rec.interimResults=true; rec.continuous=false;
+  rec.onresult=e=>{ if(TALK.rec!==rec) return; let t=''; let fin=false; for(const r of e.results){ t+=r[0].transcript; if(r.isFinal) fin=true; }
+    TALK.got=true; TALK.heard=t; clearTimeout(TALK.dog); $('#asStatus').textContent='Hearing: '+t;
+    clearTimeout(TALK.quiet); if(fin) talkSend(); else TALK.quiet=setTimeout(()=>{ if(TALK.rec!==rec) return; try{ rec.stop(); }catch(_){} TALK.safety=setTimeout(()=>{ if(TALK.rec===rec) talkSend(); },1200); },1500); };
+  rec.onerror=e=>{ if(TALK.rec!==rec) return; const er=e.error;
+    if(er==='not-allowed'||er==='service-not-allowed'){ talkEnd(); TALK.fails=2; talkFallback('blocked'); }
+    else if(er==='network'){ talkEnd(); talkFallback('network'); }
+    else if(er==='audio-capture'){ talkEnd(); TALK.fails++; talkFallback('mic'); } };
+  rec.onend=()=>{ if(TALK.rec!==rec) return; if(TALK.heard.trim()){ talkSend(); return; } talkEnd();
+    if(IS_IOS&&!TALK.got){ TALK.fails++; talkFallback('silent'); return; } /* on iPhone an empty end is the bug, not silence */
+    if(!ASSIST.busy&&!ASSIST.speaking) setOrb('idle','I didn’t hear anything. Tap the orb and try again, or type below.'); };
+  try{ rec.start(); }catch(e){ TALK.rec=null; TALK.fails++; talkFallback('silent'); return; }
   setOrb('listening','Go ahead, I’m listening…');
-  rec.onresult=e=>{ let t=''; for(const r of e.results) t+=r[0].transcript; $('#asStatus').textContent='Hearing: '+t; if(e.results[e.results.length-1].isFinal){ const w=findWake(t); handleRequest(w!==null&&w.length>1?w:t); } };
-  rec.onerror=e=>{ setOrb('idle',e.error==='no-speech'?'I didn’t hear anything. Tap the orb and try again.':e.error==='network'?'Voice recognition needs an internet connection. Type instead.':'Voice stopped ('+e.error+'). You can type instead.'); };
-  rec.onend=()=>{ if(!ASSIST.busy && !ASSIST.speaking) setOrb('idle',idleText()); };
-  try{ rec.start(); }catch(e){}
+  if(fromTap) ensureAudio(); /* unlock the sound in the same tap, after recognition has started */
+  talkPause();
+  TALK.dog=setTimeout(()=>{ if(TALK.rec!==rec||TALK.got) return; TALK.rec=null; try{ rec.abort(); }catch(_){}
+    if(++TALK.tries<2){ talkResume(); setTimeout(()=>{ if(!TALK.rec) talkStart(false); },250); return; }
+    TALK.tries=0; TALK.fails++; talkEnd(); talkFallback('silent'); },6000);
+}
+$('#asOrb').addEventListener('click',()=>{
+  if(!SRc){ ensureAudio(); talkFallback('noapi'); return; }
+  if(ASSIST.listening){ ensureAudio(); ASSIST.awakeUntil=performance.now()+9000; setOrb('listening','Go ahead, I’m listening…'); return; }
+  if(TALK.rec){ if(TALK.heard.trim()) talkSend(); else { const r=TALK.rec; talkEnd(); try{ r.abort(); }catch(e){} setOrb('idle',idleText()); } return; } /* a second tap sends what was heard, or stops */
+  if(TALK.fails>=2){ ensureAudio(); talkFallback('silent'); return; }
+  talkStart(true);
 });
 /* ---- humming becomes a track: when the song is stopped, a hummed phrase (3+ notes, no words) lands on a new layer ---- */
 function humNote(n,on){
@@ -148,7 +200,7 @@ $('#asForm').addEventListener('submit',e=>{ e.preventDefault(); const v=$('#asIn
 $('#asListen').addEventListener('change',e=>e.target.checked?startListening():stopListening());
 $('#asName').value=ASSIST.name; $('#asName').addEventListener('change',e=>{ ASSIST.name=e.target.value.trim()||'Keys'; store.set('asName',ASSIST.name); $('#asNameLbl').textContent=ASSIST.name; setOrb(ASSIST.listening?'listening':'idle',idleText()); });
 $('#asVoice').checked=ASSIST.voice; $('#asVoice').addEventListener('change',e=>{ ASSIST.voice=e.target.checked; store.set('asVoice',ASSIST.voice); if(!ASSIST.voice) try{ speechSynthesis.cancel(); }catch(_){} });
-$('#asHum').checked=ASSIST.hum; $('#asHum').addEventListener('change',e=>{ ASSIST.hum=e.target.checked; store.set('asHum',ASSIST.hum); if(ASSIST.hum&&ASSIST.listening&&!MIC.on) micStart(); });
+$('#asHum').checked=ASSIST.hum; $('#asHum').addEventListener('change',e=>{ ASSIST.hum=e.target.checked; store.set('asHum',ASSIST.hum); if(ASSIST.hum&&ASSIST.listening&&!MIC.on&&!IS_IOS) micStart(); });
 document.addEventListener('click',e=>{ const c=e.target.closest('[data-say]'); if(c && !c.dataset.add) handleRequest(c.dataset.say); });
 $('#asNameLbl').textContent=ASSIST.name;
 setOrb('idle',idleText());

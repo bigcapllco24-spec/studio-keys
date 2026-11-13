@@ -32,7 +32,7 @@ function applyState(j){
 }
 function undo(){ if(!UNDO.stack.length){ toast('Nothing to undo'); return false; } UNDO.redo.push(UNDO.last); applyState(UNDO.stack.pop()); return true; }
 function redo(){ if(!UNDO.redo.length){ toast('Nothing to redo'); return false; } UNDO.stack.push(UNDO.last); applyState(UNDO.redo.pop()); return true; }
-function undoButtons(){ const u=$('#undoBtn'), r=$('#redoBtn'); if(u) u.disabled=!UNDO.stack.length; if(r) r.disabled=!UNDO.redo.length; }
+function undoButtons(){ const u=$('#undoBtn'), r=$('#redoBtn'), p=$('#phUndo'); if(u) u.disabled=!UNDO.stack.length; if(r) r.disabled=!UNDO.redo.length; if(p) p.disabled=!UNDO.stack.length; }
 $('#undoBtn').onclick=undo; $('#redoBtn').onclick=redo;
 document.addEventListener('keydown',e=>{ const tg=e.target; if(tg&&/INPUT|SELECT|TEXTAREA/.test(tg.tagName)) return; if(!(e.ctrlKey||e.metaKey)) return; const k=e.key.toLowerCase();
   if(k==='z'&&!e.shiftKey){ e.preventDefault(); undo(); } else if((k==='z'&&e.shiftKey)||k==='y'){ e.preventDefault(); redo(); } });
@@ -145,6 +145,7 @@ $('#importFile').addEventListener('change',async e=>{ for(const f of e.target.fi
     D.moved=true; drawRolls(); });
   const up=()=>{ if(D&&D.moved){ saveProject(); toast(D.slip?`“${D.t.name}” now starts ${D.t.trim.toFixed(2)} s into the recording`:`“${D.t.name}” starts at bar ${Math.floor(D.t.start/4)+1}, beat ${(D.t.start%4+1).toFixed(2).replace(/\.00$/,'')}`); } D=null; };
   box.addEventListener('pointerup',up); box.addEventListener('pointercancel',up);
-  box.addEventListener('change',e=>{ const s=e.target.closest('[data-tonotes]'); if(!s||!s.value) return; const t=PROJ.tracks.find(x=>x.id===s.dataset.tonotes); const part=s.value; s.value='';
-    toast('Listening to the recording…'); setTimeout(()=>{ const r=transcribeTrack(t,part); if(!r) toast('That audio isn’t loaded yet. Try again in a moment.'); else if(!r.count) toast('I couldn’t hear clear notes in that recording.'); else { toast(`${r.count} ${part==='chords'?'chords':'notes'} on “${r.track.name}”. The audio is muted; unmute it to hear both.`); openEditor(r.track.id); } },30); });
+  const toNotes=e=>{ const s=e.target.closest('[data-tonotes]'); if(!s||!s.value) return; const t=PROJ.tracks.find(x=>x.id===s.dataset.tonotes); const part=s.value; s.value='';
+    toast('Listening to the recording…'); setTimeout(()=>{ const r=transcribeTrack(t,part); if(!r) toast('That audio isn’t loaded yet. Try again in a moment.'); else if(!r.count) toast('I couldn’t hear clear notes in that recording.'); else { toast(`${r.count} ${part==='chords'?'chords':'notes'} on “${r.track.name}”. The audio is muted; unmute it to hear both.`); openEditor(r.track.id); } },30); };
+  box.addEventListener('change',toNotes); const pb=$('#phPartB'); if(pb) pb.addEventListener('change',toNotes); /* a part's sheet on a phone (UX-4) */
 })();

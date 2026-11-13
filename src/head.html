@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07120e">
+<meta name="color-scheme" content="dark">
 <title>Studio Keys</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -683,6 +685,250 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 @media (max-width:600px){
   .playlist.song .sh-time,.playlist.song .slane,.playlist.song .song-hint,.playlist.song #songAddSec,.playlist.song .sh-l2 .seg,.playlist.song .playhead{display:none!important}
   .playlist.song .song-map:not([hidden]){display:flex;flex-wrap:wrap;gap:6px}
+}
+
+/* ---------- Tablets and touch screens (UX-4): 44 px targets, 16 px text boxes (no iPad zoom), Studio with Keys above the controller in portrait ---------- */
+@media (pointer:coarse){
+  .btn,.sc,.tab,.seg button,.lk,.zb,.tp{min-height:44px}
+  .ib{min-height:40px;min-width:36px}
+  input.input,input.inline,select.select,textarea{font-size:16px}
+}
+@media (max-width:1100px) and (orientation:portrait) and (pointer:coarse){.grid{grid-template-areas:"loop loop" "keys keys" "profile rack" "fx fx" "voice voice" "lab lab"}}
+@media (max-width:920px) and (orientation:portrait) and (pointer:coarse){.grid{grid-template-areas:"loop" "keys" "profile" "rack" "fx" "voice" "lab"}}
+
+/* ---------- Phone layout (UX-4): html[data-phone] is set by src/phone.js for screens up to 600 px wide (or short touch screens);
+   html[data-ptab] picks the tab: keys · song · mix · play · more. Each tab shows an existing section; theme variables only. ---------- */
+.ph-only{display:none!important}
+.ph-more,.ph-page{display:none!important}
+html[data-phone]{--phT:calc(52px + env(safe-area-inset-top,0px));--phB:calc(118px + env(safe-area-inset-bottom,0px));--phSide:max(10px,env(safe-area-inset-left,0px));-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html[data-phone] .ph-only:not([hidden]){display:flex!important}
+html[data-phone] body{padding-top:var(--phT);padding-bottom:calc(var(--phB) + 12px);overscroll-behavior-y:none}
+html[data-phone] body::before{display:none}
+html[data-phone] .top,html[data-phone] .wrap,html[data-phone] .credits{display:none!important}
+html[data-phone] .grid{display:block;max-width:none;padding:10px var(--phSide) 0;z-index:auto} /* no stacking context: the full-screen editor, menus and dialogs sit above the phone bars */
+html[data-phone] .grid>.panel{display:none}
+html[data-phone] .panel{padding:14px;border-radius:14px;gap:12px}
+html[data-phone] h2{font-size:20px}
+/* sizes: 44 px targets, 16 px text boxes so iPhone doesn't zoom in */
+html[data-phone] .btn,html[data-phone] .sc,html[data-phone] .tab,html[data-phone] .seg button,html[data-phone] .lk,html[data-phone] .zb,html[data-phone] .ib{min-height:44px}
+html[data-phone] .btn{padding:8px 14px;font-size:14px}
+html[data-phone] .seg button{min-width:44px}
+html[data-phone] .ms,html[data-phone] .strip-ctl .btn{min-width:44px;justify-content:center}
+html[data-phone] input:not([type=range]):not([type=checkbox]),html[data-phone] select,html[data-phone] textarea{font-size:16px!important}
+html[data-phone] .input,html[data-phone] .select{min-height:44px}
+html[data-phone] input[type=range]{min-height:32px}
+html[data-phone] input[type=checkbox]{width:22px;height:22px}
+html[data-phone] .toast{left:var(--phSide);right:var(--phSide);bottom:calc(var(--phB) + 10px);max-width:none}
+/* top bar */
+.ph-top{position:fixed;top:0;left:0;right:0;z-index:40;height:var(--phT);padding:env(safe-area-inset-top,0px) max(10px,env(safe-area-inset-right,0px)) 0 var(--phSide);align-items:center;gap:8px;background:var(--t1);border-bottom:1px solid var(--line)}
+.ph-top .mark{flex:none;width:30px;height:30px;padding:6px;border-radius:8px;background:var(--t4);border:1px solid var(--t6)}
+.ph-top .mark i{background:var(--ink2)}.ph-top .mark i:nth-child(2){background:var(--accent)}
+.ph-song{flex:1;min-width:0;min-height:44px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:1px;padding:2px 6px;border:0;border-radius:10px;background:transparent;color:var(--ink);text-align:left;cursor:pointer}
+.ph-song b{font:700 15px/1.2 var(--body);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-song span{font:500 12px/1.2 var(--body);color:var(--muted);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-ib{flex:none;width:44px;height:44px;display:grid;place-items:center;border-radius:12px;border:1px solid var(--t6);background:var(--t3);color:var(--ink);cursor:pointer;padding:0;font:600 16px var(--body)}
+.ph-ib:disabled{opacity:.4;cursor:default}
+html[data-phone]:not([data-ptab=keys]) #phGear{display:none!important}
+.ph-back{align-items:center;gap:8px;margin:0 var(--phSide) 8px;padding-top:8px}
+.ph-back b{font:600 18px var(--serif)}
+/* bottom: mini transport + tabs */
+.ph-bottom{position:fixed;left:0;right:0;bottom:0;z-index:40;flex-direction:column;background:var(--t1);border-top:1px solid var(--line);padding:0 0 env(safe-area-inset-bottom,0px)}
+.ph-tr{height:60px;display:flex;align-items:center;gap:8px;padding:0 max(10px,env(safe-area-inset-right,0px)) 0 var(--phSide);border-bottom:1px solid var(--line)}
+.ph-play{flex:none;width:46px;height:46px;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;cursor:pointer;padding:0}
+.ph-play[aria-pressed="true"]{background:var(--ink);color:var(--t2)}
+.ph-rec{flex:none;width:44px;height:44px;border-radius:12px;border:1px solid var(--t6);background:var(--t3);display:grid;place-items:center;cursor:pointer;padding:0}
+.ph-rec i{width:16px;height:16px;border-radius:50%;background:var(--rec)}
+.ph-rec[aria-pressed="true"]{border-color:var(--rec);background:color-mix(in srgb,var(--rec) 22%,var(--t3))}
+.ph-pos{flex:1;min-width:0;font-size:15px;color:var(--signal);background:var(--t2);border-radius:8px;padding:6px 6px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
+.ph-pos b{font-weight:500}.ph-pos small{display:block;font:600 10px var(--body);color:var(--ink2);overflow:hidden;text-overflow:ellipsis}
+.ph-seg{margin:0;flex:none}.ph-seg button{padding:5px 9px;font-weight:600}
+.ph-bpm{flex:none;min-width:52px;height:44px;border-radius:10px;border:1px solid var(--t6);background:var(--t3);color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.05;cursor:pointer;padding:0 6px}
+.ph-bpm b{font:600 15px var(--mono)}.ph-bpm span{font:600 9.5px var(--body);letter-spacing:.08em;color:var(--muted)}
+.ph-tabs{height:58px;display:flex;padding:0 max(4px,env(safe-area-inset-right,0px)) 0 max(4px,env(safe-area-inset-left,0px))}
+.ph-tabs button{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;background:transparent;color:var(--muted);font:600 11px var(--body);cursor:pointer;padding:0}
+.ph-tabs button[aria-selected="true"]{color:var(--accent)}
+.ph-tabs button[aria-selected="true"] span{color:var(--ink)}
+/* which section each tab shows */
+html[data-phone] .grid>.loop>*{display:none!important}
+html[data-phone][data-ptab=keys] .grid>.loop,html[data-phone][data-ptab=song] .grid>.loop,html[data-phone][data-ptab=mix] .grid>.loop{display:flex}
+html[data-phone][data-ptab=play] .grid>.keys{display:flex}
+html[data-phone][data-ptab=more]:not([data-psec]) #phMore{display:flex!important}
+html[data-phone][data-psec=sounds] #sounds,html[data-phone][data-psec=effects] #effects,html[data-phone][data-psec=sing] #sing,html[data-phone][data-psec=lab] #lab,html[data-phone][data-psec=midi] .grid>.profile{display:flex}
+html[data-phone] .ph-page{display:none!important;flex-direction:column}
+html[data-phone][data-psec=taste] #phPageTaste,html[data-phone][data-psec=theme] #phPageTheme,html[data-phone][data-psec=install] #phPageInstall,html[data-phone][data-psec=credits] #phPageCredits{display:flex!important}
+html[data-phone][data-ptab=keys] .loop>.assistant{display:flex!important}
+html[data-phone][data-ptab=song] .loop>#phSongHead,html[data-phone][data-ptab=song] .loop>#playlist:not([hidden]){display:flex!important}
+html[data-phone][data-ptab=song] .loop>#exportStatus:not(:empty){display:block!important}
+html[data-phone][data-ptab=mix] .loop>#mixerView:not([hidden]){display:block!important}
+html[data-phone] .loop>.song-menu:not([hidden]),html[data-phone] .loop>.editor:not([hidden]){display:flex!important}
+html[data-phone][data-ptab=keys] .grid>.loop,html[data-phone][data-ptab=song] .grid>.loop,html[data-phone][data-ptab=mix] .grid>.loop{background:none;border:0;box-shadow:none;padding:0}
+/* Keys tab: the conversation fills the screen, the talk dock sits in thumb reach */
+html[data-phone] .assistant{flex-direction:column;gap:8px;padding:12px;border-radius:16px;height:calc(100vh - var(--phT) - var(--phB) - 22px);height:calc(100dvh - var(--phT) - var(--phB) - 22px);min-height:300px}
+html[data-phone] .as-main{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px}
+html[data-phone] .as-top{order:1;gap:4px 10px}
+html[data-phone] .as-status{font-size:14px;flex:1 1 100%}
+html[data-phone] #phTaste{order:2}
+html[data-phone] .as-notes{order:3}
+html[data-phone] .ph-sing{order:4}
+html[data-phone] .ph-welcome{order:5}
+html[data-phone] .as-chat{order:6;flex:1 1 0;min-height:48px;max-height:none}
+html[data-phone] .chips-row{order:7}
+html[data-phone] .as-form{order:8}
+html[data-phone] .ph-dock{order:9}
+html[data-phone] .as-main>:not(.as-chat){flex:none}
+html[data-phone] .assistant .chips-row{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;margin:0 -12px;padding:0 12px 2px}
+html[data-phone] .assistant .chips-row::-webkit-scrollbar{display:none}
+html[data-phone] .assistant .chips-row .sc{flex:none;white-space:nowrap}
+html[data-phone] .as-form{display:none}
+html[data-phone].ph-typing .as-form{display:flex}
+html[data-phone] .as-form .btn{min-width:72px;justify-content:center}
+html[data-phone] .bub{max-width:92%;font-size:15px}
+html[data-phone] .as-chat>.bub{flex:none}
+html[data-phone] .as-chat:not(:empty)~.ph-welcome,html[data-phone] .ph-welcome.gone{display:none!important}
+.ph-taste{align-self:flex-start;max-width:100%;min-height:44px;padding:6px 12px;border-radius:999px;border:1px solid var(--t6);background:transparent;color:var(--ink2);font:600 13px var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.ph-welcome{flex-direction:column;gap:8px;padding:12px;border-radius:14px;background:var(--t2);border:1px solid var(--t5)}
+.ph-welcome p{margin:0;font:600 17px/1.35 var(--serif)}
+.ph-welcome .chips-row{flex-wrap:wrap!important;margin:0!important;padding:0!important}
+.ph-dock{align-items:center;justify-content:space-between;gap:10px;padding-top:4px}
+.ph-dk{flex:none;width:72px;height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:16px;border:1px solid var(--t6);background:var(--t4);color:var(--ink);font:600 12px var(--body);cursor:pointer;padding:0}
+.ph-dk[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.ph-orbslot{display:flex;justify-content:center;flex:1}
+html[data-phone] .ph-orbslot .orb{width:92px;height:92px;align-self:center}
+html[data-phone] .ph-orbslot .orb-core{inset:20px}
+html[data-phone] .ph-orbslot .orb-name{font-size:14px}
+.ph-sing{flex-direction:column;gap:10px;padding:12px;border-radius:14px;border:1px solid color-mix(in srgb,var(--rec) 55%,var(--line));background:var(--t2)}
+.ph-sing:not([hidden]){display:flex}
+.ph-sing-h{display:flex;flex-direction:column;gap:2px}.ph-sing-h b{font:600 18px var(--serif)}
+.ph-bars{display:flex;gap:6px}
+.ph-bars i{flex:1;height:30px;border-radius:7px;border:1px solid var(--t6);background:var(--t3);font:normal 600 11px/28px var(--mono);text-align:center;color:var(--muted)}
+.ph-bars i.done{background:var(--t6);color:var(--ink2)}
+.ph-bars i.now{border:2px solid var(--rec);color:var(--ink);background:color-mix(in srgb,var(--rec) 14%,var(--t3))}
+.ph-note{display:flex;align-items:center;gap:12px;min-width:0}
+.ph-bignote{font:600 40px/1 var(--display);color:var(--ink);min-width:72px}
+.ph-bignote.live{color:var(--accent)}
+.ph-tune{position:relative;flex:none;width:70px;height:12px;border-radius:6px;background:var(--t6)}
+.ph-tune::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--line)}
+.ph-tune i{position:absolute;top:2px;bottom:2px;width:4px;border-radius:2px;background:var(--signal);left:calc(50% - 2px)}
+.ph-last{flex:1;min-width:0;font:500 13px var(--mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ph-sing .ph-row .btn{flex:1;justify-content:center}
+html[data-phone].ph-singing .as-notes,html[data-phone].ph-singing .ph-welcome{display:none!important}
+/* Song tab */
+.ph-songhead{flex-direction:column;gap:8px;padding:2px 2px 4px}
+.ph-sh1{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ph-sh1 b{font:600 18px var(--serif)}
+#phMakeSlot{display:flex}
+#phAddPart{justify-content:center}
+#phSongHint{font-size:12.5px}
+html[data-phone] .pl-head,html[data-phone] .playlist .playhead,html[data-phone] #songFollow,html[data-phone] .sh-len,html[data-phone] .smap-hint,html[data-phone] .song-hint{display:none!important}
+html[data-phone] .song-head{padding:0}
+html[data-phone] .trk{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"h1 h1" "h3 roll";gap:6px 8px;padding:8px 8px 8px 10px;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;cursor:pointer}
+html[data-phone] .trk .th{display:contents}
+html[data-phone] .trk .th1{grid-area:h1;gap:4px}
+html[data-phone] .trk .th2,html[data-phone] .trk .th3 .row,html[data-phone] .trk .tfx,html[data-phone] .trk .tnum{display:none!important}
+html[data-phone] .trk .th3{grid-area:h3;align-self:center}
+html[data-phone] .trk .tname{pointer-events:none;font-size:15px;padding:0 2px;min-height:0}
+html[data-phone] .trk .ib{width:44px;height:42px;flex:none}
+html[data-phone] .trk .troll{grid-area:roll;height:32px;pointer-events:auto}
+html[data-phone] .trk .slane{display:none!important}
+html[data-phone] .trk.picked{outline-offset:-2px}
+html[data-phone] .selbar .hint{display:none}
+html[data-phone] .selbar{position:sticky;top:calc(var(--phT) + 4px);z-index:5;gap:6px}
+html[data-phone] .tracks .custom-empty.big{font-size:14px;padding:16px}
+/* Mix tab: one row per part, master first, the live keys and pads last */
+html[data-phone] #mixerView .mixer{display:flex;flex-direction:column;gap:8px}
+html[data-phone] #mixerView .mstrip:last-child{order:-1}
+html[data-phone] #mixerView .mstrip:nth-child(1),html[data-phone] #mixerView .mstrip:nth-child(2){order:2}
+html[data-phone] .strip-ctl{gap:6px 10px}
+html[data-phone] .strip-ctl .vol{flex:1 1 100%}
+html[data-phone] .strip-ctl .vol input{flex:1;width:auto}
+html[data-phone] .strip-ctl [data-learn]{display:none}
+html[data-phone] .dial.sm{width:36px;height:36px}
+.phonly{display:none}
+html[data-phone] .phonly{display:inline-flex}
+/* Play tab: sound pickers, big pads, a keyboard you can hit with a finger */
+html[data-phone] .keys>.kb-bar,html[data-phone] .keys>.hint,html[data-phone] .keys #scene,html[data-phone] .keys .wheels,html[data-phone] .keys .lcd,html[data-phone] .keys .knobs,html[data-phone] .keys .faders,html[data-phone] .keys .hw-row{display:none!important}
+html[data-phone] .keys .stage{padding:0;background:none;border:0;overflow:visible}
+html[data-phone] .keys .ctrl-body{background:none;border:0;padding:0;box-shadow:none;gap:14px}
+html[data-phone] .keys .ctrl-top{gap:10px}
+html[data-phone] .pads-wrap{width:100%;align-items:stretch}
+html[data-phone] .pads{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:8px}
+html[data-phone] .pad{height:74px;font-size:11px}
+html[data-phone] .kb-wrap{overflow:hidden}
+html[data-phone] .keyboard{min-width:0;height:220px}
+.ph-playhead{flex-direction:column;gap:10px}
+.ph-f{display:flex;flex-direction:column;gap:5px;min-width:0}
+.ph-f>span{font:700 11px var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--muted2)}
+.ph-playhead .stepper .btn{min-width:44px;justify-content:center}
+/* More tab */
+.ph-more{padding:6px!important}
+.ph-list{display:flex;flex-direction:column;gap:4px;width:100%}
+.ph-list button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:56px;padding:10px 14px;border:0;border-radius:12px;background:transparent;color:var(--ink);text-align:left;cursor:pointer}
+.ph-list button b{font:600 15px var(--body)}
+.ph-list button span{font:500 12.5px var(--body);color:var(--muted)}
+.ph-list button:hover,.ph-list button:focus-visible{background:var(--t4)}
+.ph-page p{margin:0}
+#phThemeSlot .themes{padding:10px 14px;gap:16px}
+#phThemeSlot .themes button{width:40px;height:40px;box-shadow:inset 0 0 0 10px var(--sw,#333)}
+html[data-phone] .modal{padding:0;place-items:end stretch}
+html[data-phone] .modal-card{width:100%;max-height:88vh;max-height:88dvh;border-radius:18px 18px 0 0;padding:16px var(--phSide) calc(16px + env(safe-area-inset-bottom,0px))}
+html[data-phone] .pitem .row{gap:14px}
+html[data-phone] .song-menu{left:var(--phSide)!important;right:var(--phSide)!important;top:auto!important;bottom:calc(var(--phB) + 8px)!important;max-width:none;max-height:70vh;overflow:auto}
+html[data-phone] .song-menu button{min-height:44px}
+html[data-phone] .lede{font-size:14px}
+html[data-phone] #micRoll{height:140px}
+/* sheets */
+.ph-sheet{position:fixed;inset:0;z-index:55;display:flex;flex-direction:column;justify-content:flex-end}
+.ph-scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.ph-card{position:relative;max-height:86vh;max-height:86dvh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--t5);border-bottom:0;border-radius:20px 20px 0 0;padding:0 var(--phSide) env(safe-area-inset-bottom,0px);transition:transform .18s}
+.ph-grab{width:44px;height:5px;border-radius:3px;background:var(--t7);margin:8px auto 2px;flex:none}
+.ph-sh-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0 8px;touch-action:none;flex:none}
+.ph-sh-head b{font:600 20px var(--serif);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ph-sh-body{overflow:auto;overscroll-behavior:contain;padding-bottom:16px;display:flex;flex-direction:column;gap:12px}
+.ph-pane{display:flex;flex-direction:column;gap:12px}
+.ph-pane[hidden]{display:none!important}
+#phPaneSong .proj{width:100%;min-width:0;font-size:17px!important;background:var(--t2);border-color:var(--t5)}
+#phPaneSong>.row{flex-direction:column;align-items:stretch;gap:6px}
+#phPaneSong>.row>.btn,#phPaneSong .mp3grp .btn{justify-content:flex-start;width:100%}
+#phPaneSong .mp3grp{display:flex;gap:6px;width:100%}#phPaneSong .mp3grp .btn{flex:1}#phPaneSong .mp3grp select{width:auto}
+#phPaneGear .as-opts{flex-direction:column;gap:14px;font-size:15px;color:var(--ink)}
+#phPaneGear .as-opts label{min-height:40px}
+#phPaneBpm{gap:14px}
+#phPaneBpm>label,#phPaneBpm>.tempo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:15px;color:var(--ink);min-height:44px}
+#phPaneBpm .tempo input{width:96px}
+#phPaneBpm label[for=keySel]::before{content:"Key"}
+.ph-part{display:flex;flex-direction:column;gap:14px;border-left:4px solid var(--c);padding-left:12px}
+.ph-part .ph-row .btn{flex:1;justify-content:center}
+.ph-part .tfx{display:flex;flex-direction:column;gap:12px;padding:12px;border-radius:12px;background:var(--t2);border:1px solid var(--t5)}
+.ph-part .tfx-list{grid-template-columns:minmax(0,1fr);gap:10px}
+.ph-part .fxrow{grid-template-columns:84px minmax(0,1fr) 62px 44px}
+.ph-part .fxrow .lk{min-width:44px}
+.ph-part .tfx-eq{gap:14px}
+.ph-part .ms.on{background:var(--accent);color:var(--on-accent);border-color:transparent}
+/* note editor: full screen on a phone */
+html[data-phone] .loop>.editor:not([hidden]){position:fixed;inset:0;z-index:45;border-radius:0;border:0;padding:calc(6px + env(safe-area-inset-top,0px)) max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) var(--phSide);gap:6px;background:var(--t1)}
+html[data-phone] .ed-head{gap:6px}
+html[data-phone] .ed-head .seg{margin-left:0}
+html[data-phone] .ed-head .btn.small,html[data-phone] .ed-head .seg button,html[data-phone] .ed-head .select{padding:4px 9px;min-height:40px}
+html[data-phone] .ed-head .hint{font-size:12px}
+html[data-phone] #edHint{order:20;flex-basis:100%;font-size:12px}
+html[data-phone] #edTitle{max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-phone] .ed-wrap{flex:1 1 auto;min-height:0}
+/* phone held sideways: slimmer bars so the Keys button stays on the first screen */
+@media (max-height:500px){
+  html[data-phone]{--phT:calc(46px + env(safe-area-inset-top,0px));--phB:calc(104px + env(safe-area-inset-bottom,0px))}
+  .ph-tr{height:56px}.ph-tabs{height:48px}.ph-tabs button{flex-direction:row;gap:6px}
+  html[data-phone] .assistant{min-height:0;padding:8px 12px;gap:6px}
+  html[data-phone] #phTaste,html[data-phone] #phWelcome,html[data-phone] .as-engine{display:none!important}
+  html[data-phone] .as-chat{min-height:0}
+  html[data-phone] .ph-orbslot .orb{width:64px;height:64px}html[data-phone] .ph-orbslot .orb-core{inset:14px}html[data-phone] .ph-orbslot .orb-name{font-size:11px}
+  .ph-dk{height:48px}
+}
+@media (pointer:coarse) and (min-width:601px){
+  .jump a{min-height:44px;display:inline-flex;align-items:center}
+  .themes button{width:30px;height:30px}
+  select.select,.input{min-height:44px}
+  input[type=checkbox]{width:20px;height:20px}
 }
 </style>
 </head>

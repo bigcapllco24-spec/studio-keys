@@ -228,7 +228,8 @@ $('#clearMon').onclick=()=>{ M.log=[]; $('#monitor').innerHTML=''; };
 function renderProfile(){
   const info=$('#devInfo'), pill=$('#midiPill');
   if(M.state==='unsupported'){
-    pill.innerHTML='<span class="led bad"></span><span>MIDI not supported</span>';
+    pill.hidden=true; /* no Web MIDI at all (every iPhone, Safari): no red pill, it isn't an error (UX-4) */
+    pill.innerHTML='<span class="led"></span><span>No MIDI in this browser</span>';
     info.innerHTML='<div class="empty"><strong>This browser can’t read MIDI devices.</strong><span>Use Chrome, Edge, Opera or Firefox on a computer. Safari and iOS don’t support Web MIDI. The on-screen keys and your computer keyboard still play every sound.</span></div>';
   } else if(M.state==='blocked'){
     pill.innerHTML='<span class="led bad"></span><span>MIDI blocked</span>';

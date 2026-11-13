@@ -76,7 +76,7 @@ function expandRange(n){
   KB.lo=lo; KB.hi=hi; renderKeyboard();
 }
 const KEYBEDS={25:[48,72],32:[53,84],37:[48,84],49:[36,84],61:[36,96],73:[28,100],76:[28,103],88:[21,108]};
-function setKeybed(keys){ const r=KEYBEDS[keys]||KEYBEDS[61]; KB.lo=r[0]; KB.hi=r[1]; renderKeyboard(); }
+function setKeybed(keys){ if(typeof phKeybed==='function'&&phKeybed()) return; /* phones: C4–E5, two octaves sideways (UX-4) */ const r=KEYBEDS[keys]||KEYBEDS[61]; KB.lo=r[0]; KB.hi=r[1]; renderKeyboard(); }
 (function(){
   const kb=$('#keyboard'), ptr=new Map();
   const keyAt=(x,y)=>{ const el=document.elementFromPoint(x,y), k=el&&el.closest?el.closest('.key'):null; return k&&kb.contains(k)?k:null; };

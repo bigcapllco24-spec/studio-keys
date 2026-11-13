@@ -221,7 +221,9 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     setOrb('listening',`Sing ${w} now: ${PROJ.bars} bar${PROJ.bars>1?'s':''}. ${this.part==='voice'?'':'Only the drums play so I can hear you clearly.'}`); if(typeof showSung==='function'){ ASSIST.sung=[]; showSung(0,false); } },
   noteOn(n,v){ if(LOOP.state!=='take') return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60; this.noteOff(); this.open={n,v,b:Math.max(0,b)}; },
   noteOff(){ if(!this.open) return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60, o=this.open; this.open=null; if(b-o.b>0.12) this.notes.push({b:o.b,d:b-o.b,n:o.n,v:o.v}); },
-  releaseMic(){ if(this.micByTake&&!(ASSIST.listening&&ASSIST.hum)){ this.micByTake=false; try{ micStop(); }catch(e){} } },
+  /* the take lets go of the mic it opened. iPhone (UX-4): always, because an open mic stops speech recognition there, and the hum mic isn't used while listening on iPhone */
+  releaseMic(){ this.dropProc(); if(this.micByTake&&!(ASSIST.listening&&ASSIST.hum&&!IS_IOS)){ this.micByTake=false; try{ micStop(); }catch(e){} } },
+  dropProc(){ if(!this.proc) return; try{ this.proc.onaudioprocess=null; this.proc.disconnect(); }catch(e){} this.proc=null; },
   backSong(){ if(!this.backToSong) return; this.backToSong=false; songMode('song',{force:true}); },
   cancel(){ setTimeout(()=>this.backSong(),0); this.releaseMic(); this.chunks=[]; this.notes=[]; this.open=null; TAKE_GUIDE=false; refreshTrackGains(); $('#micStatus').textContent='Take cancelled.'; setOrb(ASSIST.listening?'listening':'idle',idleText()); },
   finish(){
@@ -279,7 +281,7 @@ function uiLoop(){
   $('#exportZip').disabled=!has; $('#exportMid').disabled=!has; $('#exportMp3').disabled=!has; $('#playBtn').disabled=!has||PLAYING.has(st);
   $('#recBtn').classList.toggle('on',st==='recording'||st==='overdub'); $('#playBtn').classList.toggle('on',PLAYING.has(st));
   document.querySelectorAll('.tp').forEach(b=>b.classList.toggle('on',(b.dataset.tp==='play'&&PLAYING.has(st))||(b.dataset.tp==='rec'&&(st==='recording'||st==='overdub'||st==='take'))||(b.dataset.tp==='loop'&&st!=='empty'&&st!=='stopped')));
-  songUI();
+  songUI(); if(typeof phSync==='function') phSync();
 }
 /* ---------- export: MIDI, WAV, zip ---------- */
 function vlq(n){ const b=[n&0x7F]; while(n>>=7) b.unshift((n&0x7F)|0x80); return b; }

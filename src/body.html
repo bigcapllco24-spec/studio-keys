@@ -1,4 +1,13 @@
 <body>
+<!-- PHONE (UX-4): the top bar, mini transport, tab bar and sheets only show on phones (html[data-phone], see src/phone.js).
+     Every control here calls the studio's own functions; nothing is duplicated. -->
+<header class="ph-top ph-only" id="phTop">
+  <div class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <button class="ph-song" type="button" id="phSongBtn" aria-haspopup="dialog" title="Your songs, save, download"><b><span id="phSongName">Untitled song</span> ▾</b><span id="phSongSub">New song</span></button>
+  <button class="ph-ib" type="button" id="phGear" aria-label="Keys settings" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8Zm8.2 4.6-.1-2.4 2-1.6-2-3.4-2.4.8a8 8 0 0 0-2-1.2L15.2 3h-4l-.5 2.4a8 8 0 0 0-2 1.2l-2.4-.8-2 3.4 2 1.6a7 7 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-.8a8 8 0 0 0 2 1.2l.5 2.4h4l.5-2.4a8 8 0 0 0 2-1.2l2.4.8 2-3.4-2-1.6Z"/></svg></button>
+  <button class="ph-ib" type="button" id="phUndo" aria-label="Undo" title="Undo" disabled><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M9 7 4.5 11.5 9 16M5 11.5h9a5 5 0 0 1 0 10h-3"/></svg></button>
+</header>
+<div class="ph-back ph-only" id="phBackBar" hidden><button class="btn ghost" type="button" id="phBack">‹ More</button><b id="phBackT"></b></div>
 <header class="top">
   <div class="brand">
     <div class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -26,6 +35,11 @@
 
   <!-- CONTROLLER -->
   <section class="panel keys" aria-labelledby="keysH">
+    <div class="ph-playhead ph-only" id="phPlayHead">
+      <label class="ph-f"><span>Keys sound</span><select class="select" id="phKeysSel" aria-label="Sound on the keys"></select></label>
+      <label class="ph-f"><span>Pads sound</span><select class="select" id="phPadsSel" aria-label="Sound on the pads"></select></label>
+      <div class="ph-row"><button class="btn" type="button" id="phAllSounds">All sounds…</button><span class="spacer"></span><span class="stepper">Octave <button class="btn" type="button" id="phOctDn" aria-label="Octave down">−</button><span class="val" id="phOctV">C4</span><button class="btn" type="button" id="phOctUp" aria-label="Octave up">+</button></span></div>
+    </div>
     <div class="kb-bar">
       <h2 id="keysH">Your controller</h2>
       <div class="row" style="gap:16px">
@@ -86,15 +100,28 @@
       </div>
     </div>
     <span class="status" id="exportStatus"></span>
+    <div class="ph-songhead ph-only" id="phSongHead">
+      <div class="ph-sh1"><b id="phSongLen">Loop · 4 bars</b><span id="phMakeSlot"></span></div>
+      <button class="btn" type="button" id="phAddPart" aria-haspopup="dialog">+ Add a part</button>
+      <span class="hint" id="phSongHint">Tap a part to change its sound, volume, effects or notes · hold to select several</span>
+    </div>
 
     <!-- assistant -->
     <div class="assistant">
       <button class="orb" type="button" id="asOrb" data-state="idle" aria-label="Talk to the assistant"><span class="orb-core"></span><span class="orb-name" id="asNameLbl">Keys</span></button>
       <div class="as-main">
         <div class="as-top"><span class="as-status" id="asStatus">Press the orb and speak, or type below.</span><span class="as-engine" id="asEngine"></span></div>
+        <button class="ph-taste ph-only" type="button" id="phTaste">Your sound: tap to add artists or Spotify</button>
+        <div class="ph-welcome ph-only" id="phWelcome"><p>Tell me a vibe or an artist, or hum an idea.</p><div class="chips-row"><button class="sc" type="button" data-say="124 bpm drums with hihats and claps like Ben Böhmer">Drums like Ben Böhmer</button><button class="sc" type="button" data-say="make a beat">Make a beat</button><button class="sc" type="button" data-say="let me sing a melody">Hum an idea</button></div></div>
+        <div class="ph-sing" id="phSing" hidden aria-live="polite">
+          <div class="ph-sing-h"><b id="phSingT">Sing the bassline</b><span class="hint" id="phSingL">Only the drums play while you sing.</span></div>
+          <div class="ph-bars" id="phBars"></div>
+          <div class="ph-note"><span class="ph-bignote" id="phNote">—</span><span class="ph-tune" title="Flat ← in tune → sharp"><i id="phNeedle"></i></span><span class="ph-last" id="phLast"></span></div>
+          <div class="ph-row"><button class="btn" type="button" id="phSingX">Cancel</button><button class="btn" type="button" id="phSingR">Start again</button><button class="btn primary" type="button" id="phSingD">Done</button></div>
+        </div>
         <div class="as-notes" id="asNotes" hidden aria-live="off"></div>
         <div class="as-chat" id="asChat" aria-live="polite"></div>
-        <form class="as-form" id="asForm"><input class="input" id="asIn" type="text" autocomplete="off" placeholder="Talk or type, e.g. “give me a trap beat at 140 with an 808 bass”"><button class="btn primary" type="submit">Send</button></form>
+        <form class="as-form" id="asForm"><input class="input" id="asIn" type="text" autocomplete="off" enterkeyhint="send" aria-label="Type to Keys" placeholder="Talk or type, e.g. “give me a trap beat at 140 with an 808 bass”"><button class="btn primary" type="submit">Send</button></form>
         <div class="as-opts">
           <label for="asListen"><input type="checkbox" id="asListen"> Always listening for my name</label>
           <label for="asName">Name <input class="input inline" id="asName" type="text" maxlength="20" style="width:100px"></label>
@@ -112,6 +139,11 @@
           <button class="sc" type="button" data-say="add a bassline">Add a bassline</button>
           <button class="sc" type="button" data-say="mix it: drums up a little, bass a bit more low end, chords softer">Mix it</button>
           <button class="sc" type="button" data-say="undo">Undo</button>
+        </div>
+        <div class="ph-dock ph-only" id="phDock">
+          <button class="ph-dk" type="button" id="phType" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 6.5h18v11H3zM6.5 10h1M10 10h1M13.5 10h1M17 10h.5M7 14h10"/></svg><span>Type</span></button>
+          <span class="ph-orbslot" id="phOrbSlot"></span>
+          <button class="ph-dk" type="button" id="phSingBtn" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 14.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 0 0-7 0v5a3.5 3.5 0 0 0 3.5 3.5Z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><span>Sing</span></button>
         </div>
         <div class="taste" id="taste">
           <div class="taste-head"><b>Your sound</b><span class="hint" id="tasteStatus">Connect Spotify or name a few artists, and requests like “make a beat” will lean your way.</span></div>
@@ -195,6 +227,11 @@
         <button class="btn small" type="button" id="edDown" title="Transpose down a semitone">−1</button>
         <button class="btn small" type="button" id="edUp" title="Transpose up a semitone">+1</button>
         <button class="btn small ghost" type="button" id="edClear">Clear notes</button>
+        <button class="btn small" type="button" id="edCopyB" hidden title="Copy the selected notes (Ctrl+C)">Copy</button>
+        <button class="btn small" type="button" id="edPasteB" hidden title="Paste after the copied notes (Ctrl+V)">Paste</button>
+        <button class="btn small ghost" type="button" id="edDelB" hidden title="Delete the selected notes (Delete)">Delete</button>
+        <button class="btn small ph-only" type="button" id="edUndoB" title="Undo">↶ Undo</button>
+        <button class="btn small ph-only" type="button" id="edPlayB" aria-pressed="false">▶ Play</button>
         <button class="btn small" type="button" id="edClose">Close</button>
       </div>
       <div class="ed-pat" id="edPat" hidden></div>
@@ -372,7 +409,69 @@
       </ol>
     </details>
   </section>
+
+  <!-- PHONE: More tab and its pages -->
+  <section class="panel ph-more" id="phMore" aria-label="More">
+    <nav class="ph-list" aria-label="More">
+      <button type="button" data-phmore="songs"><b>Your songs</b><span>Open, rename or delete saved songs</span></button>
+      <button type="button" data-phmore="taste"><b>Your sound</b><span>Spotify and the artists you love</span></button>
+      <button type="button" data-phmore="sounds"><b>Sounds</b><span>Every instrument and drum kit</span></button>
+      <button type="button" data-phmore="effects"><b>Effects · 8 knobs</b><span>Reverb, delay and more on the keys and pads</span></button>
+      <button type="button" data-phmore="sing"><b>Sing to play</b><span>The tuner: sing a note, hear it on a sound</span></button>
+      <button type="button" data-phmore="lab"><b>Sound Lab</b><span>Turn part of a song into a playable sound</span></button>
+      <button type="button" data-phmore="midi" id="phMoreMidi"><b>MIDI controller</b><span>Connect a USB or Bluetooth keyboard</span></button>
+      <button type="button" data-phmore="theme"><b>Colour theme</b><span>Emerald, Velvet or Sapphire</span></button>
+      <button type="button" data-phmore="install"><b>Add to Home Screen</b><span>Open Studio Keys like an app</span></button>
+      <button type="button" data-phmore="credits"><b>Sound credits</b><span>Where the sounds come from</span></button>
+    </nav>
+  </section>
+  <section class="panel ph-page" id="phPageTaste" data-page="taste" aria-label="Your sound"></section>
+  <section class="panel ph-page" id="phPageTheme" data-page="theme" aria-label="Colour theme"><p class="hint">Pick the colours of your studio.</p><div id="phThemeSlot"></div></section>
+  <section class="panel ph-page" id="phPageInstall" data-page="install" aria-label="Add to Home Screen">
+    <p><b>iPhone:</b> tap the Share button in Safari, then <b>Add to Home Screen</b>.</p>
+    <p><b>Android:</b> open Chrome’s menu (⋮), then <b>Add to Home screen</b> or <b>Install app</b>.</p>
+    <p class="hint">Your songs stay on this phone. Talking to Keys works best in the browser; in the home-screen app, use the mic on your keyboard if talking doesn’t start.</p>
+  </section>
+  <section class="panel ph-page" id="phPageCredits" data-page="credits" aria-label="Sound credits"></section>
 </main>
 <footer class="credits"><p>Sound credits: Grand Piano from the Salamander Grand Piano V2 by Alexander Holm (CC BY 3.0). Sampled melodic instruments and basses from the FluidR3 GM SoundFont by Frank Wen (CC BY 3.0), via midi-js-soundfonts by Benjamin Gleitzman. Sampled drum kits and the hall reverb from the Tone.js audio collection (originally from Chris Wilson's web-audio-samples). 808, 909 and Trap kits and the synth basses are generated in the browser.</p></footer>
+<!-- PHONE: mini transport + tabs (always in thumb reach) -->
+<div class="ph-bottom ph-only" id="phBottom">
+  <div class="ph-tr" id="phTr" aria-label="Transport">
+    <button class="ph-rec" type="button" id="phRec" aria-pressed="false" title="Record what you play over the loop"><i></i><span class="sr">Record</span></button>
+    <button class="ph-play" type="button" id="phPlay" aria-label="Play" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path id="phPlayIco" fill="currentColor" d="M7 4.5v15l13-7.5z"/></svg></button>
+    <span class="ph-pos mono" id="phPos" aria-live="off">1 . 1</span>
+    <span class="seg ph-seg" role="group" aria-label="Play the loop or the whole song"><button type="button" data-phmode="loop" aria-pressed="true">Loop</button><button type="button" data-phmode="song" aria-pressed="false">Song</button></span>
+    <button class="ph-bpm" type="button" id="phBpm" aria-haspopup="dialog" title="Tempo, key, length, metronome"><b id="phBpmV">120</b><span>BPM</span></button>
+  </div>
+  <nav class="ph-tabs" id="phTabs" role="tablist" aria-label="Studio">
+    <button type="button" role="tab" data-ptab="keys" aria-selected="true"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.6" fill="currentColor"/></svg><span>Keys</span></button>
+    <button type="button" role="tab" data-ptab="song" aria-selected="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M3 5h11v3H3zM3 10.5h18v3H3zM9 16h12v3H9z"/></svg><span>Song</span></button>
+    <button type="button" role="tab" data-ptab="mix" aria-selected="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 4v16M12 4v16M18 4v16"/><path fill="currentColor" d="M3.5 13h5v3h-5zM9.5 7h5v3h-5zM15.5 15h5v3h-5z"/></svg><span>Mix</span></button>
+    <button type="button" role="tab" data-ptab="play" aria-selected="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 4.5h18v15H3zM9 4.5v15M15 4.5v15"/><path fill="currentColor" d="M7 4.5h3.5v8H7zM13.5 4.5H17v8h-3.5z"/></svg><span>Play</span></button>
+    <button type="button" role="tab" data-ptab="more" aria-selected="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="19" cy="12" r="2" fill="currentColor"/></svg><span>More</span></button>
+  </nav>
+</div>
+<!-- PHONE: one bottom sheet; each pane holds the studio's own controls while the phone layout is on -->
+<div class="ph-sheet" id="phSheet" hidden>
+  <div class="ph-scrim" data-phclose></div>
+  <div class="ph-card" role="dialog" aria-modal="true" aria-labelledby="phSheetT">
+    <div class="ph-grab" id="phGrab" aria-hidden="true"></div>
+    <div class="ph-sh-head"><b id="phSheetT">Song</b><button class="ph-ib" type="button" data-phclose aria-label="Close">✕</button></div>
+    <div class="ph-sh-body" id="phSheetBody">
+      <div class="ph-pane" data-pane="song" id="phPaneSong"></div>
+      <div class="ph-pane" data-pane="gear" id="phPaneGear"></div>
+      <div class="ph-pane" data-pane="bpm" id="phPaneBpm"></div>
+      <div class="ph-pane" data-pane="sing">
+        <p class="hint">Keys plays the drums and counts you in. Sing or hum one note at a time; the part appears when you stop.</p>
+        <div class="ph-list"><button type="button" data-phsing="bass"><b>Bassline</b><span>Low notes on the beat</span></button><button type="button" data-phsing="chords"><b>Chords</b><span>One note per chord, Keys builds the chords</span></button><button type="button" data-phsing="melody"><b>Melody</b><span>Your hook or topline</span></button><button type="button" data-phsing="voice"><b>Voice note</b><span>Keeps your voice as a recording</span></button></div>
+      </div>
+      <div class="ph-pane" data-pane="add">
+        <div class="ph-list"><button type="button" data-phadd="ask"><b>Ask Keys</b><span>“Add a bassline”, “warm pad chords”…</span></button><button type="button" data-phadd="empty"><b>Empty instrument</b><span>Draw your own notes</span></button><button type="button" data-phadd="beat"><b>Empty beat</b><span>Tap in your own drums</span></button><button type="button" data-phadd="sing"><b>Sing a melody</b><span>Over the beat, it becomes notes</span></button><button type="button" data-phadd="voice"><b>Voice note</b><span>Record your voice as audio</span></button><button type="button" data-phadd="import"><b>Import a file</b><span>Audio or MIDI from your phone</span></button></div>
+      </div>
+      <div class="ph-pane" data-pane="part" id="phPartB"></div>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script type="application/json" id="samples">__SAMPLES__</script>

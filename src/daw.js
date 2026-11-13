@@ -32,7 +32,7 @@ function renderTracks(){
   $('#projName').value=PROJ.name; $('#barsSel').value=String(PROJ.bars); $('#keySel').value=PROJ.key?`${PROJ.key.tonic}:${PROJ.key.mode}`:'';
   $('#keyInfo').textContent=PROJ.key?'':`detected ${keyName(projectKey())}`;
   const box=$('#tracks');
-  if(!PROJ.tracks.length){ box.innerHTML='<div class="custom-empty big">No tracks yet. Ask the assistant (“Keys, give me a house beat at 124”), hum a melody, press Record and play, or use the + buttons.</div>'; closeEditor(); drawRuler(); renderFaders(); songRender(); return; }
+  if(!PROJ.tracks.length){ if(typeof phPartRefresh==='function') phPartRefresh(); box.innerHTML='<div class="custom-empty big">No tracks yet. Ask the assistant (“Keys, give me a house beat at 124”), hum a melody, press Record and play, or use the + buttons.</div>'; closeEditor(); drawRuler(); renderFaders(); songRender(); return; }
   [...SEL].forEach(id=>{ if(!PROJ.tracks.some(t=>t.id===id)) SEL.delete(id); });
   box.innerHTML=selBar()+PROJ.tracks.map((t,i)=>`<div class="trk${t.id===ED.tid?' sel':''}${SEL.has(t.id)?' picked':''}${trackAudible(t)?'':' quiet'}" data-tid="${t.id}" style="--c:${t.color}">
     <div class="th">
@@ -53,6 +53,7 @@ function renderTracks(){
   if(ED.tid && !PROJ.tracks.find(t=>t.id===ED.tid)) closeEditor();
   drawRolls(); drawRuler(); renderFaders(); if(VIEW==='mixer') renderMixerView(); if(ED.tid){ drawEditor(); edPatUI(); }
   songRender(); songRefocus(songFk);
+  if(typeof phPartRefresh==='function') phPartRefresh();
 }
 function drawRuler(){ if(songOn()){ songDrawRuler(); return; } const cv=$('#ruler'); if(!cv||!cv.clientWidth) return; const {g,w,h}=prepCanvas(cv), L=PROJ.bars*4; g.font='11px '+cssVar('--mono'); for(let b=0;b<=L;b++){ const x=b/L*w; g.fillStyle=b%4===0?cssVar('--muted'):cssVar('--line'); g.fillRect(Math.min(w-1,x),b%4===0?6:14,1,h); if(b%4===0&&b<L){ g.fillStyle=cssVar('--muted'); g.fillText(String(b/4+1),x+4,13); } } }
 function drawRolls(){
@@ -70,12 +71,12 @@ function drawRolls(){
     const ns=t.events.map(e=>e.n), lo=Math.min(...ns), hi=Math.max(...ns), rngN=Math.max(6,hi-lo);
     t.events.forEach(e=>{ const x=mod(e.b,L)/L*w, y=h-5-((e.n-lo)/rngN)*(h-12); g.globalAlpha=0.45+0.55*e.v; g.fillRect(x,y-2,Math.max(2,e.d/L*w-1),4); }); g.globalAlpha=1; });
 }
-$('#tracks').addEventListener('change',e=>{ if(e.target.closest('[data-tfxk]')){ saveProject(); const b=document.querySelector(`[data-tfx="${e.target.closest('[data-tfxk]').dataset.tfxk.split(':')[0]}"]`); return; }
-  const ad=e.target.closest('[data-tfxadd]'); if(ad){ const t=PROJ.tracks.find(x=>x.id===ad.dataset.tfxadd), k=ad.value; if(t&&k){ t.fx=t.fx||{}; t.fx[k]=TFX_DEF[k].def; ensureAudio(); refreshTrackGains(); saveProject(); renderTracks(); } return; } const s=e.target.closest('[data-tinst]'); if(s){ const t=PROJ.tracks.find(x=>x.id===s.dataset.tinst); const I=INST.get(s.value); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); if(t.name===(INST.get(t.inst)||{}).name) t.name=I.name; t.inst=s.value; saveProject(); renderTracks(); } });
-$('#tracks').addEventListener('input',e=>{ const fk=e.target.closest('[data-tfxk]'); if(fk){ const [id,k]=fk.dataset.tfxk.split(':'), t=PROJ.tracks.find(x=>x.id===id), d=TFX_DEF[k]; if(!t) return; t.fx=t.fx||{};
+function trkChange(e){ if(e.target.closest('[data-tfxk]')){ saveProject(); const b=document.querySelector(`[data-tfx="${e.target.closest('[data-tfxk]').dataset.tfxk.split(':')[0]}"]`); return; }
+  const ad=e.target.closest('[data-tfxadd]'); if(ad){ const t=PROJ.tracks.find(x=>x.id===ad.dataset.tfxadd), k=ad.value; if(t&&k){ t.fx=t.fx||{}; t.fx[k]=TFX_DEF[k].def; ensureAudio(); refreshTrackGains(); saveProject(); renderTracks(); } return; } const s=e.target.closest('[data-tinst]'); if(s){ const t=PROJ.tracks.find(x=>x.id===s.dataset.tinst); const I=INST.get(s.value); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); if(t.name===(INST.get(t.inst)||{}).name) t.name=I.name; t.inst=s.value; saveProject(); renderTracks(); } }
+function trkInput(e){ const fk=e.target.closest('[data-tfxk]'); if(fk){ const [id,k]=fk.dataset.tfxk.split(':'), t=PROJ.tracks.find(x=>x.id===id), d=TFX_DEF[k]; if(!t) return; t.fx=t.fx||{};
     const v=+fk.value; t.fx[k]=d.log?fxLog(d,v):Math.round((d.min+(d.max-d.min)*v/1000)*100)/100; if(k==='pan'&&Math.abs(t.fx.pan)<0.04) t.fx.pan=0;
-    const lbl=document.querySelector(`[data-tfxv="${CSS.escape(fk.dataset.tfxk)}"]`); if(lbl) lbl.textContent=fxShow(k,t.fx[k]); ensureAudio(); refreshTrackGains(); return; } const n=e.target.closest('[data-tname]'); if(n){ const t=PROJ.tracks.find(x=>x.id===n.dataset.tname); t.name=n.value.slice(0,40); saveProject(); if(ED.tid===t.id) $('#edTitle').textContent=t.name; } });
-$('#tracks').addEventListener('click',e=>{ if(e.target.closest('[data-mute],[data-solo]')&&!(SEL.size>1&&SEL.has((e.target.closest('[data-mute],[data-solo]').dataset.mute||e.target.closest('[data-mute],[data-solo]').dataset.solo)))) return;
+    document.querySelectorAll(`[data-tfxv="${CSS.escape(fk.dataset.tfxk)}"]`).forEach(l=>l.textContent=fxShow(k,t.fx[k])); ensureAudio(); refreshTrackGains(); return; } const n=e.target.closest('[data-tname]'); if(n){ const t=PROJ.tracks.find(x=>x.id===n.dataset.tname); t.name=n.value.slice(0,40); saveProject(); if(ED.tid===t.id) $('#edTitle').textContent=t.name; } }
+function trkClick(e){ if(e.target.closest('[data-mute],[data-solo]')&&!(SEL.size>1&&SEL.has((e.target.closest('[data-mute],[data-solo]').dataset.mute||e.target.closest('[data-mute],[data-solo]').dataset.solo)))) return;
   const d=e.target.closest('[data-tdel]'); if(d){ if(d.dataset.armed){ const t=removeTrack(d.dataset.tdel); if(t) toast(`Deleted “${t.name}”`); } else { d.dataset.armed='1'; d.textContent='Confirm delete'; setTimeout(()=>{ if(d.isConnected){ delete d.dataset.armed; d.textContent='Delete'; } },3000); } return; }
   const p=e.target.closest('[data-prev]'); if(p){ togglePreview(p.dataset.prev,e.ctrlKey||e.metaKey); return; }
   const fb=e.target.closest('[data-tfx]'); if(fb){ const id=fb.dataset.tfx; FXOPEN.has(id)?FXOPEN.delete(id):FXOPEN.add(id); renderTracks(); return; }
@@ -88,7 +89,21 @@ $('#tracks').addEventListener('click',e=>{ if(e.target.closest('[data-mute],[dat
   const du=e.target.closest('[data-dup]'); if(du){ duplicateTrack(du.dataset.dup); return; }
   const ed=e.target.closest('[data-edit]'); if(ed){ openEditor(ed.dataset.edit); return; }
   const r=e.target.closest('.troll'); if(r){ const t=PROJ.tracks.find(x=>x.id===r.dataset.roll); if(t&&t.kind==='notes') openEditor(t.id); }
-});
+}
+/* the same handlers serve the track rows and a part's sheet on a phone (UX-4) */
+['#tracks','#phPartB'].forEach(q=>{ const b=$(q); if(!b) return; b.addEventListener('change',trkChange); b.addEventListener('input',trkInput); b.addEventListener('click',trkClick); });
+/* a part's sheet on a phone: name, play alone, mute/solo, sound, volume, its effects, edit / copy / delete */
+function partSheetHTML(t){ const notes=t.kind==='notes', alone=PREVIEW&&PREVIEW.has(t.id);
+  return `<div class="ph-part" style="--c:${t.color}">
+    <label class="ph-f"><span>Name</span><input class="input tname" value="${esc(t.name)}" data-tname="${t.id}" maxlength="40" aria-label="Part name"></label>
+    <div class="ph-row"><button class="btn${alone?' on':''}" type="button" data-prev="${t.id}">${alone?'■ Stop':'▶ Play alone'}</button>
+      <button class="btn ms${t.mute?' on':''}" type="button" data-mute="${t.id}" aria-pressed="${!!t.mute}">Mute</button>
+      <button class="btn ms${t.solo?' on':''}" type="button" data-solo="${t.id}" aria-pressed="${!!t.solo}">Solo</button></div>
+    <label class="ph-f"><span>${notes?'Sound':'Recording'}</span>${notes?`<select class="select" data-tinst="${t.id}" aria-label="Sound for ${esc(t.name)}">${instOptions()}</select>`:`<select class="select" data-tonotes="${t.id}" aria-label="Turn ${esc(t.name)} into notes"><option value="">♪ Turn into notes…</option><option value="melody">Melody</option><option value="bass">Bassline</option><option value="chords">Chords</option></select>`}</label>
+    <label class="ph-f"><span>Volume</span><input type="range" min="0" max="100" value="${Math.round(t.vol*100)}" data-vol="${t.id}" aria-label="${esc(t.name)} volume"></label>
+    <div class="ph-f"><span>Effects</span>${fxPanel(t)}</div>
+    <div class="ph-row">${notes?`<button class="btn primary" type="button" data-edit="${t.id}">✎ Edit notes</button>`:''}<button class="btn" type="button" data-dup="${t.id}">Copy</button><button class="btn ghost" type="button" data-tdel="${t.id}">Delete</button></div>
+    <span class="hint">${ROLE_NAME[t.role]||'Part'} · ${t.kind==='audio'?'audio':t.events.length+' notes'}. Delete asks once; Undo brings it back.</span></div>`; }
 function selAction(a,btn){
   const ids=PROJ.tracks.filter(t=>SEL.has(t.id)).map(t=>t.id); if(!ids.length) return;
   if(a==='play'){ setPreview(new Set(ids)); return; }
@@ -114,18 +129,22 @@ function edTrack(){ const t=PROJ.tracks.find(x=>x.id===ED.tid); if(!t||!ED.pat||
 function isDrumTrack(t){ return t && (t.role==='drums' || (INST.get(t.inst)||{}).drums); }
 ED.sel=new Set(); ED.mode=store.get('edMode','draw'); ED.velH=58; ED.clip=null;
 function setEdMode(m){ ED.mode=m; store.set('edMode',m); document.querySelectorAll('#edMode [data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===m))); edHint(); }
-function edHint(){ const t=edTrack(); if(!t) return; $('#edHint').textContent=isDrumTrack(t)
+function edHint(){ const t=edTrack(); if(!t) return;
+  if(PH.on){ const side=innerHeight>innerWidth?'Turn your phone sideways for more room. ':''; $('#edHint').textContent=side+(isDrumTrack(t)
+    ?(ED.mode==='draw'?'Tap steps to add or remove hits · hold a hit to select more · pinch to zoom, two fingers to scroll':'Drag a box to select hits · drag them to move · Copy, Paste and Delete are above')
+    :(ED.mode==='draw'?'Tap to add a note · drag to move · drag its right end to lengthen · hold a note to select more · pinch to zoom, two fingers to scroll':'Drag a box to select · drag notes to move · Copy, Paste and Delete are above · bottom lane sets loudness')); return; }
+  $('#edHint').textContent=isDrumTrack(t)
   ?(ED.mode==='draw'?'Click or drag across steps to add or remove hits · Shift for soft hits · Drag in the bottom lane to set how hard each hit is (drag a selected bar to move all selected, Alt sets them equal)':'Drag a box to select hits · Drag them to move · Ctrl+C / Ctrl+V to copy · Delete removes · Bottom lane sets how hard the selected hits are')
   :(ED.mode==='draw'?'Click to add a note · Drag notes to move, right edge to resize · Alt+drag copies · Right-click deletes · Bottom lane sets loudness: drag a selected bar to move all selected, Alt sets them equal':'Drag a box to select · Shift+click adds to the selection · Drag to move · Arrows nudge · Ctrl+C / Ctrl+V / Ctrl+D · Delete removes · Bottom lane sets the loudness of the selected notes'); }
-function edGeomRows(){ return clamp(Math.floor(edFitH(0)/ED.rowH),16,36); }
-function openEditor(id,o={}){ const t=PROJ.tracks.find(x=>x.id===id); if(!t||t.kind!=='notes') return; if(ED.tid!==id) ED.sel=new Set(); ED.tid=id;
+function edGeomRows(){ return clamp(Math.floor(edFitH(0)/ED.rowH),PH.on?6:16,36); }
+function openEditor(id,o={}){ const t=PROJ.tracks.find(x=>x.id===id); if(!t||t.kind!=='notes') return; const was=!$('#editor').hidden&&PH.on; if(ED.tid!==id){ ED.sel=new Set(); ED.zoom=1; } ED.tid=id;
   if(songOn()){ const s=(o.sid&&songFind(o.sid))||songSel()||(songAt(SONG.cursor)||{}).section, p=s&&s.parts[id]; ED.sid=s?s.id:null; ED.pat=o.pat||(p&&p.on&&p.variant)||'A'; } else { ED.sid=null; ED.pat=o.pat||'A'; }
   if(ED.pat!=='A'&&!(t.patterns&&t.patterns[ED.pat])) ED.pat='A'; edPatUI();
-  if(!isDrumTrack(t) && t.events.length){ const ns=t.events.map(e=>e.n).sort((a,b)=>a-b); ED.top=clamp(Math.max(ns[ns.length-1]+4,ns[0]+edGeomRows()-6),40,120); } else if(!isDrumTrack(t)) ED.top=t.role==='bass'?60:84;
+  if(!isDrumTrack(t) && t.events.length){ const ns=t.events.map(e=>e.n).sort((a,b)=>a-b), lo=ns[0], hi=ns[ns.length-1], R=edGeomRows(); ED.top=clamp(PH.on&&hi-lo<R-2?Math.round((hi+lo)/2+R/2):Math.max(hi+4,lo+R-6),40,120); } /* phones: the notes centred in the smaller grid */ else if(!isDrumTrack(t)) ED.top=t.role==='bass'?60:84;
   $('#editor').hidden=false; $('#edTitle').textContent=t.name; edHint(); setEdMode(ED.mode);
-  document.querySelectorAll('.trk').forEach(r=>r.classList.toggle('sel',r.dataset.tid===id)); drawEditor(); $('#editor').scrollIntoView({behavior:'smooth',block:'nearest'}); }
-function closeEditor(){ ED.tid=null; ED.sel=new Set(); ED.pat='A'; ED.sid=null; $('#editor').hidden=true; document.querySelectorAll('.trk.sel').forEach(r=>r.classList.remove('sel')); }
-$('#edClose').onclick=closeEditor;
+  document.querySelectorAll('.trk').forEach(r=>r.classList.toggle('sel',r.dataset.tid===id)); drawEditor(); if(PH.on){ if(!was) phEditor(true); } else $('#editor').scrollIntoView({behavior:'smooth',block:'nearest'}); }
+function closeEditor(fromPop){ const was=!$('#editor').hidden; ED.tid=null; ED.sel=new Set(); ED.pat='A'; ED.sid=null; ED.zoom=1; $('#editor').hidden=true; if(was&&PH.on) phEditor(false,fromPop===true); document.querySelectorAll('.trk.sel').forEach(r=>r.classList.remove('sel')); }
+$('#edClose').onclick=()=>closeEditor();
 /* patterns: which version of this track's notes the section plays (A is the main one; B, C… belong to some sections only) */
 function edPatUI(){ const box=$('#edPat'); if(!box) return; const t=PROJ.tracks.find(x=>x.id===ED.tid), show=!!t&&t.kind==='notes'&&(songOn()||songLetters(t).length>1); box.hidden=!show; if(!show) return;
   const letters=songLetters(t); if(!letters.includes(ED.pat)) ED.pat='A'; const cur=ED.pat||'A', s=songOn()&&ED.sid?songFind(ED.sid):null;
@@ -150,9 +169,9 @@ function edChanged(){ if(typeof undoBoundary==='function') undoBoundary(); const
 function drumRows(t){ const rows=DRUM_ROWS.slice(); t.events.forEach(e=>{ if(!rows.some(r=>r[0]===e.n)) rows.unshift([e.n,DRUM_LABEL[drumPiece(e.n)]+' '+noteName(e.n)]); }); return rows; }
 /* height the grid may use so the velocity lane always shows inside the editor box (UX-2) */
 function edFitH(W){ const wrap=$('#edWrap'), mh=parseFloat(getComputedStyle(wrap).maxHeight)||480; return mh-2-ED.velH-8-(W>wrap.clientWidth+1?14:0); }
-function edGeom(){ const t=edTrack(), L=PROJ.bars*4, K=78, wrap=$('#edWrap'), vh=ED.velH;
-  if(isDrumTrack(t)){ const rows=drumRows(t), steps=L*4, cw=Math.max(16,(wrap.clientWidth-K-2)/steps), W=K+steps*cw, rh=clamp(Math.floor(edFitH(W)/rows.length),16,24), gh=rows.length*rh; return {drum:true,rows,steps,cw,rh,K,L,W,gh,H:gh+vh+8,bw:cw*4}; }
-  const rh=ED.rowH, W=Math.max(wrap.clientWidth-2,400), rows=clamp(Math.floor(edFitH(W)/rh),16,36), gh=rows*rh; return {drum:false,rows,rh,K,L,W,gh,H:gh+vh+8,bw:(W-K)/L}; }
+function edGeom(){ const t=edTrack(), L=PROJ.bars*4, drum=isDrumTrack(t), K=PH.on&&!drum?48:78, wrap=$('#edWrap'), vh=ED.velH, Z=ED.zoom||1;
+  if(isDrumTrack(t)){ const rows=drumRows(t), steps=L*4, cw=Math.max(16,(wrap.clientWidth-K-2)/steps)*Z, W=K+steps*cw, rh=clamp(Math.floor(edFitH(W)/rows.length),16,24), gh=rows.length*rh; return {drum:true,rows,steps,cw,rh,K,L,W,gh,H:gh+vh+8,bw:cw*4}; }
+  const rh=ED.rowH, W=Math.round(Math.max(wrap.clientWidth-2,PH.on?K+L*24:400)*Z), rows=clamp(Math.floor(edFitH(W)/rh),PH.on?6:16,36), gh=rows*rh; return {drum:false,rows,rh,K,L,W,gh,H:gh+vh+8,bw:(W-K)/L}; }
 function evRect(t,G,e){ if(G.drum){ const r=G.rows.findIndex(x=>x[0]===e.n), s=Math.round(e.b*4); if(r<0||s>=G.steps) return null; return {x:G.K+s*G.cw+2,y:r*G.rh+3,w:G.cw-4,h:G.rh-6}; }
   const r=ED.top-Math.round(e.n); if(r<0||r>=G.rows) return null; return {x:G.K+e.b*G.bw,y:r*G.rh+1,w:Math.max(4,e.d*G.bw-1),h:G.rh-2}; }
 function drawEditor(){
@@ -180,8 +199,14 @@ function drawEditor(){
   const vy=G.gh+8, vh=ED.velH; g.fillStyle=TC.t1; g.fillRect(0,vy,G.W,vh); g.fillStyle=mut; g.fillText('Velocity',8,vy+14);
   g.fillStyle=line; g.fillRect(G.K,vy+vh/2,G.W-G.K,1);
   t.events.forEach(e=>{ const x=G.drum?G.K+Math.round(e.b*4)*G.cw+G.cw/2:G.K+e.b*G.bw+1, hh=Math.max(2,e.v*(vh-6)); g.fillStyle=ED.sel.has(e)?ink:t.color; g.globalAlpha=ED.sel.size&&!ED.sel.has(e)?0.45:1; g.fillRect(x-1.5,vy+vh-hh,3,hh); g.fillRect(x-3,vy+vh-hh,7,2); g.globalAlpha=1; });
+  edSelUI();
   if(ED.box){ const b=ED.box; g.strokeStyle=cssVar('--accent'); g.setLineDash([4,3]); g.strokeRect(Math.min(b.x0,b.x1)+0.5,Math.min(b.y0,b.y1)+0.5,Math.abs(b.x1-b.x0),Math.abs(b.y1-b.y0)); g.setLineDash([]); g.fillStyle='rgba(255,255,255,.07)'; g.fillRect(Math.min(b.x0,b.x1),Math.min(b.y0,b.y1),Math.abs(b.x1-b.x0),Math.abs(b.y1-b.y0)); }
 }
+/* Copy / Paste / Delete in the toolbar: touch screens have no Ctrl+C or right-click (UX-4) */
+function edSelUI(){ const n=ED.sel.size; $('#edCopyB').hidden=!n; $('#edDelB').hidden=!n; $('#edPasteB').hidden=!ED.clip; $('#edDelB').textContent=n>1?`Delete ${n}`:'Delete'; }
+$('#edCopyB').onclick=()=>{ if(edCopy()){ toast(`Copied ${ED.sel.size} note${ED.sel.size>1?'s':''}. Paste puts them after the copied bar.`); edSelUI(); } };
+$('#edPasteB').onclick=()=>edPaste();
+$('#edDelB').onclick=()=>{ const t=edTrack(); if(!t||!ED.sel.size) return; t.events=t.events.filter(x=>!ED.sel.has(x)); ED.sel=new Set(); edChanged(); };
 function previewNote(t,n){ const c=ensureAudio(); if(!c) return; const I=INST.get(t.inst); if(!I) return; try{ const v=I.play(c,trackStrip(t).inp,n,0.8,c.currentTime); if(v&&!v.oneShot) v.release(c.currentTime+0.25); }catch(e){} }
 function edCopy(){ const t=edTrack(); if(!t||!ED.sel.size) return false; const ev=[...ED.sel], b0=Math.min(...ev.map(e=>e.b)), end=Math.max(...ev.map(e=>e.b+e.d));
   ED.clip={tid:t.id,notes:ev.map(e=>({b:e.b-b0,d:e.d,n:e.n,v:e.v})),span:Math.max(ED.grid,Math.ceil((end-b0)/1-1e-6)*1),at:b0}; return true; }
@@ -272,7 +297,7 @@ function paintStep(t,n,s,P){ const i=t.events.findIndex(x=>x.n===n&&Math.round(x
 /* ----- mixer view ----- */
 function renderMixerView(){
   const ch=[['keys','Keys (live)',zoneInst('keys').name,TC.accent],['pads','Pads (live)',zoneInst('pads').name,TC.signal],...PROJ.tracks.map(t=>[t.id,t.name,t.kind==='audio'?'Recorded audio':(INST.get(t.inst)||{}).name||'',t.color]),['master','Master','After effects','#ece7dd']];
-  $('#mixerView').innerHTML=`<div class="mixer">${ch.map(([id,nm,sub,col])=>{ const cfg=chCfg(id); return `<div class="mstrip" style="--c:${col}"><div class="mname"><span class="tsw"></span><b>${esc(nm)}</b><span>${esc(sub)}</span></div>${stripControls(id,cfg,{solo:!MIX[id],name:nm})}</div>`; }).join('')}</div>`;
+  $('#mixerView').innerHTML=`<div class="mixer">${ch.map(([id,nm,sub,col])=>{ const cfg=chCfg(id); return `<div class="mstrip" style="--c:${col}"><div class="mname"><span class="tsw"></span><b>${esc(nm)}</b><span>${esc(sub)}</span>${MIX[id]?'':`<button class="btn small ghost phonly" type="button" data-phpart="${id}" style="margin-left:auto">Effects ▾</button>`}</div>${stripControls(id,cfg,{solo:!MIX[id],name:nm})}</div>`; }).join('')}</div>`;
 }
 
 /* ----- playhead and position ----- */

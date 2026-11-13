@@ -11,3 +11,4 @@ loadCustom();
 initMIDI(false);
 let rsz=0; window.addEventListener('resize',()=>{ clearTimeout(rsz); rsz=setTimeout(()=>{ drawWave(); drawIso(); drawHarm(); drawRolls(); drawRuler(); if(ED.tid) drawEditor(); drawRoll((performance.now()-MIC.t0)/1000); },120); });
 setTimeout(()=>loadDemo(false),400);
+phoneInit(); /* phone layout (UX-4): after every file has loaded */
