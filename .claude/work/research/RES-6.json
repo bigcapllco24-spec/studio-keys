@@ -1,0 +1,216 @@
+{
+ "id": "RES-6",
+ "title": "Key and chord detection from songs",
+ "for": [
+  "SE-7",
+  "AI-3",
+  "SE-6"
+ ],
+ "question": "Why the key detector fails, and how to detect key, chords and notes from songs (imported or playing live) in the browser and put them on the project.",
+ "bottomLine": "The key label bug is small: projectKey() only reads melody tracks and falls back to a fake 'detected A minor'. Fix it to read all pitched tracks, show confidence and a second guess, and say 'no key yet' when unsure. Key and chords from an imported song can be done in plain JS with our own FFT (beat-aligned chroma, EDM key profiles, chord templates with Viterbi smoothing), no download: expect about 60-65% exact key on club tracks (Mixed In Key about 89-94%; most misses are relative or fifth swaps) and about 71-79% chord accuracy (best neural about 81-85%), good enough for an editable chord lane. Note-level transcription needs Basic Pitch (Apache-2.0, about 1 MB) and only works well on stems, so it pairs with SE-6. Spotify no longer gives key data to new apps. Key and chords are fine copyright-wise; copying a song's melody note for note is the risk.",
+ "findings": [
+  "Mixed In Key leads key detection: 89% overall and 94% on club tracks in Dubspot's 2026 200-track test; KeyFinder 76%, rekordbox 69%, Beatport tags 60%. Errors cluster on relative major/minor and fifths, which still mix harmonically.",
+  "Classic profile matching on audio chroma gets about 30% exact on the GiantSteps EDM set; EDM-tuned profiles (Faraldo, CC BY paper) get 58-64%. Profiles are genre-specific.",
+  "Logic Pro 12 Chord ID (Jan 2026, improved in 12.3) fills a Chord Track from audio; reviewers report 85-95% on pop and electronic but about 30% fixes on dense mixes. Studio One has Detect Chords; Ableton converts harmony to MIDI notes (best on isolated parts); FL Studio 2026 detects chords only from MIDI.",
+  "Chordify and Moises analyse ahead and show chords synced with playback (Moises: easy/medium/advanced detail). Chord ai does live mic chords offline with a scroll-back timeline.",
+  "Live chord readouts need about 0.5-1 s of audio per decision; Basic Pitch cannot run in real time (CQT needs more than 1 s, about 120 ms model delay, non-causal decoding).",
+  "Licences: Essentia.js is AGPL, libKeyFinder GPL-3, Chordino GPL-2, madmom models CC BY-NC-SA: not usable in our shipped file. Basic Pitch (Apache-2.0), Meyda, tonal.js and web-audio-beat-detector (MIT) are fine.",
+  "Basic Pitch: under 17K parameters, about 0.3 MB ONNX or about 1 MB TF.js weights, about 60 ms per 2 s window on WASM (about 5-6 s for 3 minutes); good on single lines, rough on full mixes.",
+  "Spotify closed Audio Features (key, mode, tempo) and 30-second previews to new apps on 27 Nov 2024.",
+  "Chordify's position: chord progressions aren't protected, unlike lyrics or melody; it retracts songs on request. Melody copied note for note is the clear risk.",
+  "'Camelot' is a registered Mixed In Key trademark (a further filing, CAMELOT WHEEL for music software, Oct 2025); rekordbox calls its codes 'Alphanumeric' and Traktor uses 'Open Key'."
+ ],
+ "recommendations": [
+  "SE-7a (S, bug; sound-engine-dev + studio-ux-dev): detectKey over all pitched tracks with bass and downbeat weighting, confidence plus a second-guess key, a relative-key tie-break, null when there are too few notes, and an honest #keyInfo label that can be locked with a tap.",
+  "SE-7b (M; sound-engine-dev): analyseAudio(buf) in plain JS (Worker or chunked, cached): bpm, beats, downbeat, key with confidence and a second guess, chords per bar. Runs on SE-6 stems when present; AI-3 consumes it.",
+  "SE-7c (M; studio-ux-dev + assistant-dev): editable chord strip, PROJ.chords that all generators follow, and voice actions: what key is this, take the chords from this song, match a loop to my key.",
+  "Later (M, after SE-6): notes from a stem with Basic Pitch behind the same opt-in model download; only for the user's own audio or a stem they choose.",
+  "Later (M): live listen mode from the mic with a current-chord readout and 'keep the last 8 bars'; needs owner UX approval as a new mic mode."
+ ],
+ "ideas": [
+  {
+   "name": "What key is this?",
+   "hook": "Drop any song or loop and say 'Keys, what key is this?': it answers by voice with key, bpm and how sure it is, and sets the project on yes.",
+   "loop": "drop audio > spoken key and bpm > set project > build parts in key",
+   "why": "The most common producer question when sampling or remixing; a voice answer with honest confidence beats a bare tag.",
+   "scope": "M",
+   "reuse": "makeFFT (dsp.js), detectKey, setTempo, assistant actions",
+   "risks": "Relative-key errors on vocal-heavy or modal tracks; mitigated by confidence and a one-tap fix.",
+   "similar": "Mixed In Key; Moises Key Detector; rekordbox key analysis"
+  },
+  {
+   "name": "Take the chords",
+   "hook": "'Keys, use the chords from this song': a chord lane appears and every new pad, bass and pluck follows it, in our own voicings.",
+   "loop": "reference song > chord lane > generate parts on it > tweak chords by tap",
+   "why": "It is Logic 12's headline feature, now in a browser and driven by voice; it builds on AI-3's reference track.",
+   "scope": "M",
+   "reuse": "chordPlan(), roleFx, generators in music.js",
+   "risks": "About 25% chord errors on dense mixes; better on SE-6 stems; needs a beat grid.",
+   "similar": "Logic Pro 12 Chord ID; Studio One Chord Track; Chordify"
+  },
+  {
+   "name": "Play it in my key",
+   "hook": "Drop a sample or loop: Keys detects its key and shifts it to the song's key (nearest of plus or minus 6 semitones).",
+   "loop": "drop loop > detect > transpose > in key",
+   "why": "Ableton's Splice browser plays samples 'in key with your Set'; producers expect this now.",
+   "scope": "S-M",
+   "reuse": "Key detection plus the existing pitch or playback-rate path",
+   "risks": "Pitch-shift quality on drums or vocals; offer resample versus keep-length options.",
+   "similar": "Ableton Live 12 with Splice; Splice Bridge"
+  },
+  {
+   "name": "Listen mode",
+   "hook": "Hold the phone up to a song in the room: it shows the chord now plus the last 8 bars, then 'keep these chords'.",
+   "loop": "listen > see chords live > keep > build on them",
+   "why": "Captures inspiration from a club or radio moment, like Chord ai, but straight into a project.",
+   "scope": "M",
+   "reuse": "mic.js capture, chroma analysis",
+   "risks": "Weak bass on laptop and phone mics, room noise; label it rough; owner rules on the mic apply.",
+   "similar": "Chord ai; Chord Detector apps"
+  }
+ ],
+ "sources": [
+  {
+   "title": "Dubspot key-detection test 2026 (200 tracks)",
+   "url": "https://blog.dubspot.com/dubspot-lab-report-mixed-in-key-vs-beatport"
+  },
+  {
+   "title": "Dubspot, where Mixed In Key goes wrong",
+   "url": "https://blog.dubspot.com/harmonic-mixing-pt-3-lab-report-is-mixed-in-key-accurate"
+  },
+  {
+   "title": "DJ TechTools key detection comparison (2015, old)",
+   "url": "https://djtechtools.com/2015/11/16/key-detection-software-comparison-2015-edition/"
+  },
+  {
+   "title": "Engine DJ forum, techno tagged major",
+   "url": "https://community.enginedj.com/t/engine-dj-badly-analyses-track-key/52099"
+  },
+  {
+   "title": "Faraldo et al., multi-profile key estimation in EDM (CC BY 4.0)",
+   "url": "https://zenodo.org/records/3855499"
+  },
+  {
+   "title": "Knees et al., GiantSteps datasets",
+   "url": "https://mtg.upf.edu/system/files/publications/246_Paper.pdf"
+  },
+  {
+   "title": "Essentia Key profiles docs",
+   "url": "https://essentia.upf.edu/reference/std_Key.html"
+  },
+  {
+   "title": "Essentia.js (AGPL)",
+   "url": "https://github.com/mtg/essentia.js"
+  },
+  {
+   "title": "libKeyFinder (GPL v3)",
+   "url": "https://github.com/mixxxdj/libKeyFinder"
+  },
+  {
+   "title": "Chordify, how it works",
+   "url": "https://support.chordify.net/hc/en-us/articles/360002221018-What-is-Chordify"
+  },
+  {
+   "title": "Chordify copyright FAQ",
+   "url": "https://support.chordify.net/hc/en-us/articles/360001420738-Does-this-not-infringe-copyright"
+  },
+  {
+   "title": "Moises chord detection help",
+   "url": "https://help.moises.ai/hc/en-us/articles/6569274648220-How-do-I-use-Chord-Detection"
+  },
+  {
+   "title": "Moises chords/key/lyrics",
+   "url": "https://moises.ai/essentials/chords-keys-lyrics/"
+  },
+  {
+   "title": "Chord ai (Google Play)",
+   "url": "https://play.google.com/store/apps/details?hl=en_US&id=com.chordai"
+  },
+  {
+   "title": "Sound On Sound, Logic Pro 12 review",
+   "url": "http://www.soundonsound.com/reviews/apple-logic-pro-12"
+  },
+  {
+   "title": "CDM hands-on",
+   "url": "https://cdm.link/logic-pro-12-hands-on/"
+  },
+  {
+   "title": "Logic 12.3",
+   "url": "https://synthanatomy.com/2026/01/apple-logic-pro-12.html"
+  },
+  {
+   "title": "Ableton manual, Converting audio to MIDI",
+   "url": "https://www.ableton.com/en/manual/converting-audio-to-midi/"
+  },
+  {
+   "title": "Live 12 release notes (Splice key)",
+   "url": "https://www.ableton.com/en/release-notes/live-12"
+  },
+  {
+   "title": "FL Studio 2026",
+   "url": "https://www.image-line.com/fl-studio/release/2026"
+  },
+  {
+   "title": "Fender Studio Pro Chord Track",
+   "url": "https://fenderstudiopromanual.fender.com/en/Content/Arranging_Topics/Chord%20Track.htm"
+  },
+  {
+   "title": "Spotify Web API changes, 27 Nov 2024",
+   "url": "https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api"
+  },
+  {
+   "title": "Basic Pitch",
+   "url": "https://github.com/spotify/basic-pitch"
+  },
+  {
+   "title": "browser ONNX demo",
+   "url": "https://webai.show/models/basic-pitch-transcription"
+  },
+  {
+   "title": "NeuralNote (why not real time)",
+   "url": "https://github.com/Ohfiftyb252/neuralnote"
+  },
+  {
+   "title": "Basic Pitch in the browser, limits",
+   "url": "https://dev.to/partfit3d/running-spotifys-basic-pitch-in-the-browser-for-audio-to-midi-44bc"
+  },
+  {
+   "title": "madmom licence (models CC BY-NC-SA)",
+   "url": "https://github.com/CPJKU/madmom/blob/main/LICENSE"
+  },
+  {
+   "title": "Chordino (GPL-2)",
+   "url": "https://github.com/c4dm/nnls-chroma"
+  },
+  {
+   "title": "MIREX 2025 chord estimation results",
+   "url": "https://music-ir.org/mirex/wiki/2025:Audio_Chord_Estimation_Results"
+  },
+  {
+   "title": "Jiang et al. 2011, chroma features for chord recognition",
+   "url": "https://www.audiolabs-erlangen.de/content/05_fau/professor/00_mueller/03_publications/2011_JiangGroscheKonzMueller_ChordRecognitionEvaluation_AES42-Ilmenau.pdf"
+  },
+  {
+   "title": "Oudre et al. 2009, template-based chord recognition",
+   "url": "https://ismir2009.ismir.net/proceedings/PS1-17.pdf"
+  },
+  {
+   "title": "Mic chord detection, how it works",
+   "url": "https://chordshuffle.com/en/guides/guitar-chord-mic-detection"
+  },
+  {
+   "title": "CAMELOT WHEEL trademark filing",
+   "url": "https://trademarks.justia.com/994/31/camelot-99431013.html"
+  },
+  {
+   "title": "Musicologize, are chord progressions protected",
+   "url": "https://www.musicologize.com/chord-progressions-copyright"
+  },
+  {
+   "title": "web-audio-beat-detector (MIT)",
+   "url": "https://github.com/chrisguttandin/web-audio-beat-detector"
+  }
+ ],
+ "status": "done",
+ "at": "2026-11-14"
+}
