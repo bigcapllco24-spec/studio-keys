@@ -9,7 +9,9 @@ dropTakeVoices(PROJ);
 const AUD=new Map();
 let projSaveT=0;
 function serialize(p){ return JSON.parse(JSON.stringify(p)); }
-function saveProject(){ clearTimeout(projSaveT); projSaveT=setTimeout(()=>store.set('project',serialize(PROJ)),250); if(typeof autoSaveNamed==='function'){ $('#saveState').textContent='Saving…'; autoSaveNamed(); } }
+/* an idle transport follows the song: tracks make it ready to play, no tracks make it empty again (UX-2) */
+function syncLoopState(){ if(LOOP.state==='empty'&&PROJ.tracks.length) LOOP.state='stopped'; else if(LOOP.state==='stopped'&&!PROJ.tracks.length) LOOP.state='empty'; }
+function saveProject(){ syncLoopState(); clearTimeout(projSaveT); projSaveT=setTimeout(()=>store.set('project',serialize(PROJ)),250); if(typeof autoSaveNamed==='function'){ $('#saveState').textContent='Saving…'; autoSaveNamed(); } }
 const roleOfInst=inst=>{ const I=INST.get(inst)||{}; return I.drums?'drums':I.cat==='Bass'?'bass':'free'; };
 function makeTrack(o){
   const role=o.role||'free', mix=ROLE_MIX[role]||ROLE_MIX.free, I=INST.get(o.inst);
@@ -169,9 +171,18 @@ function shapePart(notes,part,key){
   if(key) ev.forEach(e=>e.n=snapToKey(e.n,key));
   const legato=max=>{ for(let i=0;i<ev.length;i++){ const nx=i+1<ev.length?ev[i+1].b:L; ev[i].d=Math.max(ev[i].d,Math.min(max,nx-ev[i].b-0.02)); } };
   if(part==='bass'){ const med=ev.map(e=>e.n).sort((a,b)=>a-b)[ev.length>>1], sh=Math.round((40-med)/12)*12; ev.forEach(e=>{ e.n+=sh; e.v=Math.max(e.v,0.8); }); legato(2); }
-  else if(part==='chords'){ const k=key||{tonic:0,mode:'major'}, sc=SCALES[k.mode], out=[]; legato(4);
-    ev.forEach(e=>{ const pc=mod(e.n-k.tonic,12); let deg=sc.indexOf(pc); if(deg<0) deg=sc.reduce((bi,x,i)=>Math.abs(x-pc)<Math.abs(sc[bi]-pc)?i:bi,0);
-      voice(triad(k,deg),55).forEach(n=>out.push({b:e.b,d:e.d,n,v:0.7})); }); ev=out; }
+  else if(part==='chords'){ const k=key||{tonic:0,mode:'major'}, sc=SCALES[k.mode], out=[];
+    /* chord changes land on beats (half bars when the singing is slow); the note sung longest in a slot picks the chord,
+       repeats of the same chord merge, and each chord holds to the next one (at least a beat, up to a bar past what was sung) (UX-2) */
+    const degOf=n=>{ const pc=mod(n-k.tonic,12); let deg=sc.indexOf(pc); if(deg<0) deg=sc.reduce((bi,x,i)=>Math.abs(x-pc)<Math.abs(sc[bi]-pc)?i:bi,0); return deg; };
+    const ioi=ev.slice(1).map((e,i)=>e.b-ev[i].b).filter(x=>x>0).sort((a,b)=>a-b), g=ioi.length&&ioi[ioi.length>>1]>=2?2:1;
+    const slots=new Map(); ev.forEach(e=>{ const s=clamp(Math.round(e.b/g)*g,0,L-g), w=slots.get(s)||new Map(), deg=degOf(e.n); w.set(deg,(w.get(deg)||0)+Math.max(0.25,e.d)); slots.set(s,w);
+      e.s=s; e.deg=deg; });
+    let ch=[...slots.keys()].sort((a,b)=>a-b).map(s=>{ const w=slots.get(s); const deg=[...w.keys()].reduce((a,b)=>w.get(b)>w.get(a)?b:a); return {b:s,deg,end:s+g}; });
+    ev.forEach(e=>{ const c=ch.find(x=>x.b===e.s); if(c&&c.deg===e.deg) c.end=Math.max(c.end,e.b+e.d); });
+    const m=[]; ch.forEach(c=>{ const p=m[m.length-1]; if(p&&p.deg===c.deg) p.end=Math.max(p.end,c.end); else m.push(c); }); ch=m;
+    ch.forEach((c,i)=>{ const nx=i+1<ch.length?ch[i+1].b:L, sung=Math.ceil((c.end-c.b)/g-1e-6)*g; let d=Math.min(nx-c.b,Math.max(4,sung)); if(nx-c.b-d<1) d=nx-c.b; c.d=d;
+      voice(triad(k,c.deg),55).forEach(n=>out.push({b:c.b,d:c.d,n,v:0.7})); }); ev=out; }
   return ev;
 }
 const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
@@ -220,7 +231,7 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     /* the raw recording is only used to find the notes; it isn't added as a track (owner, 13 Nov) */
     this.chunks=[]; this.notes=[];
     LOOP.state='playing'; refreshTrackGains(); saveProject(); renderTracks(); uiLoop();
-    const what=part==='chords'?`${Math.round(notes.length/3)} chords built on the notes you sang`:`${notes.length} notes`;
+    const what=part==='chords'?`${new Set(notes.map(e=>e.b)).size} chords built on the notes you sang`:`${notes.length} notes`;
     $('#micStatus').textContent=`Take saved: ${what} on “${PART_NAME[part]}”. It’s playing back now.`;
     ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
   }
@@ -230,7 +241,7 @@ function makeBuf(pcm,sr){ const b=new AudioBuffer({length:Math.max(1,pcm.length)
 
 /* ---------- UI ---------- */
 function uiLoop(){
-  const st=LOOP.state, btn=$('#loopBtn');
+  syncLoopState(); const st=LOOP.state, btn=$('#loopBtn');
   btn.dataset.state=st;
   const lbl={empty:'Record loop',counting:'Count-in…',recording:LOOP.fixed?'Recording…':'Recording · press to close',playing:'Overdub',overdub:'Overdubbing · press to keep',stopped:'Play loop',take:'Recording take…'}[st];
   $('#loopLbl').textContent=lbl;
