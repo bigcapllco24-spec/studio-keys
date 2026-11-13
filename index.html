@@ -187,6 +187,7 @@ input[type=checkbox]{accent-color:var(--accent)}
 .lcd-name,.lcd-sub{font-size:12px;color:color-mix(in srgb,var(--signal) 78%,#fff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lcd-line{font-size:20px;font-weight:500;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .knobs{display:grid;grid-template-columns:repeat(var(--kc,8),minmax(48px,1fr));gap:8px 6px;align-content:center}
+@media (max-width:560px){.knobs{grid-template-columns:repeat(4,minmax(0,1fr))}} /* phones: knobs in two rows of four (UX-2) */
 .knob{display:flex;flex-direction:column;align-items:center;gap:3px;font:500 10px var(--mono);color:var(--muted);min-width:0;text-align:center}
 .knob .lbl{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 10.5px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
 .knob .kn{font:600 10px var(--display);letter-spacing:.1em;color:var(--muted)}
@@ -276,7 +277,7 @@ input[type=checkbox]{accent-color:var(--accent)}
 .ms{min-width:28px;justify-content:center;font-family:var(--mono)}
 .ms.on{background:var(--warn);color:#2a2005;border-color:transparent}
 .mixer-wrap{display:flex;flex-direction:column;gap:8px}
-.mixer{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:8px}
+.mixer{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr));gap:8px}
 .mstrip{display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--t3);border:1px solid var(--line);border-radius:9px}
 .mname{display:flex;gap:8px;align-items:baseline}
 .mname span{font-size:12px;color:var(--muted)}
@@ -3350,7 +3351,9 @@ dropTakeVoices(PROJ); if(LAST_PROJ) dropTakeVoices(LAST_PROJ);
 const AUD=new Map();
 let projSaveT=0;
 function serialize(p){ return JSON.parse(JSON.stringify(p)); }
-function saveProject(){ clearTimeout(projSaveT); projSaveT=setTimeout(()=>{ projSaveT=0; store.set('project',serialize(PROJ)); },250); if(typeof autoSaveNamed==='function'){ $('#saveState').textContent='Saving…'; autoSaveNamed(); } }
+/* an idle transport follows the song: tracks make it ready to play, no tracks make it empty again (UX-2) */
+function syncLoopState(){ if(LOOP.state==='empty'&&PROJ.tracks.length) LOOP.state='stopped'; else if(LOOP.state==='stopped'&&!PROJ.tracks.length) LOOP.state='empty'; }
+function saveProject(){ syncLoopState(); clearTimeout(projSaveT); projSaveT=setTimeout(()=>{ projSaveT=0; store.set('project',serialize(PROJ)); },250); if(typeof autoSaveNamed==='function'){ $('#saveState').textContent='Saving…'; autoSaveNamed(); } }
 /* closing or reloading the page inside that quarter second still keeps the last change (a late rename came back as the old name) */
 addEventListener('pagehide',()=>{ if(projSaveT){ clearTimeout(projSaveT); projSaveT=0; store.set('project',serialize(PROJ)); } });
 const roleOfInst=inst=>{ const I=INST.get(inst)||{}; return I.drums?'drums':I.cat==='Bass'?'bass':'free'; };
@@ -3523,9 +3526,18 @@ function shapePart(notes,part,key){
   if(key) ev.forEach(e=>e.n=snapToKey(e.n,key));
   const legato=max=>{ for(let i=0;i<ev.length;i++){ const nx=i+1<ev.length?ev[i+1].b:L; ev[i].d=Math.max(ev[i].d,Math.min(max,nx-ev[i].b-0.02)); } };
   if(part==='bass'){ const med=ev.map(e=>e.n).sort((a,b)=>a-b)[ev.length>>1], sh=Math.round((40-med)/12)*12; ev.forEach(e=>{ e.n+=sh; e.v=Math.max(e.v,0.8); }); legato(2); }
-  else if(part==='chords'){ const k=key||{tonic:0,mode:'major'}, sc=SCALES[k.mode], out=[]; legato(4);
-    ev.forEach(e=>{ const pc=mod(e.n-k.tonic,12); let deg=sc.indexOf(pc); if(deg<0) deg=sc.reduce((bi,x,i)=>Math.abs(x-pc)<Math.abs(sc[bi]-pc)?i:bi,0);
-      voice(triad(k,deg),55).forEach(n=>out.push({b:e.b,d:e.d,n,v:0.7})); }); ev=out; }
+  else if(part==='chords'){ const k=key||{tonic:0,mode:'major'}, sc=SCALES[k.mode], out=[];
+    /* chord changes land on beats (half bars when the singing is slow); the note sung longest in a slot picks the chord,
+       repeats of the same chord merge, and each chord holds to the next one (at least a beat, up to a bar past what was sung) (UX-2) */
+    const degOf=n=>{ const pc=mod(n-k.tonic,12); let deg=sc.indexOf(pc); if(deg<0) deg=sc.reduce((bi,x,i)=>Math.abs(x-pc)<Math.abs(sc[bi]-pc)?i:bi,0); return deg; };
+    const ioi=ev.slice(1).map((e,i)=>e.b-ev[i].b).filter(x=>x>0).sort((a,b)=>a-b), g=ioi.length&&ioi[ioi.length>>1]>=2?2:1;
+    const slots=new Map(); ev.forEach(e=>{ const s=clamp(Math.round(e.b/g)*g,0,L-g), w=slots.get(s)||new Map(), deg=degOf(e.n); w.set(deg,(w.get(deg)||0)+Math.max(0.25,e.d)); slots.set(s,w);
+      e.s=s; e.deg=deg; });
+    let ch=[...slots.keys()].sort((a,b)=>a-b).map(s=>{ const w=slots.get(s); const deg=[...w.keys()].reduce((a,b)=>w.get(b)>w.get(a)?b:a); return {b:s,deg,end:s+g}; });
+    ev.forEach(e=>{ const c=ch.find(x=>x.b===e.s); if(c&&c.deg===e.deg) c.end=Math.max(c.end,e.b+e.d); });
+    const m=[]; ch.forEach(c=>{ const p=m[m.length-1]; if(p&&p.deg===c.deg) p.end=Math.max(p.end,c.end); else m.push(c); }); ch=m;
+    ch.forEach((c,i)=>{ const nx=i+1<ch.length?ch[i+1].b:L, sung=Math.ceil((c.end-c.b)/g-1e-6)*g; let d=Math.min(nx-c.b,Math.max(4,sung)); if(nx-c.b-d<1) d=nx-c.b; c.d=d;
+      voice(triad(k,c.deg),55).forEach(n=>out.push({b:c.b,d:c.d,n,v:0.7})); }); ev=out; }
   return ev;
 }
 const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
@@ -3579,7 +3591,7 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     this.chunks=[]; this.notes=[];
     LOOP.state='playing'; refreshTrackGains(); saveProject(); renderTracks(); uiLoop();
     this.backSong();
-    const what=part==='chords'?`${Math.round(notes.length/3)} chords built on the notes you sang`:`${notes.length} notes`;
+    const what=part==='chords'?`${new Set(notes.map(e=>e.b)).size} chords built on the notes you sang`:`${notes.length} notes`;
     $('#micStatus').textContent=`Take saved: ${what} on “${PART_NAME[part]}”. It’s playing back now.`;
     ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
   }
@@ -3589,7 +3601,7 @@ function makeBuf(pcm,sr){ const b=new AudioBuffer({length:Math.max(1,pcm.length)
 
 /* ---------- UI ---------- */
 function uiLoop(){
-  const st=LOOP.state, btn=$('#loopBtn');
+  syncLoopState(); const st=LOOP.state, btn=$('#loopBtn');
   btn.dataset.state=st;
   const lbl={empty:'Record loop',counting:'Count-in…',recording:LOOP.fixed?'Recording…':'Recording · press to close',playing:'Overdub',overdub:'Overdubbing · press to keep',stopped:'Play loop',take:'Recording take…'}[st];
   /* Song mode: a short label so the button keeps its width when Play starts (QA N1: "Record in the loop" pushed the readout, BPM and key 78 px) */
@@ -4350,12 +4362,13 @@ function isDrumTrack(t){ return t && (t.role==='drums' || (INST.get(t.inst)||{})
 ED.sel=new Set(); ED.mode=store.get('edMode','draw'); ED.velH=58; ED.clip=null;
 function setEdMode(m){ ED.mode=m; store.set('edMode',m); document.querySelectorAll('#edMode [data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===m))); edHint(); }
 function edHint(){ const t=edTrack(); if(!t) return; $('#edHint').textContent=isDrumTrack(t)
-  ?(ED.mode==='draw'?'Click or drag across steps to add or remove hits · Shift for soft hits · Drag in the bottom lane to set how hard each hit is':'Drag a box to select hits · Drag them to move · Ctrl+C / Ctrl+V to copy · Delete removes')
-  :(ED.mode==='draw'?'Click to add a note · Drag notes to move, right edge to resize · Alt+drag copies · Right-click deletes · Bottom lane sets loudness':'Drag a box to select · Shift+click adds to the selection · Drag to move · Arrows nudge · Ctrl+C / Ctrl+V / Ctrl+D · Delete removes'); }
+  ?(ED.mode==='draw'?'Click or drag across steps to add or remove hits · Shift for soft hits · Drag in the bottom lane to set how hard each hit is (drag a selected bar to move all selected, Alt sets them equal)':'Drag a box to select hits · Drag them to move · Ctrl+C / Ctrl+V to copy · Delete removes · Bottom lane sets how hard the selected hits are')
+  :(ED.mode==='draw'?'Click to add a note · Drag notes to move, right edge to resize · Alt+drag copies · Right-click deletes · Bottom lane sets loudness: drag a selected bar to move all selected, Alt sets them equal':'Drag a box to select · Shift+click adds to the selection · Drag to move · Arrows nudge · Ctrl+C / Ctrl+V / Ctrl+D · Delete removes · Bottom lane sets the loudness of the selected notes'); }
+function edGeomRows(){ return clamp(Math.floor(edFitH(0)/ED.rowH),16,36); }
 function openEditor(id,o={}){ const t=PROJ.tracks.find(x=>x.id===id); if(!t||t.kind!=='notes') return; if(ED.tid!==id) ED.sel=new Set(); ED.tid=id;
   if(songOn()){ const s=(o.sid&&songFind(o.sid))||songSel()||(songAt(SONG.cursor)||{}).section, p=s&&s.parts[id]; ED.sid=s?s.id:null; ED.pat=o.pat||(p&&p.on&&p.variant)||'A'; } else { ED.sid=null; ED.pat=o.pat||'A'; }
   if(ED.pat!=='A'&&!(t.patterns&&t.patterns[ED.pat])) ED.pat='A'; edPatUI();
-  if(!isDrumTrack(t) && t.events.length){ const ns=t.events.map(e=>e.n).sort((a,b)=>a-b); ED.top=clamp(Math.max(ns[ns.length-1]+4,ns[0]+30),40,120); } else if(!isDrumTrack(t)) ED.top=t.role==='bass'?60:84;
+  if(!isDrumTrack(t) && t.events.length){ const ns=t.events.map(e=>e.n).sort((a,b)=>a-b); ED.top=clamp(Math.max(ns[ns.length-1]+4,ns[0]+edGeomRows()-6),40,120); } else if(!isDrumTrack(t)) ED.top=t.role==='bass'?60:84;
   $('#editor').hidden=false; $('#edTitle').textContent=t.name; edHint(); setEdMode(ED.mode);
   document.querySelectorAll('.trk').forEach(r=>r.classList.toggle('sel',r.dataset.tid===id)); drawEditor(); $('#editor').scrollIntoView({behavior:'smooth',block:'nearest'}); }
 function closeEditor(){ ED.tid=null; ED.sel=new Set(); ED.pat='A'; ED.sid=null; $('#editor').hidden=true; document.querySelectorAll('.trk.sel').forEach(r=>r.classList.remove('sel')); }
@@ -4382,9 +4395,11 @@ function edShift(s){ const t=edTrack(); if(!t||isDrumTrack(t)) return; edTargets
 $('#edClear').onclick=()=>{ const t=edTrack(); if(!t) return; const b=$('#edClear'); if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Confirm clear'; setTimeout(()=>{ delete b.dataset.armed; b.textContent='Clear notes'; },3000); return; } delete b.dataset.armed; b.textContent='Clear notes'; t.events=[]; ED.sel=new Set(); edChanged(); };
 function edChanged(){ if(typeof undoBoundary==='function') undoBoundary(); const t=edTrack(), real=PROJ.tracks.find(x=>x.id===ED.tid); if(real) real.gen=false; if(t){ t.events.forEach(e=>{ if(e.cyc!==undefined && !TR.running) delete e.cyc; }); } saveProject(); drawEditor(); drawRolls(); const r=document.querySelector(`.trk[data-tid="${ED.tid}"] .trole`); if(r&&t) r.textContent=`${ROLE_NAME[t.role]||'Part'} · ${t.events.length} notes`; }
 function drumRows(t){ const rows=DRUM_ROWS.slice(); t.events.forEach(e=>{ if(!rows.some(r=>r[0]===e.n)) rows.unshift([e.n,DRUM_LABEL[drumPiece(e.n)]+' '+noteName(e.n)]); }); return rows; }
+/* height the grid may use so the velocity lane always shows inside the editor box (UX-2) */
+function edFitH(W){ const wrap=$('#edWrap'), mh=parseFloat(getComputedStyle(wrap).maxHeight)||480; return mh-2-ED.velH-8-(W>wrap.clientWidth+1?14:0); }
 function edGeom(){ const t=edTrack(), L=PROJ.bars*4, K=78, wrap=$('#edWrap'), vh=ED.velH;
-  if(isDrumTrack(t)){ const rows=drumRows(t), steps=L*4, cw=Math.max(16,(wrap.clientWidth-K-2)/steps), rh=24, gh=rows.length*rh; return {drum:true,rows,steps,cw,rh,K,L,W:K+steps*cw,gh,H:gh+vh+8,bw:cw*4}; }
-  const rows=36, rh=ED.rowH, W=Math.max(wrap.clientWidth-2,400), gh=rows*rh; return {drum:false,rows,rh,K,L,W,gh,H:gh+vh+8,bw:(W-K)/L}; }
+  if(isDrumTrack(t)){ const rows=drumRows(t), steps=L*4, cw=Math.max(16,(wrap.clientWidth-K-2)/steps), W=K+steps*cw, rh=clamp(Math.floor(edFitH(W)/rows.length),16,24), gh=rows.length*rh; return {drum:true,rows,steps,cw,rh,K,L,W,gh,H:gh+vh+8,bw:cw*4}; }
+  const rh=ED.rowH, W=Math.max(wrap.clientWidth-2,400), rows=clamp(Math.floor(edFitH(W)/rh),16,36), gh=rows*rh; return {drum:false,rows,rh,K,L,W,gh,H:gh+vh+8,bw:(W-K)/L}; }
 function evRect(t,G,e){ if(G.drum){ const r=G.rows.findIndex(x=>x[0]===e.n), s=Math.round(e.b*4); if(r<0||s>=G.steps) return null; return {x:G.K+s*G.cw+2,y:r*G.rh+3,w:G.cw-4,h:G.rh-6}; }
   const r=ED.top-Math.round(e.n); if(r<0||r>=G.rows) return null; return {x:G.K+e.b*G.bw,y:r*G.rh+1,w:Math.max(4,e.d*G.bw-1),h:G.rh-2}; }
 function drawEditor(){
@@ -4393,7 +4408,7 @@ function drawEditor(){
   const g=cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,G.W,G.H);
   const line=cssVar('--line'), mut=cssVar('--muted'), ink=cssVar('--ink'); g.font='11px '+cssVar('--mono');
   if(G.drum){
-    G.rows.forEach(([n,label],r)=>{ const y=r*G.rh; g.fillStyle=r%2?TC.t2:TC.t3; g.fillRect(0,y,G.W,G.rh); g.fillStyle=ink; g.fillText(label,8,y+16); });
+    G.rows.forEach(([n,label],r)=>{ const y=r*G.rh; g.fillStyle=r%2?TC.t2:TC.t3; g.fillRect(0,y,G.W,G.rh); g.fillStyle=ink; g.fillText(label,8,y+G.rh/2+4); });
     for(let s=0;s<=G.steps;s++){ const x=G.K+s*G.cw; g.fillStyle=s%16===0?mut:s%4===0?TC.t7:line; g.fillRect(x,0,1,G.gh); }
     for(let s=0;s<G.steps;s+=4) if((s/4)%2===1){ g.fillStyle='rgba(255,255,255,.025)'; g.fillRect(G.K+s*G.cw,0,G.cw*4,G.gh); }
   } else {
@@ -4425,11 +4440,13 @@ function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bar
   const snap=b=>Math.floor(b/ED.grid+1e-6)*ED.grid;
   const hit=(t,G,p)=>{ for(let i=t.events.length-1;i>=0;i--){ const e=t.events[i], R=evRect(t,G,e); if(!R) continue; if(p.y>=R.y-1&&p.y<=R.y+R.h+1&&p.x>=R.x-1&&p.x<=R.x+R.w+1) return {e,edge:!G.drum&&p.x>R.x+R.w-7}; } return null; };
   const velHit=(t,G,p)=>{ let best=null,bd=9; t.events.forEach(e=>{ const x=G.drum?G.K+Math.round(e.b*4)*G.cw+G.cw/2:G.K+e.b*G.bw+1, d=Math.abs(x-p.x); if(d<bd&&(!ED.sel.size||ED.sel.has(e)||!best)){ bd=d; best=e; } }); return best; };
-  const setVel=(t,G,p,e)=>{ const vy=G.gh+8, v=clamp(1-(p.y-vy-3)/(ED.velH-6),0.05,1); const targets=ED.sel.has(e)&&ED.sel.size>1&&ED.drag&&ED.drag.group?[...ED.sel]:[e]; targets.forEach(x=>x.v=Math.round(v*100)/100); };
+  /* velocity: a selected note's bar moves every selected note together, keeping their differences (Ableton); Alt sets them all to the same value; an unselected bar changes just that note (UX-2) */
+  const setVel=(t,G,p,e)=>{ const vy=G.gh+8, v=clamp(1-(p.y-vy-3)/(ED.velH-6),0.05,1), D=ED.drag, r=x=>Math.round(x*100)/100;
+    if(D&&D.group){ const dv=v-D.orig.get(D.lead); D.group.forEach(x=>x.v=r(D.alt?v:clamp(D.orig.get(x)+dv,0.05,1))); } else e.v=r(v); };
   cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('pointerdown',e=>{
     const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e); e.preventDefault(); ensureAudio(); cv.focus&&cv.focus();
-    if(p.y>G.gh+4){ const v=velHit(t,G,p); if(v){ ED.drag={mode:'vel',group:e.altKey}; setVel(t,G,p,v); drawEditor(); try{ cv.setPointerCapture(e.pointerId); }catch(_){} } return; }
+    if(p.y>G.gh+4){ const v=velHit(t,G,p); if(v){ const grp=ED.sel.has(v)&&ED.sel.size>1?[...ED.sel]:null; ED.drag={mode:'vel',group:grp,lead:v,alt:e.altKey,orig:new Map((grp||[v]).map(x=>[x,x.v]))}; setVel(t,G,p,v); drawEditor(); try{ cv.setPointerCapture(e.pointerId); }catch(_){} } return; }
     if(p.x<G.K){ const n=G.drum?(G.rows[Math.floor(p.y/G.rh)]||[])[0]:ED.top-Math.floor(p.y/G.rh); if(n!=null) previewNote(t,n); return; }
     const h=hit(t,G,p);
     if(e.button===2){ if(h){ const del=ED.sel.has(h.e)?[...ED.sel]:[h.e]; t.events=t.events.filter(x=>!del.includes(x)); ED.sel=new Set(); edChanged(); } return; }
@@ -4458,7 +4475,7 @@ function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bar
     if(ED.box){ const B=ED.box; B.x1=p.x; B.y1=Math.min(p.y,G.gh); const x0=Math.min(B.x0,B.x1), x1=Math.max(B.x0,B.x1), y0=Math.min(B.y0,B.y1), y1=Math.max(B.y0,B.y1);
       ED.sel=new Set(B.base); t.events.forEach(ev=>{ const R=evRect(t,G,ev); if(R&&R.x<x1&&R.x+R.w>x0&&R.y<y1&&R.y+R.h>y0) ED.sel.add(ev); }); drawEditor(); return; }
     if(!D){ if(p.y>G.gh+4){ cv.style.cursor='ns-resize'; return; } const h=hit(t,G,p); cv.style.cursor=h?(h.edge?'ew-resize':'grab'):(ED.mode==='select'?'default':'crosshair'); return; }
-    if(D.mode==='vel'){ const v=velHit(t,G,p); if(v) setVel(t,G,p,v); drawEditor(); return; }
+    if(D.mode==='vel'){ const v=D.group?D.lead:velHit(t,G,p); if(v) setVel(t,G,p,v); drawEditor(); return; }
     const o=D.orig.get(D.lead);
     if(D.mode==='move'){
       const db=Math.round(((p.x-D.x0)/G.bw)/ED.grid)*ED.grid; let dn=0;
