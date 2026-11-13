@@ -235,7 +235,7 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     PROJ.tracks.filter(t=>t.take===part||t.take===part+'-voice').forEach(t=>removeTrack(t.id)); /* a new take of the same part replaces the last one */
     const inst=partInst(part); { const I=INST.get(inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); }
     let mt=null; if(notes.length) mt=addTrack({role:part,inst,name:PART_NAME[part],events:notes,cyc:0,take:part});
-    if(mt&&prevParts){ JSON.parse(prevParts).forEach(([sid,p])=>{ const s=songSections().find(x=>x.id===sid); if(s&&p) s.parts[mt.id]=p; }); } /* the new take plays where the old one did */
+    if(mt&&prevParts){ JSON.parse(prevParts).forEach(([sid,p])=>{ const s=songSections().find(x=>x.id===sid); if(s&&p){ s.parts[mt.id]=p; songFreshCancel(); } }); } /* the new take plays where the old one did (no "plays in" toast, like a replaced part) */
     /* the raw recording is only used to find the notes; it isn't added as a track (owner, 13 Nov) */
     this.chunks=[]; this.notes=[];
     LOOP.state='playing'; refreshTrackGains(); saveProject(); renderTracks(); uiLoop();
