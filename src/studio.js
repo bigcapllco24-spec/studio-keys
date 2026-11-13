@@ -253,11 +253,15 @@ function uiLoop(){
   const st=LOOP.state, btn=$('#loopBtn');
   btn.dataset.state=st;
   const lbl={empty:'Record loop',counting:'Count-in…',recording:LOOP.fixed?'Recording…':'Recording · press to close',playing:'Overdub',overdub:'Overdubbing · press to keep',stopped:'Play loop',take:'Recording take…'}[st];
-  $('#loopLbl').textContent=songOn()&&(st==='playing'||st==='stopped')?(st==='playing'?'Record in the loop':'Play song'):lbl;
+  /* Song mode: a short label so the button keeps its width when Play starts (QA N1: "Record in the loop" pushed the readout, BPM and key 78 px) */
+  const songLbl=songOn()&&(st==='playing'||st==='stopped');
+  $('#loopLbl').textContent=songLbl?(st==='playing'?'Rec in loop':'Play song'):lbl;
+  btn.title=songLbl&&st==='playing'?'Record in the loop: switches to Loop mode and records what you play':'';
   const ledCls='led'+(st==='recording'||st==='overdub'||st==='take'?' rec':st==='playing'?' on':st==='counting'?' warn':'');
   $('#loopLed').className=ledCls;
-  const bars=songOn()?'song · '+songLenText():PROJ.bars+' bar'+(PROJ.bars>1?'s':'');
-  const pill={empty:'Studio empty',counting:'Count-in',recording:'Recording',playing:`Playing · ${bars}`,overdub:'Overdubbing',stopped:`Song ready · ${bars}`,take:'Recording take'}[st];
+  /* Song mode: "Playing song · 96 bars · 3:06" and "Song ready · 96 bars · 3:06" are the same length, so the top bar doesn't rewrap when Play starts */
+  const bars=songOn()?songLenText():PROJ.bars+' bar'+(PROJ.bars>1?'s':'');
+  const pill={empty:'Studio empty',counting:'Count-in',recording:'Recording',playing:`Playing${songOn()?' song':''} · ${bars}`,overdub:'Overdubbing',stopped:`Song ready · ${bars}`,take:'Recording take'}[st];
   $('#loopPill').innerHTML=`<span class="${ledCls}"></span><span>${pill}</span>`;
   lcd({counting:'COUNT-IN',recording:'REC',playing:'PLAY',overdub:'OVERDUB',stopped:'STOP',empty:'READY',take:'TAKE'}[st]);
   const has=PROJ.tracks.length>0;

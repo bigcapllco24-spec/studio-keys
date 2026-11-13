@@ -229,7 +229,7 @@ function songApplyFlash(){ const F=SONG.flash; if(!F||performance.now()>F.until)
 /* the chip names one change and its Undo undoes exactly that change: it remembers the undo state right after the change,
    and any newer change hides it (songChipNote, called by the undo history). o.undo:false = a note with no Undo (looping is not a change) */
 let songChipT=0, songChipTok=null;
-function songChip(text,o={}){ const c=$('#songChip'); if(!c) return; $('#songChipT').textContent=text;
+function songChip(text,o={}){ const c=$('#songChip'); if(!c) return; $('#songChipT').textContent=text; c.title=text;
   songChipTok=o.undo===false||typeof UNDO==='undefined'?null:UNDO.last; const u=$('#songChipU'); if(u) u.hidden=!songChipTok;
   c.hidden=false; clearTimeout(songChipT); songChipT=setTimeout(songChipHide,7000); }
 function songChipHide(){ const c=$('#songChip'); if(c) c.hidden=true; songChipTok=null; clearTimeout(songChipT); }
