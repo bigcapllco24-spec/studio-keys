@@ -20,6 +20,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
     .then(keys => Promise.all(keys.filter(k => k !== CACHE && scopeOf(k) === SCOPE).map(k => caches.delete(k))))   // older versions of this scope only
+    .then(() => caches.open(CACHE)).then(c => c.match(PAGE).then(hit => hit || c.add(PAGE).catch(() => {})))   // the install copy failed: try once more
     .then(() => self.clients.claim()));
 });
 
