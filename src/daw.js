@@ -274,6 +274,7 @@ function renderMixerView(){
 (function anim(){ requestAnimationFrame(anim);
   if(songOn()){ songAnim(); return; }
   const ph=$('#playhead'), first=document.querySelector('.troll'), pos=$('#posDisp');
+  if(pos) pos.classList.toggle('cnt',LOOP.state==='counting');
   if(!TR.running||!LOOP.L||LOOP.state==='counting'){ ph.style.display='none'; if(pos) pos.textContent=LOOP.state==='counting'?'Count-in':'1 . 1'; return; }
   const beat=mod(LOOP.rawBeat(),LOOP.L); if(pos) pos.textContent=`${Math.floor(beat/4)+1} . ${Math.floor(beat%4)+1}`;
   if(first && VIEW==='playlist'){ const r=first.getBoundingClientRect(), pr=$('#playlist').getBoundingClientRect(); ph.style.display='block'; ph.style.left=(r.left-pr.left+beat/LOOP.L*r.width)+'px'; ph.style.top=(r.top-pr.top-22)+'px'; ph.style.height=($('#tracks').getBoundingClientRect().bottom-r.top+22)+'px'; } else ph.style.display='none';
@@ -286,16 +287,17 @@ function autoSaveNamed(){ clearTimeout(projAutoT); projAutoT=setTimeout(()=>save
 async function refreshProjList(){}
 /* owner, 13 Nov: the app opens on a new empty song. The last song is put into the songs list first, so nothing is lost;
    if this browser can't keep the list, the last song opens as before */
-async function keepLastSong(){ const L=LAST_PROJ;
+async function keepLastSong(){ const L=LAST_PROJ, cur=PROJ;
   if(!L||L===PROJ||!(L.tracks||[]).length){ store.set('project',serialize(PROJ)); return; }
   try{ const ex=await IDB.get(L.id,'projects'), proj=Object.assign(serialize(L),{bpm:CTRL.bpm}); migrateSong(proj);
     const same=ex&&ex.proj&&ex.name===L.name&&JSON.stringify(ex.proj.tracks)===JSON.stringify(proj.tracks)&&JSON.stringify(ex.proj.sections||null)===JSON.stringify(proj.sections);
     if(!same){ const bars=proj.sections.reduce((a,s)=>a+s.bars,0), arranged=!(proj.sections.length===1&&proj.sections[0].auto);
       await IDB.put(L.id,{key:L.id,name:L.name,bpm:CTRL.bpm,bars:L.bars,song:arranged?`${bars} bars · ${fmtMS(bars*240/CTRL.bpm)}`:null,tracks:L.tracks.length,savedAt:Date.now(),proj},'projects'); }
+    if(PROJ!==cur) return; /* the user already opened another song */
     store.set('project',serialize(PROJ)); $('#saveState').textContent='New song';
     toast(`New song. “${L.name}” is saved: open it again from Open song…`); }
-  catch(e){ PROJ=migrateSong(L); songViewLoad(); SONG.ver++; LOOP.state='stopped'; loadAudioFor(PROJ).then(()=>drawRolls()); preloadTracks(); renderTracks(); uiLoop();
-    if(typeof UNDO!=='undefined'){ UNDO.last=snapState(); UNDO.stack=[]; undoButtons(); } }
+  catch(e){ if(PROJ!==cur) return; PROJ=migrateSong(L); songViewLoad(); SONG.ver++; LOOP.state='stopped'; loadAudioFor(PROJ).then(()=>drawRolls()); preloadTracks(); renderTracks(); uiLoop();
+    if(typeof undoReset==='function') undoReset(); }
 }
 async function saveNamed(quiet){
   const key=PROJ.id;
@@ -305,8 +307,12 @@ async function saveNamed(quiet){
   catch(e){ $('#saveState').textContent='Not saved'; if(!quiet) toast('Couldn’t save in this browser: '+e.message); }
 }
 async function loadAudioFor(p){ for(const t of p.tracks){ if(t.kind==='audio' && !AUD.has(t.id)){ try{ const r=await IDB.get('aud:'+t.id,'audio'); if(r) AUD.set(t.id,makeBuf(r.data,r.sr)); }catch(e){} } } }
-async function loadNamed(key){ let r=null; try{ r=await IDB.get(key,'projects'); }catch(e){} if(!r) return; loopStop(); PREVIEW=null; closeEditor(); PROJ=migrateSong(dropTakeVoices(Object.assign(newProject(),r.proj))); songViewLoad(); SONG.ver++; if(r.proj.bpm) setTempo(r.proj.bpm); await loadAudioFor(PROJ); preloadTracks(); LOOP.state=PROJ.tracks.length?'stopped':'empty'; store.set('project',serialize(PROJ)); renderTracks(); uiLoop(); toast(`Opened “${PROJ.name}”`); }
-async function newSong(name){ await saveNamed(true); loopStop(); PREVIEW=null; closeEditor(); PROJ=newProject(); if(name) PROJ.name=String(name).slice(0,60); songViewLoad(); SONG.ver++; LOOP.state='empty'; store.set('project',serialize(PROJ)); renderTracks(); uiLoop(); $('#saveState').textContent='New song'; }
+async function loadNamed(key){ clearTimeout(projAutoT); await saveNamed(true); /* keep the last edits of the song you leave */ let r=null; try{ r=await IDB.get(key,'projects'); }catch(e){} if(!r) return; loopStop(); PREVIEW=null; closeEditor(); PROJ=migrateSong(dropTakeVoices(Object.assign(newProject(),r.proj))); songViewLoad(); SONG.ver++; if(r.proj.bpm) setTempo(r.proj.bpm); await loadAudioFor(PROJ); preloadTracks(); LOOP.state=PROJ.tracks.length?'stopped':'empty'; store.set('project',serialize(PROJ)); renderTracks(); uiLoop();
+  if(typeof undoReset==='function') undoReset(); $('#saveState').textContent=savedLabel(r.savedAt); toast(`Opened “${PROJ.name}”`); }
+/* "Saved 2:41 PM" today, "Saved 12 Nov" before */
+function savedLabel(at){ if(!at) return ''; const d=new Date(at), today=new Date().toDateString()===d.toDateString();
+  return 'Saved '+(today?d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):d.toLocaleDateString([], {day:'numeric',month:'short'})); }
+async function newSong(name){ await saveNamed(true); loopStop(); PREVIEW=null; closeEditor(); PROJ=newProject(); if(name) PROJ.name=String(name).slice(0,60); songViewLoad(); SONG.ver++; LOOP.state='empty'; store.set('project',serialize(PROJ)); renderTracks(); uiLoop(); if(typeof undoReset==='function') undoReset(); $('#saveState').textContent='New song'; }
 async function saveCopy(){ await saveNamed(true); const v=Object.assign({},SONG.view); PROJ=Object.assign(serialize(PROJ),{id:'p'+Date.now().toString(36),name:PROJ.name+' (copy)'}); SONG.view=v; songViewSave(); SONG.ver++; await saveNamed(); renderTracks(); }
 function preloadTracks(){ PROJ.tracks.forEach(t=>{ const I=INST.get(t.inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); }); }
 async function openSongs(){

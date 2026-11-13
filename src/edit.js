@@ -7,10 +7,13 @@ function undoBoundary(){ UNDO.t=0; }
 const snapState=()=>JSON.stringify({p:PROJ,bpm:CTRL.bpm});
 function undoNote(){
   const j=snapState(); if(UNDO.last===null||UNDO.busy){ UNDO.last=j; return; } if(j===UNDO.last) return;
-  const now=performance.now();
-  if(now-UNDO.t>120||!UNDO.stack.length){ UNDO.stack.push(UNDO.last); if(UNDO.stack.length>120) UNDO.stack.shift(); }
+  const now=performance.now(), prev=UNDO.last; let pushed=false;
+  if(now-UNDO.t>120||!UNDO.stack.length){ UNDO.stack.push(UNDO.last); if(UNDO.stack.length>120) UNDO.stack.shift(); pushed=true; }
   UNDO.t=now; UNDO.redo=[]; UNDO.last=j; undoButtons();
+  if(typeof songChipNote==='function') songChipNote(prev,j,pushed); /* a newer change makes the Undo chip's label stale */
 }
+/* a song was opened or a new one started: its history starts here (QA, 13 Nov: the first Undo went back to the song before) */
+function undoReset(){ UNDO.stack=[]; UNDO.redo=[]; UNDO.t=0; UNDO.busy=false; UNDO.last=snapState(); undoButtons(); if(typeof songChipHide==='function') songChipHide(); }
 const _saveProject=saveProject;
 saveProject=function(){ if(typeof songSync==='function') songSync(); undoNote(); _saveProject(); };
 function applyState(j){
@@ -19,6 +22,7 @@ function applyState(j){
   if(ED.tid&&!PROJ.tracks.find(t=>t.id===ED.tid)) closeEditor(); ED.sel=new Set();
   if(!PROJ.tracks.length&&LOOP.state!=='empty'){ loopStop(); LOOP.state='empty'; } else if(PROJ.tracks.length&&LOOP.state==='empty') LOOP.state='stopped';
   loadAudioFor(PROJ).then(()=>drawRolls()); refreshTrackGains(); renderTracks(); uiLoop(); _saveProject(); UNDO.last=j; UNDO.busy=false; undoButtons();
+  if(typeof songChipHide==='function') songChipHide();
 }
 function undo(){ if(!UNDO.stack.length){ toast('Nothing to undo'); return false; } UNDO.redo.push(UNDO.last); applyState(UNDO.stack.pop()); return true; }
 function redo(){ if(!UNDO.redo.length){ toast('Nothing to redo'); return false; } UNDO.stack.push(UNDO.last); applyState(UNDO.redo.pop()); return true; }
