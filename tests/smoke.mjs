@@ -143,7 +143,8 @@ try {
   const sg = await E(() => { const S = songSections(), t = PROJ.tracks.find(t => t.take === 'chords'), on = id => S.filter(s => s.parts[id] && s.parts[id].on).map(s => s.name).join(',');
     const r = { mode: SONG.view.mode, sung: t ? on(t.id) : null, ref: on(window.__ref), toast: window.__toasts.find(m => /Sung chords/.test(m)) || null }; loopStop(); return r; });
   ok('song: sing the chords in Song mode → plays in the selected section like an added part, and a toast says so', sg.mode === 'song' && sg.sung === 'Intro' && sg.sung === sg.ref && /^“Sung chords” plays in Intro\. Click its empty parts/.test(sg.toast || ''), JSON.stringify(sg));
-  const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
+  const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600));
+    for (let i = 0; i < 20; i++) { let r = null; try { r = await IDB.get(PROJ.id, 'projects'); } catch (e) {} if (r && r.name === 'Before reload') break; await new Promise(r => setTimeout(r, 250)); } /* a busy machine saves late: wait for it */ return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
   await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(1500);
   await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 15000 }).catch(() => {}); // keepLastSong is async: wait for it on a busy machine
   const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null; try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r) await loadNamed(id);
