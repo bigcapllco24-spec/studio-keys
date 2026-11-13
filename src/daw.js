@@ -18,7 +18,7 @@ function fxPanel(t){
       <button class="btn small" type="button" data-tfxpreset="${t.id}" title="Effects a producer would start with for this part">Studio preset</button>
       <button class="btn small ghost" type="button" data-tfxclear="${t.id}">Clear effects</button></div></div>`;
 }
-function selBar(){ if(SEL.size<2) return ''; return `<div class="selbar"><b>${SEL.size} tracks selected</b><span class="hint">Ctrl/Cmd+click a track to add or remove it</span><span class="spacer"></span>
+function selBar(){ if(SEL.size<(PH.on?1:2)) return ''; return `<div class="selbar"><b>${SEL.size} ${PH.on?(SEL.size>1?'parts':'part'):'tracks'} selected</b><span class="hint">Ctrl/Cmd+click a track to add or remove it</span><span class="spacer"></span>
   <button class="btn small primary" type="button" data-sel="play">▶ Play these together</button><button class="btn small" type="button" data-sel="mute">Mute</button><button class="btn small" type="button" data-sel="solo">Solo</button><button class="btn small" type="button" data-sel="fx">FX</button><button class="btn small" type="button" data-sel="dup">Duplicate</button><button class="btn small ghost" type="button" data-sel="del">Delete</button><button class="btn small ghost" type="button" data-sel="clear">Clear selection</button></div>`; }
 function setPreview(ids){ ensureAudio(); PREVIEW=ids&&ids.size?new Set(ids):null; refreshTrackGains(); if(PREVIEW&&!TR.running) loopPlay(); if(!PREVIEW&&TR.running) loopStop(); renderTracks(); }
 function setView(v){ VIEW=v; document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===v))); $('#playlist').hidden=v!=='playlist'; $('#mixerView').hidden=v!=='mixer'; if(v==='mixer') renderMixerView(); else drawRolls(); }

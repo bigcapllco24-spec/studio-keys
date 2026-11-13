@@ -122,11 +122,9 @@ function talkFallback(why){
   if(TALK.fails>=2&&why!=='noapi'){ const b=document.createElement('button'); b.type='button'; b.className='lk'; b.textContent='Try talking again'; b.onclick=()=>{ TALK.fails=0; TALK.tries=0; setOrb('idle',idleText()); }; $('#asStatus').append(' ',b); }
   if(typeof phOpenType==='function') phOpenType(); else $('#asIn').focus();
 }
-function talkPause(){ /* iPhone only: let go of the mic, and pause the sound engine when nothing is playing */
-  if(!IS_IOS) return;
-  if(MIC.on&&LOOP.state!=='take'&&LOOP.state!=='counting'){ TALK.micWas=true; micStop(); }
-  if(A.ctx&&A.ctx.state==='running'&&!TR.running){ TALK.ctxPaused=true; A.ctx.suspend().catch(()=>{}); }
-}
+/* iPhone only: let go of the mic before recognition starts; pause the sound engine after it starts, when nothing is playing */
+function talkFreeMic(){ if(IS_IOS&&MIC.on&&LOOP.state!=='take'&&LOOP.state!=='counting'){ TALK.micWas=true; micStop(); } }
+function talkPause(){ if(IS_IOS&&A.ctx&&A.ctx.state==='running'&&!TR.running){ TALK.ctxPaused=true; A.ctx.suspend().catch(()=>{}); } }
 function talkResume(){
   if(TALK.ctxPaused){ TALK.ctxPaused=false; if(A.ctx) A.ctx.resume().catch(()=>{}); setTimeout(()=>{ if(A.ctx&&A.ctx.state!=='running') toast('Tap anywhere to turn the sound back on.'); },900); }
   if(TALK.micWas){ TALK.micWas=false; setTimeout(()=>{ if(!MIC.on&&!TALK.rec) micStart(); },400); }
@@ -136,7 +134,8 @@ function talkSend(){ if(TALK.sent) return; const t=TALK.heard.trim(); if(!t) ret
   const r=TALK.rec; talkEnd(); try{ r&&r.abort(); }catch(e){} const w=findWake(t); handleRequest(w!==null&&w.length>1?w:t); }
 function talkStart(fromTap){
   try{ if('speechSynthesis' in window) speechSynthesis.cancel(); }catch(e){} ASSIST.speaking=false; clearTimeout(ASSIST.speakT);
-  let rec; try{ rec=new SRc(); }catch(e){ talkFallback('noapi'); return; }
+  talkFreeMic();
+  let rec; try{ rec=new SRc(); }catch(e){ talkResume(); talkFallback('noapi'); return; }
   TALK.rec=rec; TALK.heard=''; TALK.sent=false; TALK.got=false;
   rec.lang=navigator.language||'en-IN'; rec.interimResults=true; rec.continuous=false;
   rec.onresult=e=>{ if(TALK.rec!==rec) return; let t=''; let fin=false; for(const r of e.results){ t+=r[0].transcript; if(r.isFinal) fin=true; }
@@ -149,7 +148,7 @@ function talkStart(fromTap){
   rec.onend=()=>{ if(TALK.rec!==rec) return; if(TALK.heard.trim()){ talkSend(); return; } talkEnd();
     if(IS_IOS&&!TALK.got){ TALK.fails++; talkFallback('silent'); return; } /* on iPhone an empty end is the bug, not silence */
     if(!ASSIST.busy&&!ASSIST.speaking) setOrb('idle','I didn’t hear anything. Tap the orb and try again, or type below.'); };
-  try{ rec.start(); }catch(e){ TALK.rec=null; TALK.fails++; talkFallback('silent'); return; }
+  try{ rec.start(); }catch(e){ TALK.rec=null; TALK.fails++; talkResume(); talkFallback('silent'); return; }
   setOrb('listening','Go ahead, I’m listening…');
   if(fromTap) ensureAudio(); /* unlock the sound in the same tap, after recognition has started */
   talkPause();

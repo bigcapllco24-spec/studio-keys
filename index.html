@@ -822,7 +822,7 @@ html[data-phone].ph-singing .as-notes,html[data-phone].ph-singing .ph-welcome{di
 #phSongHint{font-size:12.5px}
 html[data-phone] .pl-head,html[data-phone] .playlist .playhead,html[data-phone] #songFollow,html[data-phone] .sh-len,html[data-phone] .smap-hint,html[data-phone] .song-hint{display:none!important}
 html[data-phone] .song-head{padding:0}
-html[data-phone] .trk{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"h1 h1" "h3 roll";gap:6px 8px;padding:8px 8px 8px 10px;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;cursor:pointer}
+html[data-phone] .tracks>.trk{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"h1 h1" "h3 roll";gap:6px 8px;padding:8px 8px 8px 10px;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;cursor:pointer}
 html[data-phone] .trk .th{display:contents}
 html[data-phone] .trk .th1{grid-area:h1;gap:4px}
 html[data-phone] .trk .th2,html[data-phone] .trk .th3 .row,html[data-phone] .trk .tfx,html[data-phone] .trk .tnum{display:none!important}
@@ -1035,7 +1035,7 @@ html[data-phone] .ed-wrap{flex:1 1 auto;min-height:0}
     </div>
     <span class="status" id="exportStatus"></span>
     <div class="ph-songhead ph-only" id="phSongHead">
-      <div class="ph-sh1"><b id="phSongLen">Loop · 4 bars</b><span id="phMakeSlot"></span></div>
+      <div class="ph-sh1"><b id="phSongLen">Loop · 4 bars</b><span class="ph-row"><button class="btn" type="button" id="phAddSec" hidden title="Add an 8-bar section at the end">+ Section</button><span id="phMakeSlot"></span></span></div>
       <button class="btn" type="button" id="phAddPart" aria-haspopup="dialog">+ Add a part</button>
       <span class="hint" id="phSongHint">Tap a part to change its sound, volume, effects or notes · hold to select several</span>
     </div>
@@ -4235,7 +4235,7 @@ function phSync(){
   phSet($('#phSongName'),'textContent',PROJ.name||'Untitled song');
   const n=PROJ.tracks.length; phSet($('#phSongSub'),'textContent',n?`${keyName(projectKey())} · ${n} part${n>1?'s':''}`:($('#saveState').textContent||'New song'));
   phSet($('#phSongLen'),'textContent',songOn()?'Song · '+songLenText():`Loop · ${PROJ.bars} bar${PROJ.bars>1?'s':''}`);
-  const u=$('#phUndo'); if(u) u.disabled=!UNDO.stack.length;
+  $('#phAddSec').hidden=!songOn(); const u=$('#phUndo'); if(u) u.disabled=!UNDO.stack.length;
   const tp=TASTE.profile, art=tp&&(tp.artists||[]).map(a=>typeof a==='string'?a:a&&a.name).filter(Boolean);
   phSet($('#phTaste'),'textContent',art&&art.length?'Your sound: '+art.slice(0,3).join(', '):'Your sound: tap to add artists or Spotify');
   $('#phWelcome').classList.toggle('gone',n>0||!!$('#asChat').children.length);
@@ -4324,7 +4324,7 @@ function phoneInit(){
   document.querySelectorAll('[data-phsing]').forEach(b=>b.addEventListener('click',()=>{ const k=b.dataset.phsing; phSheetClose(); phTab('keys'); ensureAudio();
     if(k==='voice') TAKE.start('voice'); else handleRequest({bass:'let me sing the bassline',chords:'let me sing the chords',melody:'let me sing a melody'}[k]); }));
   /* Song tab */
-  $('#phAddPart').onclick=e=>phSheet('add',e.currentTarget);
+  $('#phAddPart').onclick=e=>phSheet('add',e.currentTarget); $('#phAddSec').onclick=()=>{ $('#songAddSec').click(); phSync(); };
   document.querySelectorAll('[data-phadd]').forEach(b=>b.addEventListener('click',()=>{ const k=b.dataset.phadd; phSheetClose();
     if(k==='ask'){ phTab('keys'); phOpenType(); $('#asIn').value='Add '; return; }
     if(k==='import'){ $('#importBtn').click(); return; }
@@ -4853,7 +4853,7 @@ function fxPanel(t){
       <button class="btn small" type="button" data-tfxpreset="${t.id}" title="Effects a producer would start with for this part">Studio preset</button>
       <button class="btn small ghost" type="button" data-tfxclear="${t.id}">Clear effects</button></div></div>`;
 }
-function selBar(){ if(SEL.size<2) return ''; return `<div class="selbar"><b>${SEL.size} tracks selected</b><span class="hint">Ctrl/Cmd+click a track to add or remove it</span><span class="spacer"></span>
+function selBar(){ if(SEL.size<(PH.on?1:2)) return ''; return `<div class="selbar"><b>${SEL.size} ${PH.on?(SEL.size>1?'parts':'part'):'tracks'} selected</b><span class="hint">Ctrl/Cmd+click a track to add or remove it</span><span class="spacer"></span>
   <button class="btn small primary" type="button" data-sel="play">▶ Play these together</button><button class="btn small" type="button" data-sel="mute">Mute</button><button class="btn small" type="button" data-sel="solo">Solo</button><button class="btn small" type="button" data-sel="fx">FX</button><button class="btn small" type="button" data-sel="dup">Duplicate</button><button class="btn small ghost" type="button" data-sel="del">Delete</button><button class="btn small ghost" type="button" data-sel="clear">Clear selection</button></div>`; }
 function setPreview(ids){ ensureAudio(); PREVIEW=ids&&ids.size?new Set(ids):null; refreshTrackGains(); if(PREVIEW&&!TR.running) loopPlay(); if(!PREVIEW&&TR.running) loopStop(); renderTracks(); }
 function setView(v){ VIEW=v; document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===v))); $('#playlist').hidden=v!=='playlist'; $('#mixerView').hidden=v!=='mixer'; if(v==='mixer') renderMixerView(); else drawRolls(); }
@@ -5820,11 +5820,9 @@ function talkFallback(why){
   if(TALK.fails>=2&&why!=='noapi'){ const b=document.createElement('button'); b.type='button'; b.className='lk'; b.textContent='Try talking again'; b.onclick=()=>{ TALK.fails=0; TALK.tries=0; setOrb('idle',idleText()); }; $('#asStatus').append(' ',b); }
   if(typeof phOpenType==='function') phOpenType(); else $('#asIn').focus();
 }
-function talkPause(){ /* iPhone only: let go of the mic, and pause the sound engine when nothing is playing */
-  if(!IS_IOS) return;
-  if(MIC.on&&LOOP.state!=='take'&&LOOP.state!=='counting'){ TALK.micWas=true; micStop(); }
-  if(A.ctx&&A.ctx.state==='running'&&!TR.running){ TALK.ctxPaused=true; A.ctx.suspend().catch(()=>{}); }
-}
+/* iPhone only: let go of the mic before recognition starts; pause the sound engine after it starts, when nothing is playing */
+function talkFreeMic(){ if(IS_IOS&&MIC.on&&LOOP.state!=='take'&&LOOP.state!=='counting'){ TALK.micWas=true; micStop(); } }
+function talkPause(){ if(IS_IOS&&A.ctx&&A.ctx.state==='running'&&!TR.running){ TALK.ctxPaused=true; A.ctx.suspend().catch(()=>{}); } }
 function talkResume(){
   if(TALK.ctxPaused){ TALK.ctxPaused=false; if(A.ctx) A.ctx.resume().catch(()=>{}); setTimeout(()=>{ if(A.ctx&&A.ctx.state!=='running') toast('Tap anywhere to turn the sound back on.'); },900); }
   if(TALK.micWas){ TALK.micWas=false; setTimeout(()=>{ if(!MIC.on&&!TALK.rec) micStart(); },400); }
@@ -5834,7 +5832,8 @@ function talkSend(){ if(TALK.sent) return; const t=TALK.heard.trim(); if(!t) ret
   const r=TALK.rec; talkEnd(); try{ r&&r.abort(); }catch(e){} const w=findWake(t); handleRequest(w!==null&&w.length>1?w:t); }
 function talkStart(fromTap){
   try{ if('speechSynthesis' in window) speechSynthesis.cancel(); }catch(e){} ASSIST.speaking=false; clearTimeout(ASSIST.speakT);
-  let rec; try{ rec=new SRc(); }catch(e){ talkFallback('noapi'); return; }
+  talkFreeMic();
+  let rec; try{ rec=new SRc(); }catch(e){ talkResume(); talkFallback('noapi'); return; }
   TALK.rec=rec; TALK.heard=''; TALK.sent=false; TALK.got=false;
   rec.lang=navigator.language||'en-IN'; rec.interimResults=true; rec.continuous=false;
   rec.onresult=e=>{ if(TALK.rec!==rec) return; let t=''; let fin=false; for(const r of e.results){ t+=r[0].transcript; if(r.isFinal) fin=true; }
@@ -5847,7 +5846,7 @@ function talkStart(fromTap){
   rec.onend=()=>{ if(TALK.rec!==rec) return; if(TALK.heard.trim()){ talkSend(); return; } talkEnd();
     if(IS_IOS&&!TALK.got){ TALK.fails++; talkFallback('silent'); return; } /* on iPhone an empty end is the bug, not silence */
     if(!ASSIST.busy&&!ASSIST.speaking) setOrb('idle','I didn’t hear anything. Tap the orb and try again, or type below.'); };
-  try{ rec.start(); }catch(e){ TALK.rec=null; TALK.fails++; talkFallback('silent'); return; }
+  try{ rec.start(); }catch(e){ TALK.rec=null; TALK.fails++; talkResume(); talkFallback('silent'); return; }
   setOrb('listening','Go ahead, I’m listening…');
   if(fromTap) ensureAudio(); /* unlock the sound in the same tap, after recognition has started */
   talkPause();

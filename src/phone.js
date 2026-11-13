@@ -88,7 +88,7 @@ function phSync(){
   phSet($('#phSongName'),'textContent',PROJ.name||'Untitled song');
   const n=PROJ.tracks.length; phSet($('#phSongSub'),'textContent',n?`${keyName(projectKey())} · ${n} part${n>1?'s':''}`:($('#saveState').textContent||'New song'));
   phSet($('#phSongLen'),'textContent',songOn()?'Song · '+songLenText():`Loop · ${PROJ.bars} bar${PROJ.bars>1?'s':''}`);
-  const u=$('#phUndo'); if(u) u.disabled=!UNDO.stack.length;
+  $('#phAddSec').hidden=!songOn(); const u=$('#phUndo'); if(u) u.disabled=!UNDO.stack.length;
   const tp=TASTE.profile, art=tp&&(tp.artists||[]).map(a=>typeof a==='string'?a:a&&a.name).filter(Boolean);
   phSet($('#phTaste'),'textContent',art&&art.length?'Your sound: '+art.slice(0,3).join(', '):'Your sound: tap to add artists or Spotify');
   $('#phWelcome').classList.toggle('gone',n>0||!!$('#asChat').children.length);
@@ -177,7 +177,7 @@ function phoneInit(){
   document.querySelectorAll('[data-phsing]').forEach(b=>b.addEventListener('click',()=>{ const k=b.dataset.phsing; phSheetClose(); phTab('keys'); ensureAudio();
     if(k==='voice') TAKE.start('voice'); else handleRequest({bass:'let me sing the bassline',chords:'let me sing the chords',melody:'let me sing a melody'}[k]); }));
   /* Song tab */
-  $('#phAddPart').onclick=e=>phSheet('add',e.currentTarget);
+  $('#phAddPart').onclick=e=>phSheet('add',e.currentTarget); $('#phAddSec').onclick=()=>{ $('#songAddSec').click(); phSync(); };
   document.querySelectorAll('[data-phadd]').forEach(b=>b.addEventListener('click',()=>{ const k=b.dataset.phadd; phSheetClose();
     if(k==='ask'){ phTab('keys'); phOpenType(); $('#asIn').value='Add '; return; }
     if(k==='import'){ $('#importBtn').click(); return; }
