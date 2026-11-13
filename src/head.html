@@ -691,7 +691,7 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 @media (pointer:coarse){
   .btn,.sc,.tab,.seg button,.lk,.zb,.tp{min-height:44px}
   .ib{min-height:40px;min-width:36px}
-  input.input,input.inline,select.select,textarea{font-size:16px}
+  input.input,input.inline,select.select,textarea,.as-form input.input,#mp3Len{font-size:16px} /* iPad Safari zooms into anything smaller */
 }
 @media (max-width:1100px) and (orientation:portrait) and (pointer:coarse){.grid{grid-template-areas:"loop loop" "keys keys" "profile rack" "fx fx" "voice voice" "lab lab"}}
 @media (max-width:920px) and (orientation:portrait) and (pointer:coarse){.grid{grid-template-areas:"loop" "keys" "profile" "rack" "fx" "voice" "lab"}}
@@ -785,7 +785,7 @@ html[data-phone] .as-form .btn{min-width:72px;justify-content:center}
 html[data-phone] .bub{max-width:92%;font-size:15px}
 html[data-phone] .as-chat>.bub{flex:none}
 html[data-phone] .as-chat:not(:empty)~.ph-welcome,html[data-phone] .ph-welcome.gone{display:none!important}
-.ph-taste{align-self:flex-start;max-width:100%;min-height:44px;padding:6px 12px;border-radius:999px;border:1px solid var(--t6);background:transparent;color:var(--ink2);font:600 13px var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.ph-taste{align-self:flex-start;max-width:100%;min-height:44px;padding:6px 12px;border-radius:999px;border:1px solid var(--t6);background:transparent;color:var(--ink2);font:600 13px/30px var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .ph-welcome{flex-direction:column;gap:8px;padding:12px;border-radius:14px;background:var(--t2);border:1px solid var(--t5)}
 .ph-welcome p{margin:0;font:600 17px/1.35 var(--serif)}
 .ph-welcome .chips-row{flex-wrap:wrap!important;margin:0!important;padding:0!important}
@@ -869,7 +869,7 @@ html[data-phone] .keyboard{min-width:0;height:220px}
 .ph-list button:hover,.ph-list button:focus-visible{background:var(--t4)}
 .ph-page p{margin:0}
 #phThemeSlot .themes{padding:10px 14px;gap:16px}
-#phThemeSlot .themes button{width:40px;height:40px;box-shadow:inset 0 0 0 10px var(--sw,#333)}
+#phThemeSlot .themes button{width:40px;height:40px;box-shadow:inset 0 0 0 10px var(--sw,var(--t6))}
 html[data-phone] .modal{padding:0;place-items:end stretch}
 html[data-phone] .modal-card{width:100%;max-height:88vh;max-height:88dvh;border-radius:18px 18px 0 0;padding:16px var(--phSide) calc(16px + env(safe-area-inset-bottom,0px))}
 html[data-phone] .pitem .row{gap:14px}
@@ -877,9 +877,10 @@ html[data-phone] .song-menu{left:var(--phSide)!important;right:var(--phSide)!imp
 html[data-phone] .song-menu button{min-height:44px}
 html[data-phone] .lede{font-size:14px}
 html[data-phone] #micRoll{height:140px}
+html[data-phone] .key .qk{display:none} /* computer-key letters mean nothing on a phone */
 /* sheets */
 .ph-sheet{position:fixed;inset:0;z-index:55;display:flex;flex-direction:column;justify-content:flex-end}
-.ph-scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.ph-scrim{position:absolute;inset:0;background:color-mix(in srgb,var(--t0) 72%,transparent)}
 .ph-card{position:relative;max-height:86vh;max-height:86dvh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--t5);border-bottom:0;border-radius:20px 20px 0 0;padding:0 var(--phSide) env(safe-area-inset-bottom,0px);transition:transform .18s}
 .ph-grab{width:44px;height:5px;border-radius:3px;background:var(--t7);margin:8px auto 2px;flex:none}
 .ph-sh-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0 8px;touch-action:none;flex:none}
@@ -923,6 +924,12 @@ html[data-phone] .ed-wrap{flex:1 1 auto;min-height:0}
   html[data-phone] .as-chat{min-height:0}
   html[data-phone] .ph-orbslot .orb{width:64px;height:64px}html[data-phone] .ph-orbslot .orb-core{inset:14px}html[data-phone] .ph-orbslot .orb-name{font-size:11px}
   .ph-dk{height:48px}
+  /* Play tab sideways: sounds and octave on one row, the 8 pads in one row, so the keyboard is on the first screen */
+  .ph-playhead{flex-direction:row;align-items:flex-end;gap:8px}.ph-playhead .ph-f{flex:1 1 0}.ph-playhead .ph-row{flex:none;gap:8px}
+  html[data-phone] .pads-lbl{display:none}
+  .ph-playhead .ph-f>span{display:none} /* the selects keep their aria-labels */
+  html[data-phone] .pads{grid-template-columns:repeat(8,minmax(0,1fr))!important}html[data-phone] .pad{height:44px}
+  html[data-phone] .keyboard{height:max(100px,calc(100dvh - var(--phT) - var(--phB) - 150px))}
 }
 @media (pointer:coarse) and (min-width:601px){
   .jump a{min-height:44px;display:inline-flex;align-items:center}

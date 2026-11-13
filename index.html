@@ -691,7 +691,7 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 @media (pointer:coarse){
   .btn,.sc,.tab,.seg button,.lk,.zb,.tp{min-height:44px}
   .ib{min-height:40px;min-width:36px}
-  input.input,input.inline,select.select,textarea{font-size:16px}
+  input.input,input.inline,select.select,textarea,.as-form input.input,#mp3Len{font-size:16px} /* iPad Safari zooms into anything smaller */
 }
 @media (max-width:1100px) and (orientation:portrait) and (pointer:coarse){.grid{grid-template-areas:"loop loop" "keys keys" "profile rack" "fx fx" "voice voice" "lab lab"}}
 @media (max-width:920px) and (orientation:portrait) and (pointer:coarse){.grid{grid-template-areas:"loop" "keys" "profile" "rack" "fx" "voice" "lab"}}
@@ -785,7 +785,7 @@ html[data-phone] .as-form .btn{min-width:72px;justify-content:center}
 html[data-phone] .bub{max-width:92%;font-size:15px}
 html[data-phone] .as-chat>.bub{flex:none}
 html[data-phone] .as-chat:not(:empty)~.ph-welcome,html[data-phone] .ph-welcome.gone{display:none!important}
-.ph-taste{align-self:flex-start;max-width:100%;min-height:44px;padding:6px 12px;border-radius:999px;border:1px solid var(--t6);background:transparent;color:var(--ink2);font:600 13px var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.ph-taste{align-self:flex-start;max-width:100%;min-height:44px;padding:6px 12px;border-radius:999px;border:1px solid var(--t6);background:transparent;color:var(--ink2);font:600 13px/30px var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .ph-welcome{flex-direction:column;gap:8px;padding:12px;border-radius:14px;background:var(--t2);border:1px solid var(--t5)}
 .ph-welcome p{margin:0;font:600 17px/1.35 var(--serif)}
 .ph-welcome .chips-row{flex-wrap:wrap!important;margin:0!important;padding:0!important}
@@ -869,7 +869,7 @@ html[data-phone] .keyboard{min-width:0;height:220px}
 .ph-list button:hover,.ph-list button:focus-visible{background:var(--t4)}
 .ph-page p{margin:0}
 #phThemeSlot .themes{padding:10px 14px;gap:16px}
-#phThemeSlot .themes button{width:40px;height:40px;box-shadow:inset 0 0 0 10px var(--sw,#333)}
+#phThemeSlot .themes button{width:40px;height:40px;box-shadow:inset 0 0 0 10px var(--sw,var(--t6))}
 html[data-phone] .modal{padding:0;place-items:end stretch}
 html[data-phone] .modal-card{width:100%;max-height:88vh;max-height:88dvh;border-radius:18px 18px 0 0;padding:16px var(--phSide) calc(16px + env(safe-area-inset-bottom,0px))}
 html[data-phone] .pitem .row{gap:14px}
@@ -877,9 +877,10 @@ html[data-phone] .song-menu{left:var(--phSide)!important;right:var(--phSide)!imp
 html[data-phone] .song-menu button{min-height:44px}
 html[data-phone] .lede{font-size:14px}
 html[data-phone] #micRoll{height:140px}
+html[data-phone] .key .qk{display:none} /* computer-key letters mean nothing on a phone */
 /* sheets */
 .ph-sheet{position:fixed;inset:0;z-index:55;display:flex;flex-direction:column;justify-content:flex-end}
-.ph-scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.ph-scrim{position:absolute;inset:0;background:color-mix(in srgb,var(--t0) 72%,transparent)}
 .ph-card{position:relative;max-height:86vh;max-height:86dvh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--t5);border-bottom:0;border-radius:20px 20px 0 0;padding:0 var(--phSide) env(safe-area-inset-bottom,0px);transition:transform .18s}
 .ph-grab{width:44px;height:5px;border-radius:3px;background:var(--t7);margin:8px auto 2px;flex:none}
 .ph-sh-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0 8px;touch-action:none;flex:none}
@@ -923,6 +924,12 @@ html[data-phone] .ed-wrap{flex:1 1 auto;min-height:0}
   html[data-phone] .as-chat{min-height:0}
   html[data-phone] .ph-orbslot .orb{width:64px;height:64px}html[data-phone] .ph-orbslot .orb-core{inset:14px}html[data-phone] .ph-orbslot .orb-name{font-size:11px}
   .ph-dk{height:48px}
+  /* Play tab sideways: sounds and octave on one row, the 8 pads in one row, so the keyboard is on the first screen */
+  .ph-playhead{flex-direction:row;align-items:flex-end;gap:8px}.ph-playhead .ph-f{flex:1 1 0}.ph-playhead .ph-row{flex:none;gap:8px}
+  html[data-phone] .pads-lbl{display:none}
+  .ph-playhead .ph-f>span{display:none} /* the selects keep their aria-labels */
+  html[data-phone] .pads{grid-template-columns:repeat(8,minmax(0,1fr))!important}html[data-phone] .pad{height:44px}
+  html[data-phone] .keyboard{height:max(100px,calc(100dvh - var(--phT) - var(--phB) - 150px))}
 }
 @media (pointer:coarse) and (min-width:601px){
   .jump a{min-height:44px;display:inline-flex;align-items:center}
@@ -4151,7 +4158,7 @@ $('#exportZip').onclick=exportZip; $('#exportMid').onclick=exportMidiOnly; $('#e
    Nothing is rebuilt: each tab shows one of the existing sections, and while the phone layout is on a few of the
    studio's own controls are moved into the sheets (and put back when it's off). Desktop and tablet keep the page as it was.
    var (not const) so files that load earlier can check PH without hitting the temporal dead zone. */
-var PH={on:false,tab:'keys',sec:null,moved:[],sheet:null,opener:null,partId:null,lock:null,lp:null,lpDone:false,down:null,oct:0,iosTip:false,skipPop:false,edDown:0};
+var PH={on:false,tab:'keys',sec:null,moved:[],sheet:null,opener:null,partId:null,lock:null,lp:null,lpDone:false,down:null,oct:0,iosTip:false,skipPop:false,pendPush:null,edDown:0,touching:0,eatArm:false,eatUntil:0};
 var PH_MQ=window.matchMedia?window.matchMedia('(max-width:600px), (max-height:500px) and (pointer:coarse)'):null;
 var IS_IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 const PH_SHEET_T={song:'Song',gear:'Keys settings',bpm:'Tempo and loop',sing:'Sing a part',add:'Add a part',part:'Part'};
@@ -4197,9 +4204,11 @@ function phMoreOpen(k){
 }
 
 /* ----- history: the Android back button (and iPhone swipe back) closes a sheet, the editor or a More page ----- */
-function phPush(kind){ try{ history.pushState({ph:kind},''); }catch(e){} }
-function phPop(){ try{ if(history.state&&history.state.ph){ PH.skipPop=true; history.back(); } }catch(e){} }
-window.addEventListener('popstate',()=>{ if(PH.skipPop){ PH.skipPop=false; return; } if(!PH.on) return;
+/* history.back() is async: when one overlay replaces another (a sheet's Edit notes opens the editor), the new entry is pushed
+   only after that back has landed, or the queued back would undo it and Back would leave the app (UX-4 fix 1) */
+function phPush(kind){ if(PH.skipPop){ PH.pendPush=kind; return; } try{ history.pushState({ph:kind},''); }catch(e){} }
+function phPop(){ if(PH.pendPush){ PH.pendPush=null; return; } try{ if(history.state&&history.state.ph&&!PH.skipPop){ PH.skipPop=true; history.back(); } }catch(e){} }
+window.addEventListener('popstate',()=>{ if(PH.skipPop){ PH.skipPop=false; const k=PH.pendPush; PH.pendPush=null; if(k&&PH.on) phPush(k); return; } if(!PH.on) return;
   if(PH.sheet) phSheetClose(true); else if(!$('#editor').hidden) closeEditor(true); else if(PH.sec) phTab('more'); });
 
 /* ----- sheets ----- */
@@ -4349,7 +4358,15 @@ function phoneInit(){
   document.addEventListener('click',e=>{ const b=e.target.closest('[data-phpart]'); if(b) phOpenPart(b.dataset.phpart,true); });
   /* song map: hold a section for its menu (rename, duplicate, longer, split, delete) */
   const sm=$('#songMap'); let smT=0, smDone=false;
-  sm.addEventListener('pointerdown',e=>{ const b=e.target.closest('.smb'); if(!b) return; clearTimeout(smT); const x=e.clientX, y=e.clientY; smT=setTimeout(()=>{ smDone=true; songSecMenu(b.dataset.sid,x,y,b); },500); });
+  sm.addEventListener('pointerdown',e=>{ smDone=false; const b=e.target.closest('.smb'); if(!b) return; clearTimeout(smT); smT=setTimeout(()=>{ smDone=true; const r=b.getBoundingClientRect(); songSecMenu(b.dataset.sid,r.left,r.bottom+8,b); },500); }); /* under the block, not under the finger */
+  /* a menu that opens while a finger is still down (a long press) ignores the tap that the finger's release makes (UX-4 fix 3) */
+  document.addEventListener('pointerdown',e=>{ if(e.pointerType==='touch') PH.touching=e.isPrimary?1:PH.touching+1; },true);
+  ['pointerup','pointercancel'].forEach(k=>document.addEventListener(k,e=>{ if(e.pointerType!=='touch') return; PH.touching=Math.max(0,PH.touching-1);
+    if(PH.eatArm&&!PH.touching){ PH.eatArm=false; PH.eatUntil=performance.now()+450; } },true));
+  document.addEventListener('click',e=>{ if(PH.eatUntil&&performance.now()<PH.eatUntil&&e.target.closest&&e.target.closest('#songMenu')){ PH.eatUntil=0; e.stopImmediatePropagation(); e.preventDefault(); } },true);
+  { const menu=$('#songMenu'); if(menu) try{ new MutationObserver(()=>{ if(menu.hidden){ PH.eatArm=false; return; } if(PH.touching) PH.eatArm=true;
+      if(PH.on) menu.querySelectorAll('button>span').forEach(sp=>{ if(/^(Ctrl\/Cmd\+\w|Delete key)$/.test(sp.textContent)) sp.remove(); }); /* no keyboard shortcuts on a phone */
+    }).observe(menu,{attributes:true,attributeFilter:['hidden'],childList:true}); }catch(e){} }
   ['pointerup','pointercancel','pointerleave'].forEach(k=>sm.addEventListener(k,()=>clearTimeout(smT)));
   sm.addEventListener('click',e=>{ if(smDone){ smDone=false; e.stopPropagation(); } },true);
   sm.addEventListener('contextmenu',e=>{ if(PH.on) e.preventDefault(); });
@@ -4370,7 +4387,7 @@ function phoneInit(){
   /* the first tap anywhere turns the sound on (a phone has no "click to start" pill) */
   document.addEventListener('pointerdown',e=>{ if(PH.on&&!A.ctx&&!e.target.closest('#asOrb')) ensureAudio(); },true);
   /* the status bar takes the theme's background */
-  const meta=document.querySelector('meta[name="theme-color"]'), tc=()=>{ if(meta) meta.content=cssVar('--t1')||'#07120e'; };
+  const meta=document.querySelector('meta[name="theme-color"]'), tc=()=>{ const c=cssVar('--t1')||cssVar('--bg'); if(meta&&c) meta.content=c; };
   try{ new MutationObserver(tc).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']}); }catch(e){} tc();
   setInterval(phPos,150);
   let rz=0; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(PH.on&&PH.tab==='play') phKeybed(); if(PH.on&&!$('#editor').hidden){ edHint(); phEdFit(); } },150); });
@@ -4853,7 +4870,7 @@ function fxPanel(t){
       <button class="btn small" type="button" data-tfxpreset="${t.id}" title="Effects a producer would start with for this part">Studio preset</button>
       <button class="btn small ghost" type="button" data-tfxclear="${t.id}">Clear effects</button></div></div>`;
 }
-function selBar(){ if(SEL.size<(PH.on?1:2)) return ''; return `<div class="selbar"><b>${SEL.size} ${PH.on?(SEL.size>1?'parts':'part'):'tracks'} selected</b><span class="hint">Ctrl/Cmd+click a track to add or remove it</span><span class="spacer"></span>
+function selBar(){ if(SEL.size<(PH.on?1:2)) return ''; return `<div class="selbar"><b>${SEL.size} ${PH.on?(SEL.size>1?'parts':'part'):'tracks'} selected</b><span class="hint">${PH.on?'Tap or hold a part to add or remove it':'Ctrl/Cmd+click a track to add or remove it'}</span><span class="spacer"></span>
   <button class="btn small primary" type="button" data-sel="play">▶ Play these together</button><button class="btn small" type="button" data-sel="mute">Mute</button><button class="btn small" type="button" data-sel="solo">Solo</button><button class="btn small" type="button" data-sel="fx">FX</button><button class="btn small" type="button" data-sel="dup">Duplicate</button><button class="btn small ghost" type="button" data-sel="del">Delete</button><button class="btn small ghost" type="button" data-sel="clear">Clear selection</button></div>`; }
 function setPreview(ids){ ensureAudio(); PREVIEW=ids&&ids.size?new Set(ids):null; refreshTrackGains(); if(PREVIEW&&!TR.running) loopPlay(); if(!PREVIEW&&TR.running) loopStop(); renderTracks(); }
 function setView(v){ VIEW=v; document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===v))); $('#playlist').hidden=v!=='playlist'; $('#mixerView').hidden=v!=='mixer'; if(v==='mixer') renderMixerView(); else drawRolls(); }
@@ -4967,7 +4984,7 @@ function setEdMode(m){ ED.mode=m; store.set('edMode',m); document.querySelectorA
 function edHint(){ const t=edTrack(); if(!t) return;
   if(PH.on){ const side=innerHeight>innerWidth?'Turn your phone sideways for more room. ':''; $('#edHint').textContent=side+(isDrumTrack(t)
     ?(ED.mode==='draw'?'Tap steps to add or remove hits · hold a hit to select more · pinch to zoom, two fingers to scroll':'Drag a box to select hits · drag them to move · Copy, Paste and Delete are above')
-    :(ED.mode==='draw'?'Tap to add a note · drag to move · drag its right end to lengthen · hold a note to select more · pinch to zoom, two fingers to scroll':'Drag a box to select · drag notes to move · Copy, Paste and Delete are above · bottom lane sets loudness')); return; }
+    :(ED.mode==='draw'?'Tap to add a note · drag to move · drag the end of a long note to stretch it · double-tap deletes · hold to select more · pinch zooms, two fingers scroll':'Drag a box to select · drag notes to move · Copy, Paste and Delete are above · bottom lane sets loudness')); return; }
   $('#edHint').textContent=isDrumTrack(t)
   ?(ED.mode==='draw'?'Click or drag across steps to add or remove hits · Shift for soft hits · Drag in the bottom lane to set how hard each hit is (drag a selected bar to move all selected, Alt sets them equal)':'Drag a box to select hits · Drag them to move · Ctrl+C / Ctrl+V to copy · Delete removes · Bottom lane sets how hard the selected hits are')
   :(ED.mode==='draw'?'Click to add a note · Drag notes to move, right edge to resize · Alt+drag copies · Right-click deletes · Bottom lane sets loudness: drag a selected bar to move all selected, Alt sets them equal':'Drag a box to select · Shift+click adds to the selection · Drag to move · Arrows nudge · Ctrl+C / Ctrl+V / Ctrl+D · Delete removes · Bottom lane sets the loudness of the selected notes'); }
@@ -5051,14 +5068,18 @@ function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bar
   const cv=$('#edCanvas');
   const pos=e=>{ const r=cv.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; };
   const snap=b=>Math.floor(b/ED.grid+1e-6)*ED.grid;
-  const hit=(t,G,p)=>{ for(let i=t.events.length-1;i>=0;i--){ const e=t.events[i], R=evRect(t,G,e); if(!R) continue; if(p.y>=R.y-1&&p.y<=R.y+R.h+1&&p.x>=R.x-1&&p.x<=R.x+R.w+1) return {e,edge:!G.drum&&p.x>R.x+R.w-7}; } return null; };
+  /* the right end resizes: 7 px with a mouse; with a finger only on notes at least 24 px wide (a third of the note, up to 14 px),
+     so a short note you just tapped in moves instead of stretching (UX-4 fix 2) */
+  let touchPt=false;
+  const hit=(t,G,p)=>{ for(let i=t.events.length-1;i>=0;i--){ const e=t.events[i], R=evRect(t,G,e); if(!R) continue; if(p.y>=R.y-1&&p.y<=R.y+R.h+1&&p.x>=R.x-1&&p.x<=R.x+R.w+1){
+      const ez=touchPt?(R.w>=24?Math.min(14,R.w/3):0):7; return {e,edge:!G.drum&&ez>0&&p.x>R.x+R.w-ez}; } } return null; };
   const velHit=(t,G,p)=>{ let best=null,bd=9; t.events.forEach(e=>{ const x=G.drum?G.K+Math.round(e.b*4)*G.cw+G.cw/2:G.K+e.b*G.bw+1, d=Math.abs(x-p.x); if(d<bd&&(!ED.sel.size||ED.sel.has(e)||!best)){ bd=d; best=e; } }); return best; };
   /* velocity: a selected note's bar moves every selected note together, keeping their differences (Ableton); Alt sets them all to the same value; an unselected bar changes just that note (UX-2) */
   const setVel=(t,G,p,e)=>{ const vy=G.gh+8, v=clamp(1-(p.y-vy-3)/(ED.velH-6),0.05,1), D=ED.drag, r=x=>Math.round(x*100)/100;
     if(D&&D.group){ const dv=v-D.orig.get(D.lead); D.group.forEach(x=>x.v=r(D.alt?v:clamp(D.orig.get(x)+dv,0.05,1))); } else e.v=r(v); };
   cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('pointerdown',e=>{
-    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e); e.preventDefault(); ensureAudio(); cv.focus&&cv.focus();
+    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e); touchPt=e.pointerType==='touch'; e.preventDefault(); ensureAudio(); cv.focus&&cv.focus();
     if(p.y>G.gh+4){ const v=velHit(t,G,p); if(v){ const grp=ED.sel.has(v)&&ED.sel.size>1?[...ED.sel]:null; ED.drag={mode:'vel',group:grp,lead:v,alt:e.altKey,orig:new Map((grp||[v]).map(x=>[x,x.v]))}; setVel(t,G,p,v); drawEditor(); try{ cv.setPointerCapture(e.pointerId); }catch(_){} } return; }
     if(p.x<G.K){ const n=G.drum?(G.rows[Math.floor(p.y/G.rh)]||[])[0]:ED.top-Math.floor(p.y/G.rh); if(n!=null) previewNote(t,n); return; }
     const h=hit(t,G,p);
@@ -5082,7 +5103,7 @@ function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bar
     try{ cv.setPointerCapture(e.pointerId); }catch(_){} drawEditor();
   });
   cv.addEventListener('pointermove',e=>{
-    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e);
+    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e); if(!ED.drag) touchPt=e.pointerType==='touch';
     if(ED.paint){ const r=Math.floor(p.y/G.rh), row=G.rows[r], s=Math.floor((p.x-G.K)/G.cw); if(row&&s>=0&&s<G.steps&&p.y<G.gh) paintStep(t,row[0],s,ED.paint); return; }
     const D=ED.drag;
     if(ED.box){ const B=ED.box; B.x1=p.x; B.y1=Math.min(p.y,G.gh); const x0=Math.min(B.x0,B.x1), x1=Math.max(B.x0,B.x1), y0=Math.min(B.y0,B.y1), y1=Math.max(B.y0,B.y1);

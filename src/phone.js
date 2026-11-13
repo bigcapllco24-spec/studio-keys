@@ -4,7 +4,7 @@
    Nothing is rebuilt: each tab shows one of the existing sections, and while the phone layout is on a few of the
    studio's own controls are moved into the sheets (and put back when it's off). Desktop and tablet keep the page as it was.
    var (not const) so files that load earlier can check PH without hitting the temporal dead zone. */
-var PH={on:false,tab:'keys',sec:null,moved:[],sheet:null,opener:null,partId:null,lock:null,lp:null,lpDone:false,down:null,oct:0,iosTip:false,skipPop:false,edDown:0};
+var PH={on:false,tab:'keys',sec:null,moved:[],sheet:null,opener:null,partId:null,lock:null,lp:null,lpDone:false,down:null,oct:0,iosTip:false,skipPop:false,pendPush:null,edDown:0,touching:0,eatArm:false,eatUntil:0};
 var PH_MQ=window.matchMedia?window.matchMedia('(max-width:600px), (max-height:500px) and (pointer:coarse)'):null;
 var IS_IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 const PH_SHEET_T={song:'Song',gear:'Keys settings',bpm:'Tempo and loop',sing:'Sing a part',add:'Add a part',part:'Part'};
@@ -50,9 +50,11 @@ function phMoreOpen(k){
 }
 
 /* ----- history: the Android back button (and iPhone swipe back) closes a sheet, the editor or a More page ----- */
-function phPush(kind){ try{ history.pushState({ph:kind},''); }catch(e){} }
-function phPop(){ try{ if(history.state&&history.state.ph){ PH.skipPop=true; history.back(); } }catch(e){} }
-window.addEventListener('popstate',()=>{ if(PH.skipPop){ PH.skipPop=false; return; } if(!PH.on) return;
+/* history.back() is async: when one overlay replaces another (a sheet's Edit notes opens the editor), the new entry is pushed
+   only after that back has landed, or the queued back would undo it and Back would leave the app (UX-4 fix 1) */
+function phPush(kind){ if(PH.skipPop){ PH.pendPush=kind; return; } try{ history.pushState({ph:kind},''); }catch(e){} }
+function phPop(){ if(PH.pendPush){ PH.pendPush=null; return; } try{ if(history.state&&history.state.ph&&!PH.skipPop){ PH.skipPop=true; history.back(); } }catch(e){} }
+window.addEventListener('popstate',()=>{ if(PH.skipPop){ PH.skipPop=false; const k=PH.pendPush; PH.pendPush=null; if(k&&PH.on) phPush(k); return; } if(!PH.on) return;
   if(PH.sheet) phSheetClose(true); else if(!$('#editor').hidden) closeEditor(true); else if(PH.sec) phTab('more'); });
 
 /* ----- sheets ----- */
@@ -202,7 +204,15 @@ function phoneInit(){
   document.addEventListener('click',e=>{ const b=e.target.closest('[data-phpart]'); if(b) phOpenPart(b.dataset.phpart,true); });
   /* song map: hold a section for its menu (rename, duplicate, longer, split, delete) */
   const sm=$('#songMap'); let smT=0, smDone=false;
-  sm.addEventListener('pointerdown',e=>{ const b=e.target.closest('.smb'); if(!b) return; clearTimeout(smT); const x=e.clientX, y=e.clientY; smT=setTimeout(()=>{ smDone=true; songSecMenu(b.dataset.sid,x,y,b); },500); });
+  sm.addEventListener('pointerdown',e=>{ smDone=false; const b=e.target.closest('.smb'); if(!b) return; clearTimeout(smT); smT=setTimeout(()=>{ smDone=true; const r=b.getBoundingClientRect(); songSecMenu(b.dataset.sid,r.left,r.bottom+8,b); },500); }); /* under the block, not under the finger */
+  /* a menu that opens while a finger is still down (a long press) ignores the tap that the finger's release makes (UX-4 fix 3) */
+  document.addEventListener('pointerdown',e=>{ if(e.pointerType==='touch') PH.touching=e.isPrimary?1:PH.touching+1; },true);
+  ['pointerup','pointercancel'].forEach(k=>document.addEventListener(k,e=>{ if(e.pointerType!=='touch') return; PH.touching=Math.max(0,PH.touching-1);
+    if(PH.eatArm&&!PH.touching){ PH.eatArm=false; PH.eatUntil=performance.now()+450; } },true));
+  document.addEventListener('click',e=>{ if(PH.eatUntil&&performance.now()<PH.eatUntil&&e.target.closest&&e.target.closest('#songMenu')){ PH.eatUntil=0; e.stopImmediatePropagation(); e.preventDefault(); } },true);
+  { const menu=$('#songMenu'); if(menu) try{ new MutationObserver(()=>{ if(menu.hidden){ PH.eatArm=false; return; } if(PH.touching) PH.eatArm=true;
+      if(PH.on) menu.querySelectorAll('button>span').forEach(sp=>{ if(/^(Ctrl\/Cmd\+\w|Delete key)$/.test(sp.textContent)) sp.remove(); }); /* no keyboard shortcuts on a phone */
+    }).observe(menu,{attributes:true,attributeFilter:['hidden'],childList:true}); }catch(e){} }
   ['pointerup','pointercancel','pointerleave'].forEach(k=>sm.addEventListener(k,()=>clearTimeout(smT)));
   sm.addEventListener('click',e=>{ if(smDone){ smDone=false; e.stopPropagation(); } },true);
   sm.addEventListener('contextmenu',e=>{ if(PH.on) e.preventDefault(); });
@@ -223,7 +233,7 @@ function phoneInit(){
   /* the first tap anywhere turns the sound on (a phone has no "click to start" pill) */
   document.addEventListener('pointerdown',e=>{ if(PH.on&&!A.ctx&&!e.target.closest('#asOrb')) ensureAudio(); },true);
   /* the status bar takes the theme's background */
-  const meta=document.querySelector('meta[name="theme-color"]'), tc=()=>{ if(meta) meta.content=cssVar('--t1')||'#07120e'; };
+  const meta=document.querySelector('meta[name="theme-color"]'), tc=()=>{ const c=cssVar('--t1')||cssVar('--bg'); if(meta&&c) meta.content=c; };
   try{ new MutationObserver(tc).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']}); }catch(e){} tc();
   setInterval(phPos,150);
   let rz=0; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(PH.on&&PH.tab==='play') phKeybed(); if(PH.on&&!$('#editor').hidden){ edHint(); phEdFit(); } },150); });

@@ -18,7 +18,7 @@ function fxPanel(t){
       <button class="btn small" type="button" data-tfxpreset="${t.id}" title="Effects a producer would start with for this part">Studio preset</button>
       <button class="btn small ghost" type="button" data-tfxclear="${t.id}">Clear effects</button></div></div>`;
 }
-function selBar(){ if(SEL.size<(PH.on?1:2)) return ''; return `<div class="selbar"><b>${SEL.size} ${PH.on?(SEL.size>1?'parts':'part'):'tracks'} selected</b><span class="hint">Ctrl/Cmd+click a track to add or remove it</span><span class="spacer"></span>
+function selBar(){ if(SEL.size<(PH.on?1:2)) return ''; return `<div class="selbar"><b>${SEL.size} ${PH.on?(SEL.size>1?'parts':'part'):'tracks'} selected</b><span class="hint">${PH.on?'Tap or hold a part to add or remove it':'Ctrl/Cmd+click a track to add or remove it'}</span><span class="spacer"></span>
   <button class="btn small primary" type="button" data-sel="play">▶ Play these together</button><button class="btn small" type="button" data-sel="mute">Mute</button><button class="btn small" type="button" data-sel="solo">Solo</button><button class="btn small" type="button" data-sel="fx">FX</button><button class="btn small" type="button" data-sel="dup">Duplicate</button><button class="btn small ghost" type="button" data-sel="del">Delete</button><button class="btn small ghost" type="button" data-sel="clear">Clear selection</button></div>`; }
 function setPreview(ids){ ensureAudio(); PREVIEW=ids&&ids.size?new Set(ids):null; refreshTrackGains(); if(PREVIEW&&!TR.running) loopPlay(); if(!PREVIEW&&TR.running) loopStop(); renderTracks(); }
 function setView(v){ VIEW=v; document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===v))); $('#playlist').hidden=v!=='playlist'; $('#mixerView').hidden=v!=='mixer'; if(v==='mixer') renderMixerView(); else drawRolls(); }
@@ -132,7 +132,7 @@ function setEdMode(m){ ED.mode=m; store.set('edMode',m); document.querySelectorA
 function edHint(){ const t=edTrack(); if(!t) return;
   if(PH.on){ const side=innerHeight>innerWidth?'Turn your phone sideways for more room. ':''; $('#edHint').textContent=side+(isDrumTrack(t)
     ?(ED.mode==='draw'?'Tap steps to add or remove hits · hold a hit to select more · pinch to zoom, two fingers to scroll':'Drag a box to select hits · drag them to move · Copy, Paste and Delete are above')
-    :(ED.mode==='draw'?'Tap to add a note · drag to move · drag its right end to lengthen · hold a note to select more · pinch to zoom, two fingers to scroll':'Drag a box to select · drag notes to move · Copy, Paste and Delete are above · bottom lane sets loudness')); return; }
+    :(ED.mode==='draw'?'Tap to add a note · drag to move · drag the end of a long note to stretch it · double-tap deletes · hold to select more · pinch zooms, two fingers scroll':'Drag a box to select · drag notes to move · Copy, Paste and Delete are above · bottom lane sets loudness')); return; }
   $('#edHint').textContent=isDrumTrack(t)
   ?(ED.mode==='draw'?'Click or drag across steps to add or remove hits · Shift for soft hits · Drag in the bottom lane to set how hard each hit is (drag a selected bar to move all selected, Alt sets them equal)':'Drag a box to select hits · Drag them to move · Ctrl+C / Ctrl+V to copy · Delete removes · Bottom lane sets how hard the selected hits are')
   :(ED.mode==='draw'?'Click to add a note · Drag notes to move, right edge to resize · Alt+drag copies · Right-click deletes · Bottom lane sets loudness: drag a selected bar to move all selected, Alt sets them equal':'Drag a box to select · Shift+click adds to the selection · Drag to move · Arrows nudge · Ctrl+C / Ctrl+V / Ctrl+D · Delete removes · Bottom lane sets the loudness of the selected notes'); }
@@ -216,14 +216,18 @@ function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bar
   const cv=$('#edCanvas');
   const pos=e=>{ const r=cv.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; };
   const snap=b=>Math.floor(b/ED.grid+1e-6)*ED.grid;
-  const hit=(t,G,p)=>{ for(let i=t.events.length-1;i>=0;i--){ const e=t.events[i], R=evRect(t,G,e); if(!R) continue; if(p.y>=R.y-1&&p.y<=R.y+R.h+1&&p.x>=R.x-1&&p.x<=R.x+R.w+1) return {e,edge:!G.drum&&p.x>R.x+R.w-7}; } return null; };
+  /* the right end resizes: 7 px with a mouse; with a finger only on notes at least 24 px wide (a third of the note, up to 14 px),
+     so a short note you just tapped in moves instead of stretching (UX-4 fix 2) */
+  let touchPt=false;
+  const hit=(t,G,p)=>{ for(let i=t.events.length-1;i>=0;i--){ const e=t.events[i], R=evRect(t,G,e); if(!R) continue; if(p.y>=R.y-1&&p.y<=R.y+R.h+1&&p.x>=R.x-1&&p.x<=R.x+R.w+1){
+      const ez=touchPt?(R.w>=24?Math.min(14,R.w/3):0):7; return {e,edge:!G.drum&&ez>0&&p.x>R.x+R.w-ez}; } } return null; };
   const velHit=(t,G,p)=>{ let best=null,bd=9; t.events.forEach(e=>{ const x=G.drum?G.K+Math.round(e.b*4)*G.cw+G.cw/2:G.K+e.b*G.bw+1, d=Math.abs(x-p.x); if(d<bd&&(!ED.sel.size||ED.sel.has(e)||!best)){ bd=d; best=e; } }); return best; };
   /* velocity: a selected note's bar moves every selected note together, keeping their differences (Ableton); Alt sets them all to the same value; an unselected bar changes just that note (UX-2) */
   const setVel=(t,G,p,e)=>{ const vy=G.gh+8, v=clamp(1-(p.y-vy-3)/(ED.velH-6),0.05,1), D=ED.drag, r=x=>Math.round(x*100)/100;
     if(D&&D.group){ const dv=v-D.orig.get(D.lead); D.group.forEach(x=>x.v=r(D.alt?v:clamp(D.orig.get(x)+dv,0.05,1))); } else e.v=r(v); };
   cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('pointerdown',e=>{
-    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e); e.preventDefault(); ensureAudio(); cv.focus&&cv.focus();
+    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e); touchPt=e.pointerType==='touch'; e.preventDefault(); ensureAudio(); cv.focus&&cv.focus();
     if(p.y>G.gh+4){ const v=velHit(t,G,p); if(v){ const grp=ED.sel.has(v)&&ED.sel.size>1?[...ED.sel]:null; ED.drag={mode:'vel',group:grp,lead:v,alt:e.altKey,orig:new Map((grp||[v]).map(x=>[x,x.v]))}; setVel(t,G,p,v); drawEditor(); try{ cv.setPointerCapture(e.pointerId); }catch(_){} } return; }
     if(p.x<G.K){ const n=G.drum?(G.rows[Math.floor(p.y/G.rh)]||[])[0]:ED.top-Math.floor(p.y/G.rh); if(n!=null) previewNote(t,n); return; }
     const h=hit(t,G,p);
@@ -247,7 +251,7 @@ function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bar
     try{ cv.setPointerCapture(e.pointerId); }catch(_){} drawEditor();
   });
   cv.addEventListener('pointermove',e=>{
-    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e);
+    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e); if(!ED.drag) touchPt=e.pointerType==='touch';
     if(ED.paint){ const r=Math.floor(p.y/G.rh), row=G.rows[r], s=Math.floor((p.x-G.K)/G.cw); if(row&&s>=0&&s<G.steps&&p.y<G.gh) paintStep(t,row[0],s,ED.paint); return; }
     const D=ED.drag;
     if(ED.box){ const B=ED.box; B.x1=p.x; B.y1=Math.min(p.y,G.gh); const x0=Math.min(B.x0,B.x1), x1=Math.max(B.x0,B.x1), y0=Math.min(B.y0,B.y1), y1=Math.max(B.y0,B.y1);
