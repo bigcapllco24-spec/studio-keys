@@ -43,6 +43,50 @@ try {
     await E(() => closeEditor()); await W(200);
     ok(`${w}x${h}: tap a part opens its sheet, Edit notes opens the editor full screen`, sh.sheet === 'part' && sh.open && ed.open && ed.pos === 'fixed' && ed.x <= 0 && ed.y <= 0 && ed.w >= ed.iw && ed.h >= ed.ih - 1 && !ed.sheet, `sheet "${sh.name}", editor ${ed.w}x${ed.h} ${ed.pos}`);
   }
+  // 8-10. UX-4 fix 1 regressions at 390x844 (real touch events through CDP)
+  await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  let cdp, bassId; const url390 = target;
+  const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((q, i) => ({ x: q[0], y: q[1], id: i })) });
+  const fresh = async () => { await p.goto(url390, { waitUntil: 'load', timeout: 60000 }); await W(1500); await E(() => { ASSIST.voice = false; });
+    cdp = await p.createCDPSession(); await E(() => { runActions(localBrain('drums like ben bohmer at 124').actions); runActions([{ type: 'add_bass' }]); });
+    await tap('#phTabs [data-ptab="song"]'); bassId = await E(() => PROJ.tracks.find(t => t.role === 'bass').id); };
+  const stillHere = async () => { try { return await E(() => typeof PH !== 'undefined' && PH.on); } catch (e) { return false; } };
+  await fresh();
+  // 8. Back from the editor opened through a part's sheet closes the editor and stays in the app (it used to leave the page)
+  try {
+    await tap(`#tracks>.trk[data-tid="${bassId}"] .tname`); await W(250); await tap('#phPartB [data-edit]'); await W(600);
+    const url0 = p.url(), st0 = await E(() => ({ ed: !$('#editor').hidden, state: JSON.stringify(history.state) }));
+    await E(() => history.back()); await W(700);
+    const url1 = p.url(), st1 = await E(() => ({ ed: !$('#editor').hidden, phone: document.documentElement.hasAttribute('data-phone'), tab: PH.tab }));
+    ok('390x844: Back from the editor (opened from a part) closes it and keeps the URL', st0.ed && !st1.ed && st1.phone && url1 === url0, `editor ${st0.ed}→${st1.ed}, state ${st0.state}, ${url1 === url0 ? 'same URL' : 'went to ' + url1}`);
+  } catch (e) { ok('390x844: Back from the editor (opened from a part) closes it and keeps the URL', false, 'left the page? ' + e.message.slice(0, 80)); }
+  // 9. A just-tapped 1/16 note (about 6 px wide) moves when dragged, it doesn't stretch
+  try {
+    if (!await stillHere()) await fresh(); /* check 8 failed by leaving the page */
+    await tap('#phTabs [data-ptab="song"]');
+    await tap(`#tracks>.trk[data-tid="${bassId}"] .tname`); await W(250); await tap('#phPartB [data-edit]'); await W(600);
+    const n0 = await E(() => edTrack().events.length);
+    const spot = await E(() => { const G = edGeom(), cr = $('#edCanvas').getBoundingClientRect(); return { x: cr.left + G.K + 9.1 * G.bw, y: cr.top + 4 * ED.rowH + ED.rowH / 2 }; });
+    await p.touchscreen.tap(spot.x, spot.y); await W(300);
+    const a = await E(() => { const t = edTrack(), e = t.events[t.events.length - 1], G = edGeom(), R = evRect(t, G, e), cr = $('#edCanvas').getBoundingClientRect(); return { n: t.events.length, ev: { b: e.b, d: e.d, n: e.n }, w: Math.round(R.w), x: cr.left + R.x + R.w / 2, y: cr.top + R.y + R.h / 2 }; });
+    await touch('touchStart', [[a.x, a.y]]); for (let i = 1; i <= 6; i++) { await touch('touchMove', [[a.x + 8 * i, a.y - 5 * i]]); await W(30); } await touch('touchEnd', []); await W(300);
+    const z = await E(() => { const e = edTrack().events[edTrack().events.length - 1]; return { b: e.b, d: e.d, n: e.n }; });
+    await E(() => closeEditor()); await W(200);
+    ok('390x844: dragging a just-tapped 1/16 note moves it without stretching it', a.n === n0 + 1 && z.d === a.ev.d && (z.b !== a.ev.b || z.n !== a.ev.n), `${a.w} px note ${JSON.stringify(a.ev)} → ${JSON.stringify(z)}`);
+  } catch (e) { ok('390x844: dragging a just-tapped 1/16 note moves it without stretching it', false, e.message.slice(0, 120)); }
+  // 10. Releasing after a 0.7 s hold on a song-map block leaves its menu open and the sections unchanged; Duplicate still works after
+  try {
+    if (!await stillHere()) await fresh();
+    await E(() => songTemplate('short')); await W(300); await tap('#phTabs [data-ptab="song"]'); await E(() => scrollTo(0, 0)); await W(200);
+    const before = await E(() => songSections().map(s => s.name + s.bars).join(' '));
+    const s = await E(() => { const q = document.querySelector('#songMap .smb').getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; });
+    await touch('touchStart', [[s.x, s.y]]); await W(700); await touch('touchEnd', []); await W(500);
+    const after = await E(() => ({ menu: !$('#songMenu').hidden, secs: songSections().map(s => s.name + s.bars).join(' ') }));
+    let dup = '';
+    if (after.menu) { const d = await E(() => { const b = [...$('#songMenu').querySelectorAll('button')].find(b => /^Duplicate/.test(b.textContent.trim())); if (!b) return null; const q = b.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; });
+      if (d) { await p.touchscreen.tap(d.x, d.y); await W(400); dup = await E(() => songSections().length + ' sections'); } }
+    ok('390x844: release after a 0.7 s hold on a song-map block leaves the menu open, sections unchanged', after.menu && after.secs === before && /^4 /.test(dup), `menu ${after.menu ? 'open' : 'closed'}, "${before}" → "${after.secs}", then Duplicate → ${dup || 'n/a'}`);
+  } catch (e) { ok('390x844: release after a 0.7 s hold on a song-map block leaves the menu open, sections unchanged', false, e.message.slice(0, 120)); }
   // 7. back to a desktop window: the desktop layout returns
   await p.setViewport({ width: 1400, height: 900, isMobile: false, hasTouch: false }); await W(600);
   const dk = await E(() => ({ phone: document.documentElement.hasAttribute('data-phone'), orb: !!document.querySelector('.assistant>#asOrb'), name: !!document.querySelector('.songbar #projName'), themes: !!document.querySelector('.top .themes'), top: getComputedStyle($('.top')).display !== 'none', bar: getComputedStyle($('#phBottom')).display }));
