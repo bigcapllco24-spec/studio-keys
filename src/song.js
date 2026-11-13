@@ -114,8 +114,8 @@ function songMove(ref,index){ const s=songFind(ref); if(!s) return false; const 
 function songResize(ref,bars){ const s=songFind(ref); if(!s) return false; bars=clamp(Math.round(+bars||s.bars),1,64); if(bars===s.bars&&!s.auto) return false; const was=s.bars;
   songEdit(()=>{ s.bars=bars; },{structure:true}); songFlash({sections:[s.id]},`${s.name}: ${bars} bars (was ${was})`); return true; }
 function songRename(ref,name){ const s=songFind(ref); name=String(name||'').trim().slice(0,24); if(!s||!name||name===s.name) return false;
-  songEdit(S=>{ s.name=songUniqueName(name,S,s); const k=songKindOf(name); if(k!=='other') s.kind=k; }); return true; }
-function songSetKind(ref,kind){ const s=songFind(ref); if(!s||!SONG_KINDS.includes(kind)) return false; songEdit(()=>{ s.kind=kind; }); return true; }
+  const was=s.name; songEdit(S=>{ s.name=songUniqueName(name,S,s); const k=songKindOf(name); if(k!=='other') s.kind=k; }); songChip(`Renamed ${was} to ${s.name}`); return true; }
+function songSetKind(ref,kind){ const s=songFind(ref); if(!s||!SONG_KINDS.includes(kind)||s.kind===kind) return false; songEdit(()=>{ s.kind=kind; }); songChip(`${s.name} is now a ${SONG_KIND_NAME[kind]||kind}`); return true; }
 function songSplit(ref){ const s=songFind(ref); if(!s||s.bars<2) return null; let b=null;
   songEdit(S=>{ const first=Math.floor(s.bars/2); b=JSON.parse(JSON.stringify(s)); b.id=songNewId(S); b.bars=s.bars-first; s.bars=first;
     b.off=((s.off||0)+first*4)%(PROJ.bars*4)||0; if(!b.off) delete b.off; b.name=songUniqueName(s.name,S); s.end=null; S.splice(S.indexOf(s)+1,0,b); },{structure:true});
@@ -226,8 +226,15 @@ function songApplyFlash(){ const F=SONG.flash; if(!F||performance.now()>F.until)
   document.querySelectorAll('#songStrip .sec,#songMap .smb').forEach(el=>{ if(F.all||F.secs.has(el.dataset.sid)) el.classList.add('flash'); });
   document.querySelectorAll('#tracks .part').forEach(el=>{ if(F.all||F.secs.has(el.dataset.sid)||F.parts.has(el.dataset.sid+':'+el.dataset.tid)) el.classList.add('flash'); });
   clearTimeout(SONG.flashT); SONG.flashT=setTimeout(()=>document.querySelectorAll('.flash').forEach(el=>el.classList.remove('flash')),left); }
-let songChipT=0;
-function songChip(text){ const c=$('#songChip'); if(!c) return; $('#songChipT').textContent=text; c.hidden=false; clearTimeout(songChipT); songChipT=setTimeout(()=>{ c.hidden=true; },7000); }
+/* the chip names one change and its Undo undoes exactly that change: it remembers the undo state right after the change,
+   and any newer change hides it (songChipNote, called by the undo history). o.undo:false = a note with no Undo (looping is not a change) */
+let songChipT=0, songChipTok=null;
+function songChip(text,o={}){ const c=$('#songChip'); if(!c) return; $('#songChipT').textContent=text;
+  songChipTok=o.undo===false||typeof UNDO==='undefined'?null:UNDO.last; const u=$('#songChipU'); if(u) u.hidden=!songChipTok;
+  c.hidden=false; clearTimeout(songChipT); songChipT=setTimeout(songChipHide,7000); }
+function songChipHide(){ const c=$('#songChip'); if(c) c.hidden=true; songChipTok=null; clearTimeout(songChipT); }
+function songChipNote(prev,now,pushed){ if(!songChipTok) return; if(!pushed&&songChipTok===prev){ songChipTok=now; return; } songChipHide(); }
+function songChipUndo(){ const ok=!!songChipTok&&UNDO.last===songChipTok; songChipHide(); if(ok) undo(); }
 const songSnapshot=()=>JSON.stringify(songSections());
 /* for the assistant: call with songSnapshot() taken before a batch; flashes the sections and parts that changed */
 function songFlashDiff(before,text){ let B=null; try{ B=typeof before==='string'?JSON.parse(before):before; }catch(e){} if(!Array.isArray(B)) return null;
@@ -241,7 +248,7 @@ const songVW=()=>{ const el=$('#songScroll'); return el&&el.clientWidth||900; };
 const songPx=()=>clamp(SONG.view.zoom||Math.max(3,(songVW()-84)/Math.max(1,songBars())),3,160); /* pixels per bar */
 function songUI(){ const on=songOn(), pl=$('#playlist'); if(!pl) return;
   document.querySelectorAll('#songSeg [data-songmode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.songmode===SONG.view.mode)));
-  pl.classList.toggle('song',on); if(on) pl.setAttribute('tabindex','-1'); else pl.removeAttribute('tabindex');
+  pl.classList.toggle('song',on); const pd=$('#posDisp'); if(pd){ pd.classList.toggle('songpos',on); if(!on){ pd.textContent='1 . 1'; pd.title='Bar . beat'; } } if(on) pl.setAttribute('tabindex','-1'); else pl.removeAttribute('tabindex');
   ['#songHead','#songHint','#songMap'].forEach(id=>{ const el=$(id); if(el) el.hidden=!on; });
   const h=$('.pl-head'); if(h) h.hidden=on; const ml=$('#mp3Len'); if(ml) ml.hidden=on;
   const mp=$('#exportMp3'); if(mp) mp.title=on?'Download the whole song, start to end, as an MP3':'Download the song as an MP3';
@@ -268,13 +275,13 @@ function songLaneHTML(t){ const S=songSections(), px=songPx(); let x=0;
 function songRender(){ songUI(); if(!songOn()||!$('#songStrip')) return; const fk=songFocusKey();
   const S=songSections(), px=songPx(), sel=SONG.view.sel, lp=SONG.view.loop&&SONG.view.loop.sid; let x=0;
   $('#songStrip').style.width=(songBars()*px+84)+'px';
-  $('#songStrip').innerHTML=S.map(s=>{ const w=s.bars*px, h=`<div class="sec k-${s.kind}${s.id===sel?' cur':''}${s.id===lp?' looped':''}${w<46?' tiny':w<112?' narrow':''}" data-sid="${s.id}" style="left:${x}px;width:${Math.max(4,w-2)}px">
-      <button type="button" class="sname" aria-pressed="${s.id===sel}" title="${esc(s.name)} · ${s.bars} bars · drag to move, Alt+drag copies · double-click to rename · right-click for more">${esc(s.name)}</button><span class="sbars mono">${s.bars}</span>${s.end&&s.end.to&&s.end.to!=='none'?`<i class="send" title="Into the next part: ${esc(s.end.to)}"></i>`:''}<button type="button" class="smore" aria-haspopup="menu" aria-label="More for ${esc(s.name)}" title="More">⋯</button><span class="rz" title="Drag to make ${esc(s.name)} longer or shorter (Alt: 1 bar)"></span></div>`; x+=w; return h; }).join('')
+  $('#songStrip').innerHTML=S.map(s=>{ const w=s.bars*px, h=`<div class="sec k-${s.kind}${s.id===sel?' cur':''}${s.id===lp?' looped':''}${songSecCls(w)}" data-sid="${s.id}" style="left:${x}px;width:${Math.max(4,w-2)}px">
+      <button type="button" class="sname" aria-pressed="${s.id===sel}" title="${esc(s.name)} · ${s.bars} bars · drag to move, Alt+drag copies · double-click to rename · right-click (or hold) for more">${esc(s.name)}</button><span class="sbars mono">${s.bars}</span>${s.end&&s.end.to&&s.end.to!=='none'?`<i class="send" title="Into the next part: ${esc(s.end.to)}"></i>`:''}<button type="button" class="smore" aria-haspopup="menu" aria-label="More for ${esc(s.name)}" title="More">⋯</button><span class="rz" title="Drag to make ${esc(s.name)} longer or shorter (Alt: 1 bar)"></span></div>`; x+=w; return h; }).join('')
     +`<button type="button" class="btn small sadd" style="left:${x+6}px" title="Add an 8-bar section at the end">+ Add</button>`;
   $('#songLen').textContent=songLenText();
   $('#songFollow').setAttribute('aria-pressed',String(!!SONG.view.follow));
   $('#songMap').innerHTML=S.map(s=>`<button type="button" class="smb k-${s.kind}${s.id===lp?' looped':''}" data-sid="${s.id}" style="flex-grow:${s.bars}" aria-pressed="${s.id===lp}" title="Tap to loop ${esc(s.name)}"><b>${esc(s.name)}</b><span>${s.bars} bars</span></button>`).join('')+'<span class="hint smap-hint">Tap a section to loop it. Editing parts needs a tablet or a computer.</span>';
-  songPreviews(); songScrollSync(); songApplyFlash(); if(fk) songRefocus(fk); }
+  songFitNames(); songPreviews(); songScrollSync(); songApplyFlash(); if(fk) songRefocus(fk); }
 function songPreviews(){ PROJ.tracks.forEach(t=>{ const lane=document.querySelector(`.slane[data-lane="${t.id}"]`); if(!lane) return; const used=new Set(['A']); songSections().forEach(s=>{ const p=s.parts[t.id]; if(p&&p.variant) used.add(p.variant); });
   used.forEach(v=>{ try{ lane.style.setProperty('--pv'+v,`url("${songPvURL(t,v)}")`); }catch(e){} }); }); }
 function songScrollSync(){ const sc=$('#songScroll'); if(!sc) return; $('#playlist').style.setProperty('--sx',sc.scrollLeft+'px'); songDrawRuler(); }
@@ -294,7 +301,9 @@ function songNowMark(id){ if(SONG.nowSid===id) return; SONG.nowSid=id; document.
 /* playhead, position readout and Follow (called every frame by daw.js) */
 function songAnim(){ const ph=$('#playhead'), pos=$('#posDisp'), sc=$('#songScroll'), playing=TR.running&&LOOP.state==='playing'&&SONG.segs.length;
   const beat=playing?clamp(songBeatAt(A.ctx.currentTime),0,songBeats()):SONG.cursor, at=songAt(beat);
-  if(pos&&at){ const t=`${Math.floor(beat/4)+1} . ${Math.floor(mod(beat,4))+1} · ${at.section.name} · bar ${at.barInSection} of ${at.section.bars}`; if(pos.textContent!==t) pos.textContent=t; }
+  /* a fixed-width readout, so the transport row doesn't jump when you switch Loop/Song or a long section name comes up */
+  if(pos&&at){ const a=`${Math.floor(beat/4)+1} . ${Math.floor(mod(beat,4))+1}`, b=`${at.section.name} · ${at.barInSection}/${at.section.bars}`, k=a+'|'+b;
+    if(pos.dataset.k!==k||!pos.firstElementChild){ pos.dataset.k=k; pos.innerHTML=`<b>${a}</b><small>${esc(b)}</small>`; pos.title=`Bar . beat · ${at.section.name}, bar ${at.barInSection} of ${at.section.bars}`; } }
   songNowMark(playing&&at?at.section.id:null);
   const px=songPx()/4, x=beat*px;
   if(playing&&SONG.view.follow&&sc&&sc.clientWidth){ const vw=sc.clientWidth, maxL=sc.scrollWidth-vw; if(x<sc.scrollLeft||x>sc.scrollLeft+vw*0.85){ const nl=clamp(x-vw*0.15,0,Math.max(0,maxL)); if(Math.abs(nl-sc.scrollLeft)>1){ SONG.prog=nl; sc.scrollLeft=nl; } } }
@@ -312,8 +321,21 @@ function songRelayout(){ const S=songSections(), px=songPx(), starts={}; let x=0
   document.querySelectorAll('#tracks .part').forEach(el=>{ const s=S.find(q=>q.id===el.dataset.sid); if(!s) return; const w=s.bars*px; el.style.left=starts[s.id]+'px'; el.style.width=Math.max(2,w-2)+'px'; el.style.setProperty('--pw',PROJ.bars*px+'px'); el.style.setProperty('--po',-(s.off||0)/4*px+'px'); el.classList.toggle('tiny',w<26); });
   document.querySelectorAll('#tracks .sl-in').forEach(el=>el.style.width=(x+84)+'px');
   $('#songStrip').style.width=(x+84)+'px';
-  document.querySelectorAll('#songStrip .sec').forEach(el=>{ const s=S.find(q=>q.id===el.dataset.sid); if(!s) return; const w=s.bars*px; el.style.left=starts[s.id]+'px'; el.style.width=Math.max(4,w-2)+'px'; el.classList.toggle('tiny',w<46); el.classList.toggle('narrow',w>=46&&w<112); });
-  const add=$('#songStrip .sadd'); if(add) add.style.left=(x+6)+'px'; songScrollSync(); }
+  document.querySelectorAll('#songStrip .sec').forEach(el=>{ const s=S.find(q=>q.id===el.dataset.sid); if(!s) return; const w=s.bars*px; el.style.left=starts[s.id]+'px'; el.style.width=Math.max(4,w-2)+'px'; el.classList.toggle('tiny',w<46); el.classList.toggle('narrow',w>=46&&w<112); el.classList.toggle('slim',w<92); });
+  const add=$('#songStrip .sadd'); if(add) add.style.left=(x+6)+'px'; songFitNames(); songScrollSync(); }
+const songSecCls=w=>(w<46?' tiny':w<112?' narrow':'')+(w<92?' slim':'');
+/* short names for narrow sections, unique within the song: Intro In, Build Bu, Break Br, Drop / Drop 2 / Drop 3 → D1 D2 D3 (QA, 13 Nov: "D…" three times) */
+function songShortNames(S){ const P=S.map(s=>{ const n=String(s.name).trim(), m=/^(.*?)\s*(\d+)$/.exec(n); const base=(m&&m[1]?m[1]:n).replace(/\s+/g,''); return {id:s.id,base,k:base.toLowerCase(),num:m&&m[1]?+m[2]:null}; });
+  const cnt={}; P.forEach(p=>cnt[p.k]=(cnt[p.k]||0)+1); const keys=Object.keys(cnt), len={};
+  keys.forEach(k=>{ let L=cnt[k]>1?1:2; while(L<k.length&&keys.some(o=>o!==k&&o.slice(0,L)===k.slice(0,L))) L++; len[k]=L; });
+  const out={}; P.forEach(p=>{ let x=p.base.slice(0,len[p.k]); x=x.charAt(0).toUpperCase()+x.slice(1); if(cnt[p.k]>1) x+=p.num!=null?p.num:1; else if(p.num!=null) x+=p.num; out[p.id]=x||p.base; }); return out; }
+/* a name that doesn't fit its block shows its short name (the full name stays in the tooltip and for screen readers) */
+function songFitNames(){ const S=songSections(), els=[], short=new Set(), grp=s=>String(s.name).trim().replace(/\s*\d+$/,'').toLowerCase()||s.name;
+  document.querySelectorAll('#songStrip .sec').forEach(el=>{ const n=el.querySelector('.sname'), s=S.find(q=>q.id===el.dataset.sid); if(!n||!s) return;
+    if(n.textContent!==s.name) n.textContent=s.name; els.push([n,s]); if(n.scrollWidth>n.clientWidth+1) short.add(grp(s)); });
+  if(!short.size){ els.forEach(([n])=>n.removeAttribute('aria-label')); return; }
+  const sh=songShortNames(S); /* Drop, Drop 2, Drop 3 all go short together, so they read D1 D2 D3 */
+  els.forEach(([n,s])=>{ if(short.has(grp(s))){ n.textContent=sh[s.id]; n.setAttribute('aria-label',s.name); } else n.removeAttribute('aria-label'); }); }
 function songFocusKey(){ const a=document.activeElement, pl=$('#playlist'); if(!a||!pl||!pl.contains(a)) return null;
   if(a.classList.contains('part')) return `.part[data-sid="${a.dataset.sid}"][data-tid="${a.dataset.tid}"]`; const sec=a.closest('.sec'); if(sec) return `.sec[data-sid="${sec.dataset.sid}"] .${a.classList.contains('smore')?'smore':'sname'}`;
   if(a===pl) return '#playlist'; return null; }
@@ -337,7 +359,7 @@ function songSecMenu(id,x,y,ret){ const s=songFind(id); if(!s) return; songSelec
     {label:'Split in half',disabled:s.bars<2,act:()=>songSplit(s.id)},{label:looped?'Stop looping':'Loop this section',sub:'Ctrl/Cmd+L',act:()=>songLoopToggle(s.id)},
     {kinds:true,value:s.kind,sid:s.id},{sep:true},{label:'Delete',danger:true,sub:'Delete key',disabled:songSections().length<2,act:()=>songRemove(s.id)}],x,y,ret); }
 function songLoopToggle(id){ const s=songFind(id)||songSel(); if(!s) return; const on=SONG.view.loop&&SONG.view.loop.sid===s.id;
-  if(on){ songLoop(null); songChip(`Stopped looping ${s.name}`); } else { songLoop(s.id); songChip(`Looping ${s.name}`); if(!TR.running) songPlay(); } songUIState(); }
+  if(on){ songLoop(null); songChip(`Stopped looping ${s.name}`,{undo:false}); } else { songLoop(s.id); songChip(`Looping ${s.name}`,{undo:false}); if(!TR.running) songPlay(); } songUIState(); }
 function songStartRename(id){ const el=document.querySelector(`#songStrip .sec[data-sid="${id}"] .sname`), s=songFind(id); if(!el||!s) return;
   const inp=document.createElement('input'); inp.className='input inline srename'; inp.value=s.name; inp.maxLength=24; inp.setAttribute('aria-label','Section name'); el.replaceWith(inp); inp.focus(); inp.select();
   let done=false; const fin=ok=>{ if(done) return; done=true; if(ok&&inp.value.trim()&&inp.value.trim()!==s.name) songRename(id,inp.value); else songRender(); songRefocus(`.sec[data-sid="${id}"] .sname`); };
@@ -352,7 +374,7 @@ function songStartRename(id){ const el=document.querySelector(`#songStrip .sec[d
   $('#songAddSec').onclick=()=>songAdd({name:'Section',kind:'other',bars:8,at:songSections().length});
   $('#songZIn').onclick=()=>songZoom(1.25); $('#songZOut').onclick=()=>songZoom(0.8); $('#songZFit').onclick=()=>songZoom(0);
   $('#songFollow').onclick=()=>{ SONG.view.follow=!SONG.view.follow; songViewSave(); $('#songFollow').setAttribute('aria-pressed',String(SONG.view.follow)); };
-  $('#songChipU').onclick=()=>{ $('#songChip').hidden=true; undo(); };
+  $('#songChipU').onclick=songChipUndo;
   const menu=$('#songMenu');
   menu.addEventListener('click',e=>{ const b=e.target.closest('[data-mi]'); if(!b||!SONG.menu) return; const it=SONG.menu.items[+b.dataset.mi]; songMenuClose(); if(it&&it.act) it.act(); });
   menu.addEventListener('change',e=>{ const k=e.target.closest('[data-mk]'); if(!k||!SONG.menu) return; const it=SONG.menu.items.find(x=>x.kinds); songMenuClose(); if(it) songSetKind(it.sid,k.value); });
@@ -371,29 +393,37 @@ function songStartRename(id){ const el=document.querySelector(`#songStrip .sec[d
   /* click the ruler to play from that bar */
   $('#songRuler').addEventListener('click',e=>{ if(!songOn()) return; const r=e.currentTarget.getBoundingClientRect(), bar=Math.floor((e.clientX-r.left+sc.scrollLeft)/songPx())+1; if(bar>songBars()) return; ensureAudio(); songPlay({from:bar}); pl.focus({preventScroll:true}); });
   /* the strip: select, drag to move (Alt copies), drag the right edge to resize, double-click to rename or loop, right-click or ⋯ for more */
-  let D=null;
+  let D=null, lpT=0, lpAt=0; /* touch: hold a section for half a second to open its menu (the ⋯ is hidden on narrow blocks) */
   strip.addEventListener('pointerdown',e=>{ const sec=e.target.closest('.sec'); if(!sec||e.button!==0||e.target.closest('.smore,.srename')||e.pointerType==='touch'&&touches.size>1) return; const s=songFind(sec.dataset.sid); if(!s) return;
-    D={id:s.id,el:sec,x0:e.clientX,bars0:s.bars,mode:e.target.closest('.rz')?'resize':'move',alt:e.altKey,moved:false,px:songPx()}; if(D.mode==='resize') e.preventDefault(); });
-  document.addEventListener('pointermove',e=>{ if(!D) return; const dx=e.clientX-D.x0; if(!D.moved&&Math.abs(dx)<5) return; D.moved=true;
+    D={id:s.id,el:sec,x0:e.clientX,bars0:s.bars,mode:e.target.closest('.rz')?'resize':'move',alt:e.altKey,moved:false,px:songPx()}; if(D.mode==='resize') e.preventDefault();
+    clearTimeout(lpT); if(e.pointerType==='touch'&&D.mode==='move'){ const d=D; lpT=setTimeout(()=>{ if(D!==d||d.moved) return; D=null; lpAt=performance.now(); const r=sec.getBoundingClientRect(); songSecMenu(s.id,r.left,r.bottom+4,sec.querySelector('.sname')); },550); } });
+  document.addEventListener('pointermove',e=>{ if(!D) return; const dx=e.clientX-D.x0; if(!D.moved&&Math.abs(dx)<5) return; D.moved=true; clearTimeout(lpT);
     if(D.mode==='resize'){ const step=e.altKey?1:4; D.nb=clamp(Math.round((D.bars0+dx/D.px)/step)*step,1,64); D.el.style.width=Math.max(4,D.nb*D.px-2)+'px'; D.el.querySelector('.sbars').textContent=D.nb; D.el.classList.add('sizing'); }
     else { D.el.style.transform=`translateX(${dx}px)`; D.el.classList.add('dragging'); D.alt=e.altKey; } });
-  document.addEventListener('pointerup',e=>{ if(!D) return; const d=D; D=null; if(!d.moved){ if(d.mode==='move'){ songSelect(d.id); } return; }
+  document.addEventListener('pointercancel',()=>{ clearTimeout(lpT); const d=D; D=null; if(d&&d.moved){ d.el.style.transform=''; songRender(); } }); /* e.g. the page scrolls instead */
+  document.addEventListener('pointerup',e=>{ clearTimeout(lpT); if(!D) return; const d=D; D=null; if(!d.moved){ if(d.mode==='move'){ songSelect(d.id); } return; }
     if(d.mode==='resize'){ if(d.nb&&d.nb!==d.bars0) songResize(d.id,d.nb); else songRender(); return; }
     const sr=strip.getBoundingClientRect(), xp=e.clientX-sr.left, S=songSections(), s=songFind(d.id); let acc=0, idx=0, idxAll=0;
     S.forEach(o=>{ const mid=(acc+o.bars/2)*d.px; acc+=o.bars; if(mid<xp){ idxAll++; if(o!==s) idx++; } });
     d.el.style.transform=''; if(d.alt) songAdd({copyOf:d.id,at:idxAll}); else if(!songMove(d.id,idx)) songRender(); });
   strip.addEventListener('dblclick',e=>{ const sec=e.target.closest('.sec'); if(!sec||e.target.closest('.smore,.rz')) return; if(e.target.closest('.sname')) songStartRename(sec.dataset.sid); else songLoopToggle(sec.dataset.sid); });
-  strip.addEventListener('contextmenu',e=>{ const sec=e.target.closest('.sec'); if(!sec) return; e.preventDefault(); songSecMenu(sec.dataset.sid,e.clientX,e.clientY,sec.querySelector('.sname')); });
+  strip.addEventListener('contextmenu',e=>{ const sec=e.target.closest('.sec'); if(!sec) return; e.preventDefault(); if(performance.now()-lpAt<1000) return; songSecMenu(sec.dataset.sid,e.clientX,e.clientY,sec.querySelector('.sname')); });
   strip.addEventListener('click',e=>{ const m=e.target.closest('.smore'); if(m){ const r=m.getBoundingClientRect(); songSecMenu(m.closest('.sec').dataset.sid,r.left,r.bottom+4,m); return; }
     if(e.target.closest('.sadd')){ songAdd({name:'Section',kind:'other',bars:8,at:songSections().length}); return; }
     const n=e.target.closest('.sname'); if(n&&e.detail===0) songSelect(n.closest('.sec').dataset.sid); });
   $('#songMap').addEventListener('click',e=>{ const b=e.target.closest('.smb'); if(!b) return; ensureAudio(); songLoopToggle(b.dataset.sid); });
-  /* parts: click switches on/off (after a moment, so a double-click can open the editor instead) */
-  let pT=0;
-  const togglePart=el=>{ const s=songFind(el.dataset.sid), t=PROJ.tracks.find(x=>x.id===el.dataset.tid); if(!s||!t) return; const on=!(s.parts[t.id]&&s.parts[t.id].on);
-    if(!(TR.running&&songOn())) SONG.view.sel=s.id; songSetPart(s.id,t.id,{on}); songFlash({parts:[[s.id,t.id]]}); };
-  box.addEventListener('click',e=>{ const el=e.target.closest('.part'); if(!el) return; clearTimeout(pT); if(e.detail===0){ togglePart(el); return; } if(e.detail>1) return; pT=setTimeout(()=>togglePart(el),230); });
-  box.addEventListener('dblclick',e=>{ const el=e.target.closest('.part'); if(!el) return; clearTimeout(pT); const t=PROJ.tracks.find(x=>x.id===el.dataset.tid); if(!t) return;
+  /* parts: click switches on/off (after a moment, so a double-click can open the editor instead).
+     A relaxed double-click (a tablet double-tap, 0.25-0.5 s) arrives after the switch: it puts the part back as it was, history included (QA, 13 Nov) */
+  let pT=0, pLast=null;
+  const togglePart=el=>{ const s=songFind(el.dataset.sid), t=PROJ.tracks.find(x=>x.id===el.dataset.tid); if(!s||!t) return; const was=!!(s.parts[t.id]&&s.parts[t.id].on), on=!was;
+    pLast={sid:s.id,tid:t.id,was,at:performance.now(),redo:UNDO.redo.slice(),last:UNDO.last,chip:$('#songChip').hidden?null:{text:$('#songChipT').textContent,tok:songChipTok}};
+    if(!(TR.running&&songOn())) SONG.view.sel=s.id; songSetPart(s.id,t.id,{on}); songFlash({parts:[[s.id,t.id]]},`${t.name} ${on?'on':'off'} in ${s.name}`); };
+  const untogglePart=(sid,tid)=>{ const L=pLast; pLast=null; if(!L||L.sid!==sid||L.tid!==tid||performance.now()-L.at>800) return; const s=songFind(sid); if(!s||!s.parts[tid]||!!s.parts[tid].on===L.was) return;
+    UNDO.busy=true; try{ songSetPart(sid,tid,{on:L.was}); } finally{ UNDO.busy=false; }
+    if(UNDO.stack.length&&UNDO.stack[UNDO.stack.length-1]===L.last) UNDO.stack.pop(); UNDO.redo=L.redo; UNDO.last=snapState(); undoButtons(); songChipHide();
+    if(L.chip&&L.chip.tok===UNDO.last) songChip(L.chip.text); };
+  box.addEventListener('click',e=>{ const el=e.target.closest('.part'); if(!el) return; clearTimeout(pT); if(e.detail===0){ togglePart(el); return; } if(e.detail>1) return; pLast=null; pT=setTimeout(()=>togglePart(el),230); });
+  box.addEventListener('dblclick',e=>{ const el=e.target.closest('.part'); if(!el) return; clearTimeout(pT); untogglePart(el.dataset.sid,el.dataset.tid); const t=PROJ.tracks.find(x=>x.id===el.dataset.tid); if(!t) return;
     songSelect(el.dataset.sid,{cursor:!TR.running}); if(t.kind==='notes') openEditor(t.id,{sid:el.dataset.sid}); else toast('That’s a recording: switch it on or off here. Use “Turn into notes” to edit it as notes.'); });
   /* the song area takes the keyboard while it has focus; clicking the piano gives the keys back */
   pl.addEventListener('pointerdown',e=>{ if(!songOn()||e.target.closest('input,select,textarea,button,.slane')) return; if(e.target.closest('.th,.tfx')) return; pl.focus({preventScroll:true}); });
