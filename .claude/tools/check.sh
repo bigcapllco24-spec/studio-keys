@@ -2,7 +2,7 @@
 # Release check for Studio Keys. Run from the repo root: bash .claude/tools/check.sh
 # 1) rebuilds index.html from src/ and fails if the committed index.html is stale
 # 2) syntax-checks the bundled JavaScript and the Worker
-# 3) runs the headless smoke test (tests/smoke.mjs)
+# 3) runs the headless smoke test (tests/smoke.mjs, which runs tests/phone.mjs) and the installable-app check over http (tests/pwa.mjs)
 set -u; cd "$(git rev-parse --show-toplevel)"; fail=0
 cp index.html /tmp/sk-index-before.html 2>/dev/null || true
 python3 tools/build.py >/dev/null || { echo "FAIL build"; exit 1; }
@@ -20,4 +20,5 @@ if ! node -e "require.resolve('puppeteer-core')" 2>/dev/null; then
   export SK_NODE_MODULES=/tmp/sk-test/node_modules
 fi
 node tests/smoke.mjs || fail=1
+node tests/pwa.mjs || fail=1   # installable app over http with the real Worker (UX-6): manifest, service worker, offline reload
 [ $fail -eq 0 ] && echo "CHECK OK" || { echo "CHECK FAILED"; exit 1; }
