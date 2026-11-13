@@ -153,7 +153,8 @@ function feelShape(c,r){ if(!c) return Array(16).fill(1); const nz=c.filter(x=>x
    percentage (MPC style): 50% straight, 66% triplet. "less swing" steps down this ladder, "more swing" goes to full. */
 const SWING_STEPS=[0,0.08,0.16,0.333,0.4];
 const swingPct=sw=>Math.floor(50+(+sw||0)*50+0.01);
-function swingName(sw){ return sw<0.02?'straight':sw<0.06?'a touch of swing':sw<0.12?'light swing':sw<0.2?'medium swing':sw<0.3?'strong swing':sw<0.37?'full triplet swing':'heavy swing'; }
+/* the name follows the percentage shown next to it, so the word and the number always agree (59% and 60% are both medium) */
+function swingName(sw){ const p=swingPct(sw); return sw<0.02?'straight':p<54?'a touch of swing':p<57?'light swing':p<62?'medium swing':p<65?'strong swing':p<68?'full triplet swing':'heavy swing'; }
 function resolveSwing(v,cur){ cur=+cur||0; if(v==null||v===''||v===false) return v===false?0:undefined; const r3=x=>Math.round(clamp(x,0,0.4)*1000)/1000;
   if(typeof v==='string'){ const s=v.toLowerCase().trim(), num=parseFloat(s), bit=/\b(bit|little|touch|slight(ly)?|tad)\b/.test(s);
     if(/^(none|no|off|straight|zero|no swing)$/.test(s)) return 0;
@@ -162,13 +163,13 @@ function resolveSwing(v,cur){ cur=+cur||0; if(v==null||v===''||v===false) return
     else if(/more|heav|full|lots|max|up|triplet|swing/.test(s)) return bit?r3(cur+0.08):(cur<0.3?0.333:0.4);
     else return undefined; }
   v=+v; if(!isFinite(v)) return undefined; if(v>1) v=v>=50?(v-50)/50:v/100; return r3(v); }
-/* the reply in musician words: "Lighter swing, about 58%" */
-function swingWords(sw,prev){ const p=swingPct(sw);
+/* the reply in musician words, with the same name the beat description uses: "Lighter: medium swing, about 58%" */
+function swingWords(sw,prev){ const p=swingPct(sw), nm=swingName(sw), most=sw>=0.395;
   if(sw<0.02) return prev!=null&&prev<0.02?'Already straight, no swing':'Straight, no swing';
-  if(prev!=null&&sw<prev-0.005) return `Lighter swing, about ${p}%`;
-  if(prev!=null&&sw>prev+0.005) return sw>=0.3&&sw<0.37?`Full triplet swing, about ${p}%`:sw>=0.37?`Heavy swing, about ${p}% (the most it goes)`:`More swing, about ${p}%`;
-  if(prev!=null&&sw>=0.4) return `Already at the heaviest swing, about ${p}%`;
-  return `${swingName(sw).replace(/^./,c=>c.toUpperCase())}, about ${p}%`; }
+  if(prev!=null&&sw<prev-0.005) return `Lighter: ${nm}, about ${p}%`;
+  if(prev!=null&&sw>prev+0.005) return `${nm.replace(/^./,c=>c.toUpperCase())}, about ${p}%${most?' (the most it goes)':''}`;
+  if(prev!=null&&most) return `Already at the most it goes: ${nm}, about ${p}%`;
+  return `${nm.replace(/^./,c=>c.toUpperCase())}, about ${p}%`; }
 const PERC_SETS={melodichouse:[37,45,50],melodictechno:[37,47],techno:[37,47],progressive:[37,45],deephouse:[37,45],organichouse:[45,50,37],techhouse:[37,56,45],afro:[45,47,50,37],amapiano:[45,50,37],nudisco:[56,45,37],house:[37,45,56],bhangra:[45,47,50],bollywood:[45,47,50],punjabi:[45,50],downtempo:[37,45,50],reggaeton:[37,45],ukg:[37,45],drill:[37]};
 const PERC_MOTIFS={
   37:['...x..x....x..x.','..x..x....x..x..','......x.......x.','...x.......x..x.','.x....x..x....x.'],
