@@ -5014,7 +5014,8 @@ const ACT={
     return `${chName(id)}: ${out.join(', ')||'unchanged'}`; },
   fx(a){ const want=String(a.effect||'').toLowerCase().replace(/[-_]/g,' '); const type=Object.keys(FX_LIB).find(k=>FX_LIB[k].name.toLowerCase()===want||k===want.replace(/ /g,''))||Object.keys(FX_LIB).find(k=>FX_LIB[k].name.toLowerCase().includes(want)||want.includes(k));
     if(!type) return; let i=FX.slots.findIndex(s=>s.type===type); if(i<0){ i=7; FX.setType(i,type); } FX.set(i,clamp((+a.amount)/100,0,1)); return `${FX_LIB[type].name} ${Math.round(FX.slots[i].amount*100)}%`; },
-  remove(a){ const t=findTrack(a.track||a.value); if(!t) return; removeTrack(t.id); return `Removed ${t.name}`; },
+  remove(a){ const ref=a.track||a.value; if(!PROJ.tracks.some(t=>t.name.toLowerCase()===String(ref||'').toLowerCase())&&songArranged()&&findSec(ref)) return; /* "remove the second drop" sent as a track: the section action does it */
+    const t=findTrack(ref); if(!t) return; removeTrack(t.id); return `Removed ${t.name}`; },
   quantize(a){ const t=findTrack(a.track); if(!t) return; const q=+a.grid||0.25; t.events.forEach(e=>{ e.b=Math.round(e.b/q)*q; e.d=Math.max(q,Math.round(e.d/q)*q); }); return `Quantized ${t.name}`; },
   transpose(a){ const t=findTrack(a.track); if(!t||(INST.get(t.inst)||{}).percussive) return; const s=Math.round(+a.semitones||0); t.events.forEach(e=>e.n+=s); return `${t.name} ${s>0?'up':'down'} ${Math.abs(s)}`; },
   transport(a){ const d=String(a.do||a.value||'').toLowerCase(); if(/stop|pause/.test(d)){ loopStop(); return 'Stopped'; }
@@ -5211,6 +5212,8 @@ Object.assign(ACT,{
     if(!s){ songNote('I couldn’t tell which part that transition goes on.'); return; }
     const w=String(a.to||a.kind||'snareroll').toLowerCase(), e=endFor(w,a.bars,{max:s.bars});
     if(!e){ songNote(`I can do a snare roll, a drum fill, a kick drop with a gap, or a crash.`); return; }
+    /* Llama sometimes sends a roll and then a crash for the same section ("riser" = roll + crash): the roll already ends on a crash, so keep it */
+    BATCH.ends=BATCH.ends||{}; const prev=BATCH.ends[s.id]; if(prev&&(e.to==='crash'||a.gap===true&&e.to===prev)){ if(a.gap===true&&s.end){ songEdit(()=>{ s.end.gap=true; }); } return; } BATCH.ends[s.id]=e.to;
     if(a.gap===true&&e.to!=='kickdrop') e.gap=true;
     return setEnd(s,e,/riser|rise|uplift/.test(w)?'riser':/filter|sweep/.test(w)?'filter':null); },
   loop_section(a){ const r=String(a.section==null?a.value||'':a.section);

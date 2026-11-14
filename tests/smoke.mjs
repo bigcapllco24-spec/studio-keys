@@ -206,6 +206,26 @@ try {
         const bpm0 = CTRL.bpm; await handleRequest(s); loopStop(); R[s] = { bpm: CTRL.bpm - bpm0, back: drums().recipe.back }; }
       return R; } finally { ASSIST.engine = eng; } });
   ok('"faster" about a part keeps the tempo, "add a snare roll" keeps the clap', n23['make the bass faster'].bpm === 0 && n23['faster chords'].bpm === 0 && n23['make it faster'].bpm === 5 && n23['add a snare roll'].back !== 'snare' && n23['add a snare'].back === 'snare', JSON.stringify(n23));
+  // AI-1: the song by voice (offline parser through handleRequest): sections, lengths, parts, a second drop, a gap, Undo, one undo step per request
+  const ai1 = await E(async () => { const eng = ASSIST.engine, R = {}; ASSIST.engine = null;
+    const say = async t => { const u0 = UNDO.stack.length; await handleRequest(t); loopStop(); return UNDO.stack.length - u0; };
+    try { await newSong('Smoke AI-1'); runActions([{ type: 'vibe', ref: 'Stephan Bodzin' }, { type: 'add_drums', ref: 'Stephan Bodzin' }, { type: 'add_bass' }, { type: 'add_chords' }]); loopStop();
+      R.s1 = await say('make an 8-bar intro, then build up and drop'); R.lay1 = songSections().map(s => s.name + ' ' + s.bars).join(' · '); R.mode = SONG.view.mode;
+      const last = [...document.querySelectorAll('#asChat .bub.as')].pop(); R.map = last && last.querySelectorAll('.as-map i').length; R.chip = !$('#songChip').hidden && !$('#songChipU').hidden;
+      R.s2 = await say('make it a full track'); R.full = songBars();
+      const b0 = songFind('break').bars; R.s3 = await say('make the break longer'); R.brk = songFind('break').bars - b0;
+      await say('drop the drums in the outro'); const dr = PROJ.tracks.find(t => t.role === 'drums'); R.outro = !!songFind('outro').parts[dr.id].on;
+      await say('remove the second drop'); const n0 = songSections().length; R.s4 = await say('add a second drop'); R.tail = songSections().slice(-3).map(s => s.name).join(','); R.added = songSections().length - n0;
+      await say('drop se pehle thoda silence daal do'); const S = songSections(), d2 = songFind('drop 2'), pre = S[S.indexOf(d2) - 1], end = songStartOf(pre) + pre.bars * 4;
+      R.gap = pre.end && pre.end.to; R.inGap = PROJ.tracks.filter(t => t.kind === 'notes' && t.role !== 'drums').reduce((a, t) => a + songFlat(t).filter(e => e.B >= end - 1 && e.B < end).length, 0) + songFlat(dr).filter(e => e.B >= end - 1 && e.B < end).length;
+      undo(); undo(); R.undo = songSections().length === n0 && !songFind('drop 2');
+      R.loop = localBrain('make the loop 8 bars').actions.map(a => a.type + ':' + a.bars).join();
+      await newSong('Smoke AI-1b'); const u0 = UNDO.stack.length; runActions([{ type: 'vibe', ref: 'Ben Böhmer' }, { type: 'add_drums' }, { type: 'add_bass' }, { type: 'add_chords' }, { type: 'add_melody' }, { type: 'arrange', template: 'full' }, { type: 'transport', do: 'play' }]); loopStop(); R.one = UNDO.stack.length - u0; R.oneLen = songBars();
+    } finally { ASSIST.engine = eng; } return R; });
+  ok('AI-1: "8-bar intro, then build up and drop" → Intro 8 · Build 8 · Drop 16 in Song mode, with the song map and one Undo chip', ai1.lay1 === 'Intro 8 · Build 8 · Drop 16' && ai1.mode === 'song' && ai1.map === 3 && ai1.chip && ai1.s1 === 1, JSON.stringify({ lay: ai1.lay1, map: ai1.map, steps: ai1.s1 }));
+  ok('AI-1: "full track" is 96 bars; "make the break longer" adds 8; "drop the drums in the outro" switches them off', ai1.full === 96 && ai1.brk === 8 && ai1.outro === false && ai1.s2 === 1 && ai1.s3 === 1, JSON.stringify({ full: ai1.full, brk: ai1.brk, outro: ai1.outro }));
+  ok('AI-1: "add a second drop" (after the break) adds Drop 2 before the Outro; Hinglish silence = a gap before it; Undo goes back', ai1.tail === 'Break,Drop 2,Outro' && ai1.added === 1 && ai1.s4 === 1 && ai1.gap === 'kickdrop' && ai1.inGap <= 1 && ai1.undo, JSON.stringify({ tail: ai1.tail, gap: ai1.gap, notesInGap: ai1.inGap, undo: ai1.undo }));
+  ok('AI-1: "make the loop 8 bars" still sets the loop; arrange with four new parts is one undo step (Böhmer: long break)', ai1.loop === 'bars:8' && ai1.one === 1 && ai1.oneLen >= 96, JSON.stringify({ loop: ai1.loop, steps: ai1.one, bars: ai1.oneLen }));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
