@@ -287,10 +287,11 @@ function transitionEvents(s,t){ const e=s.end; if(!e||!e.to||e.to==='none') retu
     [50,48,47,45].forEach((n,i)=>out.push({b:len-1+i*0.25,d:0.25,n,v:0.85})); }
   if(!last&&e.crash!==false) out.push({b:len,d:2,n:49,v:0.9});
   return out; }
-/* which notes stop for a transition: [{from, only}] in beats from the section start; only = drum pieces (drums tracks), none = every note of the track */
+/* which notes stop for a transition: [{from, only}] in beats from the section start; only = drum pieces (drums tracks), none = every note of the track. songFlat starts each cut 1/16 beat early (SONG_EARLY) so hits the drummer pushes early stay out */
 function transitionCut(s,t){ const e=s.end; if(!e||!e.to||e.to==='none') return null; const len=s.bars*4, drum=t.role==='drums'||!!(INST.get(t.inst)||{}).drums, out=[];
   if(e.to==='kickdrop'){ if(drum) out.push({from:len-4,only:['kick']}); else if(songRole(t)==='bass') out.push({from:len-4}); out.push({from:len-1}); }
-  else if(e.gap) out.push({from:len-1});
+  /* a beat of silence after a roll: the kick also sits out the beat before it, because deep kicks ring for about 3 beats (kitDeepTechno 1.4 s) and would fill the gap */
+  else if(e.gap){ if(drum) out.push({from:len-2,only:['kick']}); out.push({from:len-1}); }
   return out; }
 
 Object.assign(ACT,{

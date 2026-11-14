@@ -76,6 +76,8 @@ function songPlaysIn(t,v){ v=v||'A'; return songSections().filter(s=>{ const p=s
 const songCopyEvents=ev=>ev.map(e=>{ const c=Object.assign({},e); delete c.cyc; delete c.raw; return c; });
 
 /* ----- the song timeline: every note of a track in song beats (cached until the next saveProject) ----- */
+/* a hit the drummer feel pushes early (SE-3: 10-25 ms) still belongs to the beat it's pushed from, so a cut (a gap, a kick drop) starts 1/16 beat early */
+const SONG_EARLY=1/16;
 function songFlatReset(){ if(SONG.flatFor!==PROJ||SONG.flatVer!==SONG.ver){ SONG.flat.clear(); SONG.flatFor=PROJ; SONG.flatVer=SONG.ver; } }
 function songFlat(t){ songFlatReset(); let f=SONG.flat.get(t.id); if(f) return f; f=[];
   const S=songSections(), L=PROJ.bars*4, drum=t.kind==='notes'&&(t.role==='drums'||!!(INST.get(t.inst)||{}).drums); let b0=0;
@@ -84,11 +86,11 @@ function songFlat(t){ songFlatReset(); let f=SONG.flat.get(t.id); if(f) return f
     const tr=t.kind==='notes'&&s.end&&s.end.to&&s.end.to!=='none', cut=tr&&typeof transitionCut==='function'?songTry(()=>transitionCut(s,t)):null;
     if(p&&p.on&&t.kind==='notes'){ const ev=songPatEvents(t,p.variant), wo=drum&&p.without&&p.without.length?new Set(p.without.flatMap(g=>DRUM_GROUPS[g]||[g])):null;
       for(let k=Math.floor(off/L);k*L-off<len;k++) for(const e of ev){ if(e.b>=L) continue; const rb=k*L+e.b-off; if(rb<0||rb>=len) continue; if(wo&&wo.has(drumPiece(e.n))) continue;
-        let d=Math.min(e.d,len-rb); if(cut&&cut.length){ let skip=false; for(const c of cut){ if(c.only&&!(drum&&c.only.includes(drumPiece(e.n)))) continue; if(rb>=c.from){ skip=true; break; } if(!c.only) d=Math.min(d,c.from-rb); } if(skip) continue; }
+        let d=Math.min(e.d,len-rb); if(cut&&cut.length){ let skip=false; for(const c of cut){ if(c.only&&!(drum&&c.only.includes(drumPiece(e.n)))) continue; if(rb>=c.from-SONG_EARLY){ skip=true; break; } if(!c.only) d=Math.min(d,c.from-rb); } if(skip) continue; }
         f.push({B:b0+rb,d,n:e.n,v:e.v}); }
     }
     if(drum&&tr&&typeof transitionEvents==='function'){ const more=S[S.length-1]!==s?4:0, gap=(cut||[]).filter(c=>!c.only).reduce((a,c)=>Math.min(a,c.from),len);
-      (songTry(()=>transitionEvents(s,t))||[]).forEach(e=>{ if(e.b>=0&&e.b<len+more&&!(e.b>=gap&&e.b<len)) f.push({B:b0+e.b,d:Math.max(0.05,Math.min(e.d||0.25,len+more-e.b)),n:e.n,v:e.v==null?0.8:e.v}); }); }
+      (songTry(()=>transitionEvents(s,t))||[]).forEach(e=>{ if(e.b>=0&&e.b<len+more&&!(e.b>=gap-SONG_EARLY&&e.b<len)) f.push({B:b0+e.b,d:Math.max(0.05,Math.min(e.d||0.25,len+more-e.b)),n:e.n,v:e.v==null?0.8:e.v}); }); }
     b0+=len; }
   f.sort((a,b)=>a.B-b.B); SONG.flat.set(t.id,f); return f; }
 /* audio tracks: where the clip starts in each section it plays in, and how many beats it may run */
