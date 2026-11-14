@@ -92,6 +92,20 @@ try {
     el().click(); const text = $('#songChip').hidden ? null : $('#songChipT').textContent; $('#songChipU').click(); const back = !!songFind('break').parts[t.id].on === was;
     el().click(); undoBoundary(); songResize('outro', 12); const label = $('#songChipT').textContent; undo(); undo(); return { text, back, label, outro: songFind('outro').bars }; });
   ok('song: clicking a part shows its own Undo chip, and that Undo undoes exactly it', /^\S.* (on|off) in Break$/.test(chp.text || '') && chp.back && /^Outro: 12 bars/.test(chp.label) && chp.outro === 16, JSON.stringify(chp));
+  // UX-7 (QA, 14 Nov): after a double-click opens the note editor on a part, Ctrl+A / Delete / Ctrl+D act on its notes, never on the song's sections
+  const kxy = await E(() => { songTemplate('club'); const s = songFind('drop'), t = PROJ.tracks.find(t => t.role === 'chords'); const el = document.querySelector(`.part[data-sid="${s.id}"][data-tid="${t.id}"]`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  const kdbl = async () => { await p.mouse.move(kxy.x, kxy.y); await p.mouse.down(); await p.mouse.up(); await W(80); await p.mouse.down({ clickCount: 2 }); await p.mouse.up({ clickCount: 2 }); await W(400); };
+  const kmod = async k => { await p.keyboard.down('Control'); await p.keyboard.press(k); await p.keyboard.up('Control'); await W(150); };
+  const kst = () => E(() => ({ secs: songSections().length, bars: songBars(), notes: edTrack() ? edTrack().events.length : -1, ed: !$('#editor').hidden }));
+  await kdbl(); const k0 = await kst(); await kmod('a'); await p.keyboard.press('Delete'); await W(150); const k1 = await kst();
+  await p.keyboard.press('Delete'); await p.keyboard.press('Backspace'); await W(150); const k2 = await kst(); await E(() => undo()); await W(150); const k3 = await kst();
+  ok('song: double-click Chords in the Drop, Ctrl+A, Delete removes its notes, not the Drop; Delete with nothing selected changes nothing; Undo brings the notes back', k0.ed && k0.notes > 0 && k1.secs === 6 && k1.bars === 96 && k1.notes === 0 && k2.secs === 6 && k2.bars === 96 && k3.notes === k0.notes, `${k0.notes} → ${k1.notes} → ${k3.notes} notes, ${k2.secs} sections, ${k2.bars} bars`);
+  await kmod('a'); await kmod('d'); const k4 = await kst(); await E(() => undo()); await W(150); const k5 = await kst();
+  ok('song: Ctrl+D in the editor duplicates the notes, not the section (one Undo)', k4.secs === 6 && k4.notes === 2 * k0.notes && k5.notes === k0.notes, `${k0.notes} → ${k4.notes} → ${k5.notes} notes, ${k4.secs} sections`);
+  const bxy = await E(() => { const el = document.querySelector(`.sec[data-sid="${songFind('break').id}"] .sname`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  await p.mouse.click(bxy.x, bxy.y); await W(300); await p.keyboard.press('Delete'); await W(150);
+  const k6 = await E(() => { const r = { secs: songSections().length, gone: !songFind('break') }; undo(); r.back = songSections().length; r.brk = !!songFind('break'); closeEditor(); return r; });
+  ok('song: click a section name, then Delete still removes the section, and Undo restores it', k6.secs === 5 && k6.gone && k6.back === 6 && k6.brk, JSON.stringify(k6));
   const pl = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); const calls = []; const orig = scheduleEvent; window.scheduleEvent = function (tr, e) { calls.push(e.B); return orig.apply(this, arguments); };
     songPlay({ from: 33 }); await W(400); loopStop(); const first = calls[0], sec = first != null ? songAt(first).section.name : null;
     calls.length = 0; songLoop('break', { play: false }); const range = songLoopRange(); songPlay({ from: 64 }); await W(2900); const beat = songBeatAt(A.ctx.currentTime), wrapped = calls.some(B => B < 200); loopStop(); songLoop(null); window.scheduleEvent = orig;
@@ -113,6 +127,11 @@ try {
     const u = new Uint8Array(await m.blob.arrayBuffer()), d = await A.ctx.decodeAudioData(u.buffer.slice(0)); let pk = 0; for (let c = 0; c < d.numberOfChannels; c++) { const x = d.getChannelData(c); for (let i = 0; i < x.length; i++) { const a = Math.abs(x[i]); if (a > pk) pk = a; } }
     return { dec: d.duration, pk: 20 * Math.log10(pk || 1e-9), rms: 20 * Math.log10(m.rms || 1e-9), sec: ms / 1000 }; });
   ok('song: whole-song MP3 of the Short layout, drums (decodes back, no clipping)', Math.abs(sp.dec - 33.0) < 0.1 && sp.pk < 0 && sp.rms > -40, `${sp.dec.toFixed(2)} s, peak ${sp.pk.toFixed(2)} dBFS, RMS ${sp.rms.toFixed(1)} dB, ${sp.sec.toFixed(0)} s to make`);
+  // UX-7 (QA, 14 Nov): importing a MIDI file with the Drop selected names every new track in the note
+  await E(() => { songTemplate('club'); closeEditor(); songSelect(songFind('drop').id); window.__toasts = []; const o = window.toast; window.toast = function (m) { window.__toasts.push(m); return o.apply(this, arguments); }; window.__toastO = o; });
+  await (await p.$('#importFile')).uploadFile(fx('test.mid')); await W(1600);
+  const mt = await E(() => { const m = window.__toasts.find(m => / in Drop\b/.test(m)) || ''; window.toast = window.__toastO; return m; });
+  ok('song: a MIDI file imported into the Drop names both new tracks', /Lead/.test(mt) && /Kick/.test(mt) && /play in Drop/.test(mt), mt);
   const rc = await E(() => { songMode('song'); recordPress(); const m = SONG.view.mode; loopStop(); return m; });
   ok('song: Rec in Song mode switches to Loop', rc === 'loop', rc);
   const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
