@@ -40,7 +40,7 @@ function setBars(n){
 function setKey(k,from,opts){
   from=from||'you'; const old=PROJ.key, hard=x=>x&&x.tonic!=null&&KEY_HARD.includes(x.from||'you');
   if(k&&from==='notes'&&hard(old)) return; /* a sung take never overrides a key that was set */
-  PROJ.kv=2; PROJ.key=k?Object.assign({tonic:k.tonic,mode:k.mode,from},from==='notes'&&k.hum?{hum:true}:{}):null;
+  PROJ.kv=2; PROJ.key=k?Object.assign({tonic:k.tonic,mode:k.mode,from},from==='notes'&&k.src?{src:k.src}:{}):null;
   if(hard(old) && k && from!=='notes' && old.tonic!==k.tonic && !(opts&&opts.move===false)){ let d=mod(k.tonic-old.tonic,12); if(d>6) d-=12; PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && !(INST.get(t.inst)||{}).percussive) [t.events,...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(ev=>ev.forEach(e=>e.n+=d)); }); }
   $('#keySel').value=hard(PROJ.key)?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks();
 }
@@ -245,7 +245,7 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
       this.chunks=[]; this.notes=[]; LOOP.state='playing'; saveProject(); renderTracks(); uiLoop(); $('#micStatus').textContent=`Saved “${at.name}”.`; this.backSong();
       ASSIST.say(`Saved “${at.name}”. It plays with the loop. Say “${ASSIST.name}, turn the voice note into a bassline” to play it on an instrument.`,{chips:[at.name]}); return; }
     /* SE-7a: a take only gives a soft key ("from your humming"), worked out with the song's other parts, and only from 8+ notes */
-    const key=takeKey(notes,part==='melody');
+    const key=takeKey(notes,part==='melody','sing');
     if($('#micSnap').checked||part!=='melody') notes=shapePart(notes,part,key);
     notes.forEach(e=>e.cyc=0);
     const prevTake=PROJ.tracks.find(t=>t.take===part), prevParts=prevTake?JSON.stringify(songSections().map(s=>[s.id,s.parts[prevTake.id]])):null;
@@ -259,7 +259,7 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     this.backSong();
     const what=part==='chords'?`${new Set(notes.map(e=>e.b)).size} chords built on the notes you sang`:`${notes.length} notes`;
     $('#micStatus').textContent=`Take saved: ${what} on “${PART_NAME[part]}”. It’s playing back now.`;
-    const ks=keyStatus(); ASSIST.say(notes.length?`Got it: ${what}${ks.key?(ks.from==='notes'&&!ks.hum?' (it sounds like '+keyName(ks.key)+')':' in '+keyName(ks.key)):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
+    const ks=keyStatus(); ASSIST.say(notes.length?`Got it: ${what}${ks.key?(ks.from==='notes'?' (it sounds like '+keyName(ks.key)+')':' in '+keyName(ks.key)):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
   }
 };
 function makeBuf(pcm,sr){ const b=new AudioBuffer({length:Math.max(1,pcm.length),numberOfChannels:1,sampleRate:sr}); b.copyToChannel(pcm,0); return b; }

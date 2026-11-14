@@ -136,12 +136,12 @@ setInterval(()=>{
   if(!PROJ.tracks.length&&!playing){ const bars=[1,2,4,8].find(b=>b*4>=endBeat)||8; PROJ.bars=bars; $('#barsSel').value=String(bars); }
   const L=PROJ.bars*4; ev=ev.filter(e=>e.b<L).map(e=>Object.assign(e,{d:Math.min(e.d,L-e.b)}));
   /* SE-7a: a hum gives a soft key from 8+ notes (with the song's other parts); a short hum never locks the key */
-  const key=takeKey(ev);
+  const key=takeKey(ev,true,'hum');
   if(key) ev.forEach(e=>e.n=snapToKey(e.n,key));
   ev.sort((a,b)=>a.b-b.b);
   const count=PROJ.tracks.filter(t=>/^Hummed melody/.test(t.name)).length, inst=partInst('melody');
   const t=addTrack({role:'melody',inst,name:'Hummed melody'+(count?' '+(count+1):''),events:ev});
-  ASSIST.say(`Got your hum: ${ev.length} notes${key?' in '+keyName(key):''} on “${t.name}”${playing?', lined up with the loop':''}. Want it as a bassline or chords instead? Just say “${ASSIST.name}, make it the bass”.`,{chips:[`${ev.length} notes`,INST.get(inst).name]});
+  ASSIST.say(`Got your hum: ${ev.length} notes${key?(KEY_HARD.includes(key.from||'you')?' in '+keyName(key):' (it sounds like '+keyName(key)+')'):''} on “${t.name}”${playing?', lined up with the loop':''}. Want it as a bassline or chords instead? Just say “${ASSIST.name}, make it the bass”.`,{chips:[`${ev.length} notes`,INST.get(inst).name]});
   ASSIST.lastHum=t.id;
 },400);
 /* ---- controls ---- */

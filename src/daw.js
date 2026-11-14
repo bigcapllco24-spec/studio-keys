@@ -31,19 +31,19 @@ function renderKeyChip(){
   const el=$('#keyInfo'); if(!el) return; const st=keyStatus(), tag=KEY_TAG[st.from];
   el.innerHTML=!st.key?'<span class="kc-none">no key yet</span>'
     :tag?`<span class="kc-tag">${tag}</span>`
-    :`<b>${keyName(st.key)}</b>${keyMeter(st.level)}<span class="kc-word">${st.hum?'from your humming':st.word}${st.alt&&!st.hum&&st.level<4?' · or '+keyName(st.alt):''}</span>`;
+    :`<b>${keyName(st.key)}</b>${keyMeter(st.level)}<span class="kc-word">${st.src?KEY_SRC[st.src]:st.word}${st.alt&&!st.src&&st.level<4?' · or '+keyName(st.alt):''}</span>`;
   el.dataset.from=st.from; el.setAttribute('aria-label',`Key: ${keyStatusText(st)}. Tap to check or fix it.`);
   if(!$('#keyPop').hidden) renderKeyPop(st);
 }
 function renderKeyPop(st){
   st=st||keyStatus(); const p=$('#keyPop'), hard=!!KEY_TAG[st.from], c=st.cands||[];
-  const head=!st.key?'<b>No key yet</b>':`<b>${keyName(st.key)}</b><span class="kp-dj">DJ key ${djKey(st.key)}</span><span class="kp-sub">${hard?KEY_TAG[st.from]:st.hum?'from your humming':st.word}</span>${!hard?keyMeter(st.level):''}`;
+  const head=!st.key?'<b>No key yet</b>':`<b>${keyName(st.key)}</b><span class="kp-dj">DJ key ${djKey(st.key)}</span><span class="kp-sub">${hard?KEY_TAG[st.from]:st.src?KEY_SRC[st.src]:st.word}</span>${!hard?keyMeter(st.level):''}`;
   const sub=!st.key?`Not enough notes to hear a key yet (I need about 8). Play, sing or add a part, or pick a key in the Key menu.`
     :st.from==='you'?`You set this key. New parts follow it.`
     :st.from==='keys'?`Keys picked this key for the first part because the song had none. Keep it, set another below or in the Key menu.`
     :st.from==='vibe'?`This key came with the vibe${PROJ.ref?' ('+esc(PROJ.ref)+')':''}. New parts follow it.`
     :st.from==='song'?`This key came from a song you brought in.`
-    :`Worked out from your ${st.hum?'humming':'notes'}${st.level<3?', so it can still change as you add parts':''}. New parts follow it. Set it to keep it.`;
+    :`Worked out from your ${st.src?KEY_SRC_NOUN[st.src]:'notes'}${st.level<3?', so it can still change as you add parts':''}. New parts follow it. Set it to keep it.`;
   const rows=c.length?`<div class="kp-h">${hard?'Your notes sound like':'Best guesses'}</div>`+c.map((k,i)=>{ const isSet=st.from==='you'&&sameKey(k,st.key);
     return `<div class="kp-row${sameKey(k,st.key)?' cur':''}"><div><span><b>${keyName(k)}</b><span class="kp-dj">DJ key ${djKey(k)}</span></span><span class="kp-why">${esc(k.why)}</span></div><button class="btn small${i===0&&!hard?' primary':''}" type="button" data-kset="${i}"${isSet?' disabled':''} title="Set the song to ${keyName(k)} (your notes stay where they are)">${isSet?'Set ✓':'Set'}</button></div>`; }).join(''):'';
   const foot=`<div class="kp-foot">${hard?`<button class="btn small" type="button" data-kauto>Back to auto</button>`:`<button class="btn small" type="button" data-kauto>Keep on auto</button>`}<span class="hint">${hard?'Auto works the key out from your notes.':'Auto follows your notes.'}</span></div>`;

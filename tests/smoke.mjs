@@ -234,6 +234,19 @@ try {
     await new Promise(r => setTimeout(r, 200)); undo(); R.undo = keyStatusText(); redo(); $('#keyInfo').click(); document.querySelector('#keyPop [data-kauto]').click(); R.back = keyStatusText();
     await newSong('Smoke key picked'); runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_bass' }]); loopStop(); R.picked = keyStatusText(); R.chip = $('#keyInfo').innerText.trim(); return R; });
   ok('key: popover Set relabels without moving notes, Undo goes back to auto, "Back to auto" works; Keys picks a key for a bass on a drums-only beat', kpop.open && kpop.rows === 3 && / · set$/.test(kpop.set) && kpop.menu !== '' && kpop.same && kpop.closed && kpop.undo === kpop.auto && kpop.back === kpop.auto && /· Keys picked$/.test(kpop.picked) && kpop.chip === 'Keys picked', `${kpop.auto} → ${kpop.set} → undo ${kpop.undo} → back ${kpop.back}; drums + bass: ${kpop.picked}`);
+  // SE-7a fix 1 + 3: a sung tune alone is never read through fake "bass" roots (A C G E G A C G G reads C major or A minor, and
+  // Keys builds its bass in a key those notes fit); the key's label names its real source (singing, recording, or plain notes)
+  const kfix = await E(async () => { const R = {}; const tune = [[0, 69], [1, 60], [2, 67], [4, 64], [5, 67], [6, 69], [8, 72], [10, 67], [12, 67]].map(([b, n]) => ({ b, d: 1, n, v: 0.85 }));
+    const okKey = k => !!k && ((k.tonic === 0 && k.mode === 'major') || (k.tonic === 9 && k.mode === 'minor'));
+    await newSong('Smoke tune'); PROJ.style = 'house'; addTrack({ role: 'melody', inst: 'lead', name: 'Sung melody', events: tune }); const st = keyStatus(); R.tune = keyStatusText(st); R.tuneOk = okKey(st.key) && !/bass/.test(st.why);
+    await newSong('Smoke short tune'); PROJ.style = 'house'; runActions([{ type: 'add_drums', style: 'house' }]); addTrack({ role: 'melody', inst: 'lead', name: 'Sung melody', events: tune.slice(0, 7) }); runActions([{ type: 'add_bass' }]); loopStop();
+    const pk = keyStatus().key, bb = PROJ.tracks.find(t => t.role === 'bass'); R.picked = keyStatusText(); R.pickOk = okKey(pk) && bb && bb.events.every(e => scaleOf(pk).includes(mod(e.n, 12)));
+    await newSong('Smoke sung'); takeKey(tune, true, 'sing'); R.sung = keyStatusText();
+    await newSong('Smoke rec'); takeKey(tune, true, 'audio'); R.rec = keyStatusText();
+    await newSong('Smoke chords then sing'); const ch = []; [[9, 0, 4], [5, 9, 0], [0, 4, 7], [7, 11, 2]].forEach((c, i) => c.forEach(pc => ch.push({ b: i * 4, d: 3.9, n: nearestAbove(pc, 55), v: 0.7 }))); addTrack({ role: 'chords', inst: 'piano', name: 'My chords', events: ch });
+    takeKey(tune, true, 'sing'); R.overChords = keyStatusText(); return R; });
+  ok('key: a sung tune alone reads C major or A minor (no fake bass roots), and Keys builds a bass for 7 sung notes in a key they fit', kfix.tuneOk && kfix.pickOk, `tune: ${kfix.tune}; 7 notes + bass: ${kfix.picked}`);
+  ok('key: the label names its real source (singing, recording; chords that already gave the key stay plain)', / · from your singing$/.test(kfix.sung) && / · from your recording$/.test(kfix.rec) && /^A minor/.test(kfix.overChords) && !/from your/.test(kfix.overChords), `${kfix.sung} / ${kfix.rec} / chords then a sung take: ${kfix.overChords}`);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
