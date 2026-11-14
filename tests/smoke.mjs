@@ -61,6 +61,10 @@ try {
   // 4c. ... also when the Song view is on (UX-2 with UX-1)
   const ps = await E(async () => { await newSong('Smoke play song'); songMode('song'); runActions(localBrain('add chords').actions); document.querySelector('#playBtn').click(); const r = { run: TR.running, mode: SONG.view.mode, st: LOOP.state }; loopStop(); songMode('loop'); return r; });
   ok('Play button plays a new song in Song mode', ps.run && ps.mode === 'song' && ps.st === 'playing', JSON.stringify(ps));
+  // 4d. the big loop button on a beat: press 1 plays, press 2 stops; Rec still records over it (UX-8)
+  const lb = await E(async () => { await newSong('Smoke loop button'); runActions(localBrain('add drums').actions); const B = document.querySelector('#loopBtn'), R = document.querySelector('#recBtn'), st = () => LOOP.state + (TR.running ? ' run' : ' idle');
+    const r = {}; LOOP.lastPress = 0; B.click(); r.p1 = st(); r.lbl = $('#loopLbl').textContent; LOOP.lastPress = 0; B.click(); r.p2 = st(); LOOP.lastPress = 0; B.click(); R.click(); r.rec = st(); R.click(); r.kept = st(); loopStop(); return r; });
+  ok('loop button: press 1 plays a beat, press 2 stops, Rec overdubs', lb.p1 === 'playing run' && lb.lbl === 'Stop loop' && lb.p2 === 'stopped idle' && lb.rec === 'overdub run' && lb.kept === 'playing run', JSON.stringify(lb));
   // 5. import MIDI and audio, audio → notes
   await E(() => newSong('Smoke import')); await W(300);
   const inp = await p.$('#importFile'); await inp.uploadFile(fx('test.mid')); await W(800); await inp.uploadFile(fx('sing.wav')); await W(1500);

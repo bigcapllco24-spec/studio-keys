@@ -61,6 +61,8 @@ $('#bpm').addEventListener('change',e=>setTempo(+e.target.value));
 const TR={running:false,t0:0,schedT:0};
 const LOOP={
   state:PROJ.tracks.length?'stopped':'empty', after:null, fixed:0, pass:null, open:new Map(), voices:new Set(), lastPress:0,
+  /* looping: true while the loop the big button just recorded plays on, so its next press overdubs like a looper pedal; any other playback (a beat or song) stops on the next press (UX-8) */
+  looping:false,
   get L(){ return PROJ.tracks.length?PROJ.bars*4:0; },
   capturing(){ return this.state==='counting'||this.state==='recording'||this.state==='overdub'; },
   rawBeat(){ return (A.ctx.currentTime-TR.t0)*CTRL.bpm/60; },
@@ -78,7 +80,7 @@ const LOOP={
 const spb=()=>60/CTRL.bpm;
 function trStart(t0){ TR.running=true; TR.t0=t0; TR.schedT=A.ctx.currentTime; }
 function trStop(){ TR.running=false; if(A.ctx){ const t=A.ctx.currentTime; LOOP.voices.forEach(v=>v.kill(t)); } LOOP.voices.clear(); KB.pl.clear(); KB.els.forEach(el=>el.classList.remove('pl')); }
-function countInto(after){ const c=A.ctx; LOOP.after=after; if(CTRL.countIn){ trStart(c.currentTime+0.08+4*spb()); LOOP.state='counting'; } else { trStart(c.currentTime+0.05); beginAfterCount(); } uiLoop(); }
+function countInto(after){ const c=A.ctx; LOOP.after=after; LOOP.looping=false; if(CTRL.countIn){ trStart(c.currentTime+0.08+4*spb()); LOOP.state='counting'; } else { trStart(c.currentTime+0.05); beginAfterCount(); } uiLoop(); }
 function beginAfterCount(){ const a=LOOP.after; LOOP.state=a==='take'?'take':a==='overdub'?'overdub':'recording'; if(a==='take') TAKE.begin(); uiLoop(); }
 /* recording, overdubs and sung takes go into the loop (pattern A), so Song mode hands over to Loop first */
 function songToLoopForRec(){ if(!songOn()) return false; loopStop(); songMode('loop'); toast('Recording in Loop mode: what you play goes into the loop. Switch back to Song to hear the whole song.'); return true; }
@@ -93,7 +95,7 @@ function loopPress(){
     case 'stopped': loopPlay(); break;
     case 'counting': loopStop(); break;
     case 'recording': finalizeFirst(); break;
-    case 'playing': LOOP.state='overdub'; LOOP.pass=null; LOOP.after='overdub'; uiLoop(); break;
+    case 'playing': if(!LOOP.looping){ loopStop(); break; } LOOP.state='overdub'; LOOP.pass=null; LOOP.after='overdub'; uiLoop(); break;
     case 'overdub': endOverdub(); break;
     case 'take': break;
   }
@@ -108,7 +110,7 @@ function finalizeFirst(){
   PROJ.tracks.forEach(t=>t.events.forEach(e=>{ if(e.raw!=null){ e.cyc=Math.floor(e.raw/L); e.b=mod(e.raw,L); delete e.raw; } }));
   LOOP.pass=null;
   if(!PROJ.tracks.length){ trStop(); LOOP.state='empty'; toast('Nothing was played, so no loop was recorded.'); }
-  else { LOOP.state='playing'; if(LOOP.fixed) TR.schedT=Math.min(TR.schedT,TR.t0+L*spb()); }
+  else { LOOP.state='playing'; LOOP.looping=true; if(LOOP.fixed) TR.schedT=Math.min(TR.schedT,TR.t0+L*spb()); }
   saveProject(); uiLoop(); renderTracks();
 }
 function endOverdub(){ LOOP.closeAll(); PROJ.tracks=PROJ.tracks.filter(t=>t.kind!=='notes'||t.events.length); PROJ.tracks.forEach(t=>t.events.forEach(e=>delete e.raw)); LOOP.pass=null; LOOP.state='playing'; saveProject(); uiLoop(); renderTracks(); }
@@ -117,15 +119,15 @@ function loopStop(){
   if(LOOP.state==='recording') finalizeFirst();
   if(LOOP.state==='overdub') endOverdub();
   if(LOOP.state==='take') TAKE.cancel();
-  trStop(); SONG.segs=[]; SONG.endT=0; LOOP.state=PROJ.tracks.length?'stopped':'empty'; uiLoop();
+  trStop(); SONG.segs=[]; SONG.endT=0; LOOP.looping=false; LOOP.state=PROJ.tracks.length?'stopped':'empty'; uiLoop();
 }
 function loopPlay(){
   const c=ensureAudio(); if(!c||!PROJ.tracks.length) return;
-  PROJ.tracks.forEach(t=>{ t.cyc=-1; t.events.forEach(e=>{ e.cyc=-1; }); });
+  LOOP.looping=false; PROJ.tracks.forEach(t=>{ t.cyc=-1; t.events.forEach(e=>{ e.cyc=-1; }); });
   if(songOn()){ songStartAt(c.currentTime+0.06,SONG.cursor); LOOP.state='playing'; uiLoop(); return; }
   trStart(c.currentTime+0.06); LOOP.state='playing'; uiLoop();
 }
-function loopClear(){ trStop(); LOOP.pass=null; LOOP.open.clear(); LOOP.state='empty'; uiLoop(); }
+function loopClear(){ trStop(); LOOP.looping=false; LOOP.pass=null; LOOP.open.clear(); LOOP.state='empty'; uiLoop(); }
 $('#loopBtn').onclick=loopPress; $('#recBtn').onclick=recordPress; $('#stopBtn').onclick=loopStop;
 $('#playBtn').onclick=()=>{ if(LOOP.state==='stopped') loopPlay(); else if(LOOP.state==='empty') toast('Add a track or record something first.'); };
 
@@ -263,11 +265,11 @@ function makeBuf(pcm,sr){ const b=new AudioBuffer({length:Math.max(1,pcm.length)
 function uiLoop(){
   syncLoopState(); const st=LOOP.state, btn=$('#loopBtn');
   btn.dataset.state=st;
-  const lbl={empty:'Record loop',counting:'Count-in…',recording:LOOP.fixed?'Recording…':'Recording · press to close',playing:'Overdub',overdub:'Overdubbing · press to keep',stopped:'Play loop',take:'Recording take…'}[st];
+  const lbl={empty:'Record loop',counting:'Count-in…',recording:LOOP.fixed?'Recording…':'Recording · press to close',playing:LOOP.looping?'Overdub':'Stop loop',overdub:'Overdubbing · press to keep',stopped:'Play loop',take:'Recording take…'}[st];
   /* Song mode: a short label so the button keeps its width when Play starts (QA N1: "Record in the loop" pushed the readout, BPM and key 78 px) */
   const songLbl=songOn()&&(st==='playing'||st==='stopped');
   $('#loopLbl').textContent=songLbl?(st==='playing'?'Rec in loop':'Play song'):lbl;
-  btn.title=songLbl&&st==='playing'?'Record in the loop: switches to Loop mode and records what you play':'';
+  btn.title=songLbl&&st==='playing'?'Record in the loop: switches to Loop mode and records what you play':st==='playing'?(LOOP.looping?'Press to record over the loop, press twice quickly to stop':'Stop playing. To record over it, press Rec'):'';
   const ledCls='led'+(st==='recording'||st==='overdub'||st==='take'?' rec':st==='playing'?' on':st==='counting'?' warn':'');
   $('#loopLed').className=ledCls;
   /* Song mode: "Playing song · 96 bars · 3:06" and "Song ready · 96 bars · 3:06" are the same length, so the top bar doesn't rewrap when Play starts */
