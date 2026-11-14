@@ -176,3 +176,53 @@ Llama's replies often offered a "filter sweep" as the next step. I added "don't 
   - These templates haven't had a musical listening review.
 - **"Make it N minutes"** snaps sections to 8 bars and spreads the rounding, so the result is close to, not exact (4 min asked → 4:08, 2.5 → 2:35, 5 → 4:54).
 - **Not changed:** `vary` and the other generators still change a part's main pattern, so every section using it follows. Sections with their own version (B) keep it.
+
+## Fix 1 (15 Nov 2026, after the tester's NOT READY)
+`bash .claude/tools/check.sh`: **CHECK OK, SMOKE OK 52 checks** (the tester's new gap check passes: `{"rollGap":0,"kickdrop":"kickdrop:0"}`).
+
+### 1. The beat of silence before a drop is now quiet
+- `src/song.js` `songFlat`: a cut (gap, kick drop) starts 1/16 beat early (`SONG_EARLY`), so the kick, snare and clap the SE-3 drummer feel pushes 10-25 ms early no longer start just before the gap. Same tolerance for transition notes.
+- `src/actions.js` `transitionCut`: with a roll + gap, the kick also sits out the beat before the gap. The Deep Techno kick rings 1.39 s (about 3 beats at 124), so the beat-3 kick filled the gap even with no new hits in it. The roll itself was not the cause (ending it half a beat earlier changed the gap by under 1 dB).
+- Renders (Bodzin loop, "make an 8-bar intro, then build up and drop", end of the Build, the tester's own script, two runs):
+
+  | Ending | Beat before | Gap beat | Second half of gap |
+  |---|---|---|---|
+  | Roll + gap, before | -7.2 | -5.6 | -5.7 |
+  | Roll + gap, now | -10.5 | -21.4 | -32.3 |
+  | Kick drop, before | -13.5 | -19.7 | -34 |
+  | Kick drop, now | -18.3 | -31.2 | -39.7 |
+  | No transition (reference) | -6.5 | -6.3 | -6.6 |
+
+  RMS dB. Roll + gap: the gap is 11 dB under the beat before and 15 dB under the bar's music. Only notes were removed, so peaks can't rise.
+- **Tails (not done, not my files):** drum voices are one-shots and the scheduler ignores their note end. A choke would get the gap lower still and would let the kick play on beat 3 again. Simulated in the page: roll + gap -21.6 / -53 dB (with the beat-3 kick), kick drop -30.2 / -53. What it needs (studio-ux-dev, `src/studio.js`): in `scheduleEvent` and in `renderSongSpan`, when the voice is a one-shot and the song note carries a cut time, call `v.kill(t + cut * secondsPerBeat)` (`Voice.kill` in core.js already fades in 6 ms). `songFlat` could then mark notes before a gap with `cut` (beats to the gap). Optional; the current numbers meet the brief.
+
+### 2. Prompt no longer offers risers (`cloudflare/worker.js`)
+- The example reply is now "Want a snare roll into the drop?". The suggestion rule says what to offer on an arranged song (snare roll, fill, beat of silence, longer break, different second drop, part in or out). New song rule: taking a part out of one section is `parts` with `out`, never `mix mute`. Prompt 15,612 characters (was 15,206). No backticks or `${`.
+- Llama runs (run endpoint, askLlama settings, sha256 of SYSTEM checked against the file):
+  - Run A (example fixed only): 10 requests, 0 riser offers, 2 filter-sweep offers; "drop the drums in the outro" came back as `mix mute Drums` (whole song).
+  - Final prompt (sha256 0e08605f…): 16 requests, 0 riser offers, 6 filter-sweep offers ("Want a filter sweep into the second drop?"). Llama keeps reaching for a filter sweep even with the rule; naming it more often made it worse. All actions usable: break ±8, intro bars 16, outro drums out (as `parts` both times, plus the Hinglish one), arrange club / full, arrange minutes 4.33, section remove "Drop 2", parts intro out kick, riser → snareroll 4 + crash. 2.2 to 10.8 s, mean 4.3 s (two club / add-drop calls over 6 s).
+- So the app guards it (`src/assistant.js` `handleRequest`): unless the user said riser or sweep, a question in the AI's reply offering a riser, uplifter or (filter) sweep is replaced with "Want a snare roll into the drop?" (removed when there's no layout). Checked with Llama's real replies through `handleRequest`: "Want a filter sweep into the second drop?" becomes "Want a snare roll into the drop?"; the explicit riser reply and "more DJ filter" are left alone.
+- Executor guard (`src/actions.js` `mix`): a mute or unmute while the user's words name a section ("in the outro", "outro mein", "from the intro") becomes `parts` out / in for that section. "mute the drums" still mutes the whole track.
+
+### 3. Offline Hinglish with the verb last (`src/maker.js` `songBrain`)
+All 9 of the tester's phrases now work offline through `handleRequest`, 1 undo step each:
+- "drop ke baad break daal do" / "drop ke baad break add karo" → section add break after drop; "intro ke baad break daal do" → Break 2 after the Intro.
+- "dusra drop add karo", "ek aur drop daal do", "second drop daal do" → Break 2 + Drop 3 before the Outro.
+- "break ko loop karo" → looping Break; "drop 2 se play karo" → playing from Drop 2 (cursor at beat 256).
+- "outro mein drums mat bajao" → Outro: drums out (`mat`, `band`, `nahi`, `bina` are "out"; `bajao`, `chalao` are "in").
+- Still fine: "intro mein bass daal do", "intro se kick hata do", "break ko lamba karo", "yaar drop se pehle thoda silence daal do", "make the loop 8 bars".
+
+### 4. Typed wake name (`src/maker.js` `localBrain`)
+A leading "Keys," (or "hey Keys", or "Keys make/add/…") is stripped before parsing. "Keys, make an 8-bar intro, then build up and drop" → Intro 8 · Build 8 · Drop 16 (1:02). "Keys, add a bassline" → add_bass.
+
+### 5. "Make it longer / shorter" offline
+On an arranged song, "make it longer", "make the song longer", "song ko lamba karo" → `arrange minutes` = current rounded + 1 (3:06 → 4:08); "make it shorter" → current − 1 (3:06 → 2:04), or half for songs under 1.5 minutes. Same action Llama sends. On a plain loop it is unchanged (not understood, as on main).
+
+### Also fixed
+- Offline replies no longer repeat the missing-part suggestion: "There’s no bassline or chords yet: want them? Say “add a bassline”." and no second "Bassline next?". Grammar: "There are no chords yet: want some?" / "There’s no bassline yet: want one?".
+- "move the break after the first drop" when it's already there: "Break is already after Drop.", no chip, 0 undo steps.
+- The offline "Shape the song" tip now changes between requests and only offers what fits the layout (no "add a second drop" when there are two; no "drop the drums in the outro" when they're already out).
+
+### Not changed
+- "add a break" on a plain loop still opens the song with the break; Llama's "add a second drop" names the new one Drop 3 when Drop 2 exists (the executor names it in order). Both as the tester described.
+- Smoke: no new lines (the tester's gap check covers fix 1). Suggested for the tester: one offline line for "drop ke baad break daal do" + "outro mein drums mat bajao", and one for "make it longer" on a 96-bar song (→ about 4 minutes).

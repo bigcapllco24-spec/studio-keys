@@ -32,6 +32,8 @@ function swingOnly(raw,hasDrums){ let s=' '+String(raw||'').toLowerCase().replac
   return !s.replace(/[^a-z0-9]+/g,'').length; }
 const SWING_ADD_PART=/\b(add|adding|bring in|layer|put in|write|create|make|give me|want|need)( me)?( a| an| some| new| another| more)? (?!(?:the|my|it|this|that|its|your) )([a-z]+ )?(bass ?lines?|bass|chords?|pads?|harmony|progression|melody|lead|hook|riff|keys|piano|synths?|arps?)\b/;
 function localBrain(raw){
+  /* a typed "Keys, make an 8-bar intro…": the assistant's name isn't the part "keys" (speech already strips it) */
+  { const nm=String((typeof ASSIST!=='undefined'&&ASSIST.name)||'Keys').trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); if(nm) raw=String(raw||'').replace(new RegExp('^\\s*(?:(?:hey|hi|ok|okay|yo)\\s+)?'+nm+'\\s*[,:!–—-]\\s*|^\\s*(?:hey|hi|ok|okay|yo)\\s+'+nm+'\\b\\s*|^\\s*'+nm+'\\s+(?=(?:make|add|turn|arrange|give|let|put|take|drop|loop|play|remove|bring|can|could|please|stretch|move|rename|duplicate)\\b)','i'),''); }
   const sws=swingSaid(raw), anyDrums=PROJ.tracks.some(x=>x.role==='drums'), hasDrums=PROJ.tracks.some(x=>x.role==='drums'&&x.recipe);
   if(sws!=null&&swingOnly(raw,hasDrums)){
     if(hasDrums) return {actions:[{type:'groove',track:'drums',swing:sws}]};
@@ -137,6 +139,9 @@ function songBrain(raw,t0){
   /* whole song: play, loop */
   if(/\b(play|hear|listen to|start) (the |my )?(whole|full|entire|complete) (song|track|thing)\b|\bstop looping\b|\bloop (the )?(whole|full|entire) (song|track)\b|\bplay (it |the song )?from the (start|top|beginning)\b/.test(t)) return needArr({actions:[{type:'loop_section',section:'song'}]});
   if((m=t.match(new RegExp(`\\bloop (?:the |this |that )?${ORD}(${SEC})s?(?: (\\d))?\\b`)))) return needArr({actions:[{type:'loop_section',section:ref(m.slice(1))}]});
+  /* Hinglish puts the verb last: "break ko loop karo", "drop 2 se play karo" */
+  if((m=t.match(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:ko |pe |par )?(?:loop|repeat) (?:karo|kar do|kardo|kar|chalao|pe rakho)\\b`)))) return needArr({actions:[{type:'loop_section',section:ref(m.slice(1))}]});
+  if((m=t.match(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? se (?:play|start|chalao|bajao|shuru|suno)\\b`)))) return needArr({actions:[{type:'transport',do:'play',from:ref(m.slice(1))}]});
   if((m=t.match(new RegExp(`\\b(?:play|start|go|jump|skip)(?: it)? (?:from|at|to) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`)))) return needArr({actions:[{type:'transport',do:'play',from:ref(m.slice(1))}]});
   /* the whole layout */
   const mins=t.match(/\b(?:make|turn|stretch|cut) (?:the (?:whole )?(?:song|track)|it|this) (?:to |into )?(?:about |around |roughly )?(\d+(?:\.\d+)?) ?(?:min|mins|minutes?)\b|\b(\d+(?:\.\d+)?) ?minutes? (?:long|song|track|version)\b/);
@@ -149,6 +154,10 @@ function songBrain(raw,t0){
   const seq=[...t.matchAll(new RegExp(`(?:(\\d{1,2}) bar )?(?:an? |the )?(${SEC}|silence|gap)\\b`,'g'))].map(x=>({bars:x[1]?+x[1]:undefined,name:x[2]}));
   const isSeq=seq.filter(x=>!/silence|gap/.test(x.name)).length>=2&&/\b(then|followed by|and|into|,)\b|,/.test(t)&&!/\b(after|before|move|longer|shorter|remove|delete|loop|play|rename|copy|duplicate|pehle|baad)\b/.test(t)&&!new RegExp(`\\b(${SB_PART})\\b`).test(t.replace(/\bbuild\b/g,''))&&!/\b(first|second|third|another|last)\b/.test(t);
   if(isSeq&&PROJ.tracks.length) return {actions:[{type:'arrange',template:'custom',sections:seq.map(x=>({name:x.name,bars:x.bars}))},{type:'transport',do:'play'}]};
+  /* the whole song longer or shorter: about a minute either way, like the AI does (arrange minutes) */
+  if(arr&&!anySec.length&&(m=t.match(/\b(?:make|let|get) (?:it|this|the (?:whole |full )?(?:song|track|arrangement)|everything) (?:a (?:bit|little) |a lot |much |way )?(longer|shorter)\b|\b(?:song|gaana|gana|track) (?:ko )?(?:thoda )?(lamba|chhota|chota) (?:karo|kar do|kardo|banao|bana do)\b/))){
+    const cur=songSecs(songBars())/60, down=/short|chhota|chota/.test(m[1]||m[2]), mins=down?(cur>1.5?Math.max(1,Math.round(cur)-1):cur/2):Math.round(cur)+1;
+    return {actions:[{type:'arrange',minutes:+mins.toFixed(2)},{type:'transport',do:'play'}]}; }
   if(!anySec.length&&!/\b(silence|gap|riser|roll|fill)\b/.test(t)) return null;
   /* transitions: "a riser before the drop", "drop se pehle thoda silence daal do", "a fill at the end of the intro", "no roll before the drop" */
   const TR=/\b(snare roll|drum roll|roll|riser|uplifter|fill|drum fill|crash|cymbal|silence|gap|pause|kick drop|filter sweep|filter|sweep|transition)\b/;
@@ -167,13 +176,18 @@ function songBrain(raw,t0){
     const clauses=body.split(/,|\band (?=(?:bring|take|drop|remove|add|put|mute|kill|cut|keep|lose|pull|no|without|only|just|let)\b)|\bthen\b|\bbut\b|\bplus\b/);
     const act={in:[],out:[],only:[]};
     clauses.forEach(c=>{ const ps=[...c.matchAll(partRe)].map(x=>x[1].replace(/ /g,'')); if(!ps.length) return;
-      const k=/\b(only|just|sirf)\b/.test(c)?'only':/\b(take|drop|remove|mute|kill|cut|pull|lose|without|no|hata|hatao|nikal|nikalo|out|off|stop)\b/.test(c)?'out':/\b(bring|add|put|keep|with|daal|dalo|daalo|want|back|in|on|start|enter|play)\b/.test(c)?'in':null; if(k) act[k].push(...ps); });
+      const k=/\b(only|just|sirf)\b/.test(c)?'only':/\b(take|drop|remove|mute|kill|cut|pull|lose|without|no|hata|hatao|nikal|nikalo|out|off|stop|mat|band|bandh|nahi|nahin|bina)\b/.test(c)?'out':/\b(bring|add|put|keep|with|daal|dalo|daalo|want|back|in|on|start|enter|play|bajao|chalao|bajne)\b/.test(c)?'in':null; if(k) act[k].push(...ps); });
     if(act.in.length||act.out.length||act.only.length){ const a={type:'parts',section:inSec}; ['in','out','only'].forEach(k=>{ if(act[k].length) a[k]=[...new Set(act[k])]; }); return needArr({actions:[a]}); } }
   const one=anySec.length?ref(anySec[0].slice(1)):null;
   /* longer / shorter: "make the break longer", "intro 8 bars shorter", "break ko lamba karo" */
   if((m=t.match(/\b(longer|shorter|extend|lengthen|shorten|stretch|trim|double|halve|lamba|lambi|lambaa|chhota|chhoti|chota|choti)\b/))&&one){ const n=(t.match(/\b(?:by )?(\d{1,2}) (?:more )?bar\b/)||[])[1], down=/short|trim|halve|chhot|chot/.test(m[1]), s=findSec(one);
     if(/double|halve/.test(m[1])&&s) return needArr({actions:[{type:'section',do:'length',section:one,bars:m[1]==='double'?s.bars*2:s.bars/2}]});
     return needArr({actions:[{type:'section',do:'length',section:one,change:(down?-1:1)*(n?+n:8)}]}); }
+  /* add a section, Hinglish with the verb last: "drop ke baad break daal do", "dusra drop add karo", "ek aur drop daal do" */
+  if((m=t.match(new RegExp(`\\b(?:(?:a|an|ek|ek aur|aur ek|another|one more|new|naya|nayi) )?(?:(?:second|third|fourth|2nd|3rd|4th) )?(?:(\\d{1,2}) bar )?(${SEC}) (?:bhi |aur )?(?:daal do|daalo|dalo|daal|add karo|add kar do|add kardo|add karna|laga do|lagao|bana do|banao|chahiye|jodo|jod do)\\b`)))){
+    const after=secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? ke baad\\b`))||secAt(new RegExp(`\\b(?:after) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`)), before=secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:se|ke) pehle\\b`));
+    if(!arr&&PROJ.tracks.length) return {actions:[{type:'arrange',template:'custom',sections:m[2]==='outro'?[{name:'Main',bars:Math.max(8,PROJ.bars)},{name:'Outro',bars:m[1]?+m[1]:8}]:[{name:m[2],bars:m[1]?+m[1]:undefined},{name:'Main',bars:Math.max(8,PROJ.bars)}]}]};
+    return needArr({actions:[{type:'section',do:'add',name:m[2],after:after||undefined,before:before||undefined,bars:m[1]?+m[1]:undefined}]}); }
   /* add a section: "add a second drop", "add a break after the first drop", "add an outro" */
   if((m=t.match(new RegExp(`\\b(?:add|insert|put in|throw in|make|create|daal|dalo|daalo)\\b(?: me| us)?(?: (?:a|an|another|one more|a new|new|some))?(?: (?:second|third|fourth|2nd|3rd|4th))? (?:\\d{1,2} bar )?(${SEC}|silence|gap)\\b`)))&&!(new RegExp(`\\b(${SB_PART})\\b`).test(t.replace(/\bbuild\b/g,'')))){
     const after=secAt(new RegExp(`\\b(?:after|ke baad) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`))||secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? ke baad\\b`)), before=secAt(new RegExp(`\\bbefore (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`))||secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:se|ke) pehle\\b`));

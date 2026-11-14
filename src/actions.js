@@ -149,7 +149,9 @@ const ACT={
     return `${list.length} notes on ${t.name}`; },
   instrument(a){ const t=findTrack(a.track); if(!t||t.kind!=='notes') return; const id=resolveInst(a.instrument||a.value,t.role==='drums'?'drums':t.role==='bass'?'bass':null); if(!id) return;
     const I=INST.get(id); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); t.inst=id; return `${t.name} now on ${I.name}`; },
-  mix(a){ const ref=String(a.track||'').toLowerCase(); const id=['master','keys','pads'].includes(ref)?ref:(findTrack(a.track)||{}).id; if(!id) return; const cfg=chCfg(id); const out=[];
+  mix(a){ const sw=a.mute!=null&&a.volume==null&&a.change==null&&songArranged()&&secSaid(); /* "drop the drums in the outro" sent as a mute: that is one section, not the whole song */
+    if(sw) return ACT.parts({section:sw,[a.mute?'out':'in']:[a.track]});
+    const ref=String(a.track||'').toLowerCase(); const id=['master','keys','pads'].includes(ref)?ref:(findTrack(a.track)||{}).id; if(!id) return; const cfg=chCfg(id); const out=[];
     if(a.volume!=null){ chSet(id,'vol',clamp(+a.volume/100,0,1)); out.push(`volume ${Math.round(cfg.vol*100)}`); }
     if(a.change!=null){ chSet(id,'vol',clamp(cfg.vol+(+a.change)/100,0,1)); out.push(`volume ${Math.round(cfg.vol*100)}`); }
     ['low','mid','high'].forEach(b=>{ if(a[b]!=null){ chSet(id,{low:'lo',mid:'mid',high:'hi'}[b],clamp(+a[b],-15,15)); out.push(`${b} ${a[b]>0?'+':''}${a[b]} dB`); } });
@@ -211,6 +213,9 @@ function songFamily(style){ const s=style||PROJ.style||'house';
   return /^(dnb|liquid|dubstep)$/.test(s)?'dnb':/^(hiphop|boombap|trap|drill|lofi)$/.test(s)?'hiphop':/^(pop|rock|bollywood|punjabi|bhangra|reggaeton)$/.test(s)?'pop':'electronic'; }
 const snapBars=(b,step=4)=>clamp(Math.round((+b||0)/step)*step||step,4,64);
 const said=()=>normName(LAST_TEXT.text||'');
+/* the section the user's own words name ("in the outro", "outro mein", "from the second drop"), or null */
+const SEC_RE='((?:first|second|third|last|1st|2nd|3rd) )?(intro|build ?up|build|drop|breakdown|break|outro|chorus|verse|bridge|hook)( \\d+| two| three)?';
+function secSaid(){ const t=said(); let m=t.match(new RegExp('\\b(?:in|during|for|from|throughout) (?:the )?'+SEC_RE+'\\b'))||t.match(new RegExp('\\b'+SEC_RE+' (?:mein|me|main)\\b')); return m?((m[1]||'')+m[2]+(m[3]||'')).trim():null; }
 const songNote=(text,unless)=>{ (BATCH.notes=BATCH.notes||[]).push({text,unless}); };
 /* "the break" when there are two: the one playing, else the one touched last (the selected one), else the first (songFind) */
 function findSec(ref){ if(ref==null||ref==='') return null; if(typeof ref==='object'&&!ref.id&&ref.index!=null) ref=+ref.index;
@@ -318,7 +323,7 @@ Object.assign(ACT,{
     if(a.minutes) songScaleTo(a.minutes);
     songMainSel(); SONG.cursor=0;
     const miss=[!PROJ.tracks.some(t=>songRole(t)==='bass')&&'a bassline',!PROJ.tracks.some(t=>songRole(t)==='chords')&&'chords'].filter(Boolean);
-    if(miss.length) songNote(`There’s no ${miss.join(' or ').replace(/^a /,'')} yet: want ${miss.length>1?'them':'one'}? Say “add ${miss[0]}”.`,/bass|chord/i);
+    if(miss.length) songNote(miss.length>1?'There’s no bassline or chords yet: want them? Say “add a bassline”.':miss[0]==='chords'?'There are no chords yet: want some? Say “add chords”.':'There’s no bassline yet: want one? Say “add a bassline”.',/bass|chord/i);
     return `${label}${hint&&named?' like '+artist.name:''}: ${S.map(s=>s.name+' '+s.bars).join(' · ')} · ${songLenText()}`; },
   section(a){ const d=String(a.do||a.action||a.value||'').toLowerCase();
     if(/^(add|insert|new|create)/.test(d)) return songAddSec(a);
@@ -326,7 +331,7 @@ Object.assign(ACT,{
     const s=findSec(a.section||a.name); if(!s){ songNote(`I couldn’t find ${a.section?'“'+a.section+'”':'that section'} in the song.`); return; }
     if(/^(remove|delete|cut|drop|kill)/.test(d)){ if(songSections().length<2) return; songRemove(s.id); return `Removed ${s.name}`; }
     if(/^(dup|copy|repeat|clone)/.test(d)){ const S=songSections(), tg=a.after?findSec(a.after):null, at=tg?S.indexOf(tg)+1:S.indexOf(s)+1; const c=songAdd({copyOf:s.id,at,chip:false}); songAutoAround(c); return `Copied ${s.name} to ${c.name}`; }
-    if(/^(move)/.test(d)){ const S=songSections(), tg=findSec(a.after||a.before); if(!tg||tg===s) return; const rest=S.filter(x=>x!==s); const at=rest.indexOf(tg)+(a.after?1:0); songMove(s.id,at); SONG.view.sel=s.id; return `Moved ${s.name} ${a.after?'after':'before'} ${tg.name}`; }
+    if(/^(move)/.test(d)){ const S=songSections(), tg=findSec(a.after||a.before); if(!tg||tg===s) return; const rest=S.filter(x=>x!==s); const at=rest.indexOf(tg)+(a.after?1:0); if(!songMove(s.id,at)){ songNote(`${s.name} is already ${a.after?'after':'before'} ${tg.name}.`); return; } SONG.view.sel=s.id; return `Moved ${s.name} ${a.after?'after':'before'} ${tg.name}`; }
     if(/^(rename|name)/.test(d)){ const was=s.name; if(!a.name||!songRename(s.id,a.name)) return; return `Renamed ${was} to ${s.name}`; }
     /* length: bars (an exact number) or change (+8, -8); "longer" with no number = 8 more bars */
     const was=s.bars; let want=a.bars!=null&&a.bars!==''?+a.bars:a.change!=null&&a.change!==''?was+(+String(a.change).replace(/[^\d.-]/g,'')||0):was+(/short|less|cut|trim|minus/.test(d)?-8:8);

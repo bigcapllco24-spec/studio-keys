@@ -42,7 +42,11 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
   if(!has('bass')) return `Bassline next? Say “add a bassline”, or sing it: “let me sing the bassline”.`;
   if(!has('chords')) return `Chords next? Say “add chords”, or “let me sing the chords”.`;
   if(!has('melody')) return `A melody or hook next? Add one, or hum it while it plays.`;
-  if(typeof songArranged==='function'&&songArranged()) return `Shape the song: “make the break longer”, “drop the drums in the outro”, “add a second drop”, or download the MP3.`;
+  if(typeof songArranged==='function'&&songArranged()){ const S=songSections(), n=k=>S.filter(s=>s.kind===k).length, out=S.find(s=>s.kind==='outro'), d=PROJ.tracks.find(t=>t.role==='drums');
+    /* a different pair each time, and only moves that still make sense for this layout */
+    const ideas=[n('break')&&'“make the break longer”',n('drop')<2&&'“add a second drop”',n('drop')>=2&&'“make the second drop different”',out&&d&&out.parts[d.id]&&out.parts[d.id].on&&'“drop the drums in the outro”',n('drop')&&'“a snare roll before the drop”','“take the kick out of the intro”'].filter(Boolean), k=ASSIST.history.length%ideas.length;
+    const two=[ideas[k],ideas[(k+1)%ideas.length]].filter((x,i,a)=>x&&a.indexOf(x)===i);
+    return `Shape the song: ${two.join(', ')}, or download the MP3.`; }
   return `Shape it with effects (“more reverb on the chords”), mix it, make it a full track, or download the MP3.`; }
 function projectState(){
   /* the song layout first, so the Worker's 7,000-character cut never drops it */
@@ -71,11 +75,13 @@ async function handleRequest(text){
       done=runActions(j.actions||[]); reply=j.reply||'';
     }catch(e){ console.warn('assistant AI failed, using offline brain',e); const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
   } else { const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
+  /* the AI sometimes offers a riser or a filter sweep as the next step; the studio has neither yet (D3), so offer what it has */
+  if(reply&&!/\b(riser|sweep|uplifter)\b/i.test(text)) reply=reply.replace(/[^.!?]*\b(risers?|uplifters?|(?:filter |noise )?sweeps?)\b[^.!?]*\?/gi,()=>songArranged()?' Want a snare roll into the drop?':'').replace(/\s+/g,' ').trim();
   /* what the executor knows and the AI didn't: a clamped length, a riser played as a roll, a missing part (AI-1) */
   const notes=(BATCH.notes||[]).filter(n=>!(n.unless&&n.unless.test(reply))).map(n=>n.text);
   if(reply&&notes.length) reply=reply.replace(/\s*$/,'')+' '+notes.join(' ');
   else if(!reply&&!done.length&&notes.length) reply=notes.join(' ');
-  if(!reply) reply=done.length?'Done: '+done.join(', ')+'. '+(notes.length?notes.join(' ')+' ':'')+nextStep():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
+  if(!reply) reply=done.length?('Done: '+done.join(', ')+'. '+(notes.length?notes.join(' ')+' ':'')+(notes.some(n=>/\bSay “/.test(n))?'':nextStep())).trim():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
   ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false; LAST_TEXT.text='';
   const map=BATCH.song?songMapHTML(BATCH.song.changed):'';
   if(BATCH.take){ ASSIST.say(reply,{chips:done,speak:false,map}); if(ASSIST.voice) speak('Sing after the count-in.'); } else ASSIST.say(reply,{chips:done,map}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());
