@@ -24,13 +24,54 @@ function setPreview(ids){ ensureAudio(); PREVIEW=ids&&ids.size?new Set(ids):null
 function setView(v){ VIEW=v; document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===v))); $('#playlist').hidden=v!=='playlist'; $('#mixerView').hidden=v!=='mixer'; if(v==='mixer') renderMixerView(); else drawRolls(); }
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 
+/* ----- SE-7a: the honest key chip. It says where the key comes from and how sure it is; tap it for the best guesses ----- */
+const KEY_TAG={you:'set',keys:'Keys picked',vibe:'from the vibe',song:'from the song'};
+const keyMeter=l=>`<span class="kc-meter" aria-hidden="true">${[1,2,3,4].map(i=>`<i${i<=l?' class="on"':''}></i>`).join('')}</span>`;
+function renderKeyChip(){
+  const el=$('#keyInfo'); if(!el) return; const st=keyStatus(), tag=KEY_TAG[st.from];
+  el.innerHTML=!st.key?'<span class="kc-none">no key yet</span>'
+    :tag?`<span class="kc-tag">${tag}</span>`
+    :`<b>${keyName(st.key)}</b>${keyMeter(st.level)}<span class="kc-word">${st.hum?'from your humming':st.word}${st.alt&&!st.hum&&st.level<4?' · or '+keyName(st.alt):''}</span>`;
+  el.dataset.from=st.from; el.setAttribute('aria-label',`Key: ${keyStatusText(st)}. Tap to check or fix it.`);
+  if(!$('#keyPop').hidden) renderKeyPop(st);
+}
+function renderKeyPop(st){
+  st=st||keyStatus(); const p=$('#keyPop'), hard=!!KEY_TAG[st.from], c=st.cands||[];
+  const head=!st.key?'<b>No key yet</b>':`<b>${keyName(st.key)}</b><span class="kp-dj">DJ key ${djKey(st.key)}</span><span class="kp-sub">${hard?KEY_TAG[st.from]:st.hum?'from your humming':st.word}</span>${!hard?keyMeter(st.level):''}`;
+  const sub=!st.key?`Not enough notes to hear a key yet (I need about 8). Play, sing or add a part, or pick a key in the Key menu.`
+    :st.from==='you'?`You set this key. New parts follow it.`
+    :st.from==='keys'?`Keys picked this key for the first part because the song had none. Keep it, set another below or in the Key menu.`
+    :st.from==='vibe'?`This key came with the vibe${PROJ.ref?' ('+esc(PROJ.ref)+')':''}. New parts follow it.`
+    :st.from==='song'?`This key came from a song you brought in.`
+    :`Worked out from your ${st.hum?'humming':'notes'}${st.level<3?', so it can still change as you add parts':''}. New parts follow it. Set it to keep it.`;
+  const rows=c.length?`<div class="kp-h">${hard?'Your notes sound like':'Best guesses'}</div>`+c.map((k,i)=>{ const isSet=st.from==='you'&&sameKey(k,st.key);
+    return `<div class="kp-row${sameKey(k,st.key)?' cur':''}"><div><span><b>${keyName(k)}</b><span class="kp-dj">DJ key ${djKey(k)}</span></span><span class="kp-why">${esc(k.why)}</span></div><button class="btn small${i===0&&!hard?' primary':''}" type="button" data-kset="${i}"${isSet?' disabled':''} title="Set the song to ${keyName(k)} (your notes stay where they are)">${isSet?'Set ✓':'Set'}</button></div>`; }).join(''):'';
+  const foot=`<div class="kp-foot">${hard?`<button class="btn small" type="button" data-kauto>Back to auto</button>`:`<button class="btn small" type="button" data-kauto>Keep on auto</button>`}<span class="hint">${hard?'Auto works the key out from your notes.':'Auto follows your notes.'}</span></div>`;
+  p.innerHTML=`<div class="kp-top">${head}</div><div class="kp-sub">${sub}</div>${rows}${foot}`;
+}
+function keyPopOpen(open){
+  const p=$('#keyPop'), b=$('#keyInfo'); if(!p||!b) return; if(open===undefined) open=p.hidden;
+  if(!open){ if(p.hidden) return; p.hidden=true; b.setAttribute('aria-expanded','false'); return; }
+  renderKeyPop(); p.hidden=false; b.setAttribute('aria-expanded','true'); p.style.left='0px';
+  const r=p.getBoundingClientRect(), over=r.right-(document.documentElement.clientWidth-16); if(over>0) p.style.left=-Math.min(over,r.left-16)+'px';
+  const f=p.querySelector('button:not([disabled])'); if(f) try{ f.focus({preventScroll:true}); }catch(e){}
+}
+(function(){ const b=$('#keyInfo'), p=$('#keyPop'); if(!b||!p) return;
+  b.addEventListener('click',()=>keyPopOpen());
+  p.addEventListener('click',e=>{ const s=e.target.closest('[data-kset]'), a=e.target.closest('[data-kauto]');
+    if(s){ const k=(keyStatus().cands||[])[+s.dataset.kset]; if(!k) return; setKey({tonic:k.tonic,mode:k.mode},'you',{move:false}); keyPopOpen(false); toast(`Key set to ${keyName(k)}. New parts follow it.`); b.focus(); }
+    else if(a){ const hard=!!KEY_TAG[keyStatus().from]; keyPopOpen(false); if(hard){ setKey(null); toast(`Key back on auto: ${keyStatusText()}`); } b.focus(); } });
+  p.addEventListener('keydown',e=>{ if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); keyPopOpen(false); b.focus(); } });
+  document.addEventListener('pointerdown',e=>{ if(!p.hidden&&!p.contains(e.target)&&!b.contains(e.target)) keyPopOpen(false); },true);
+})();
+
 /* ----- track list ----- */
 let instOpts='';
 function instOptions(){ if(!instOpts){ instOpts=CAT_ORDER.concat(['Mine']).map(cat=>{ const l=ORDER.map(id=>INST.get(id)).filter(i=>i.cat===cat); return l.length?`<optgroup label="${cat}">${l.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('')}</optgroup>`:''; }).join(''); } return instOpts; }
 function renderTracks(){
   instOpts=''; songUI(); const songFk=songFocusKey(), song=songOn();
-  $('#projName').value=PROJ.name; $('#barsSel').value=String(PROJ.bars); $('#keySel').value=PROJ.key?`${PROJ.key.tonic}:${PROJ.key.mode}`:'';
-  $('#keyInfo').textContent=PROJ.key?'':`detected ${keyName(projectKey())}`;
+  renderKeyChip(); /* first: it also brings a song saved before SE-7 up to date (migrateKey) */
+  $('#projName').value=PROJ.name; $('#barsSel').value=String(PROJ.bars); $('#keySel').value=PROJ.key&&KEY_HARD.includes(PROJ.key.from||'you')?`${PROJ.key.tonic}:${PROJ.key.mode}`:'';
   const box=$('#tracks');
   if(!PROJ.tracks.length){ box.innerHTML='<div class="custom-empty big">No tracks yet. Ask the assistant (“Keys, give me a house beat at 124”), hum a melody, press Record and play, or use the + buttons.</div>'; closeEditor(); drawRuler(); renderFaders(); songRender(); return; }
   [...SEL].forEach(id=>{ if(!PROJ.tracks.some(t=>t.id===id)) SEL.delete(id); });

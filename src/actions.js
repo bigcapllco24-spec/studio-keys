@@ -63,7 +63,7 @@ function adoptVibe(s,artist,a,noKey){
   if(a.style||artist||!PROJ.style) PROJ.style=s;
   if(artist&&(a.ref||a.artist||a.like)) PROJ.ref=artist.name;
   const b=+a.bpm; if(b&&!BATCH.tempo&&Math.abs(b-BATCH.startBpm)>0.5) setTempo(b); else if(!PROJ.tracks.length&&!BATCH.tempo&&!BATCH.vibe) setTempo(artist?artist.bpm:STYLES[s].bpm);
-  if(!noKey&&!PROJ.key&&!BATCH.key&&artist&&!PROJ.tracks.some(t=>t.role!=='drums')) setKey(parseKey(artist.key));
+  if(!noKey&&!PROJ.key&&!BATCH.key&&artist&&!PROJ.tracks.some(t=>t.role!=='drums')) setKey(parseKey(artist.key),'vibe');
 }
 function ensureProg(force){ if(PROJ.prog&&!force) return; const k=projectKey(), list=PROGS[k.mode]||PROGS.minor; let p, n=0; do{ p=list[Math.floor(Math.random()*list.length)]; n++; }while(force&&PROJ.prog&&n<9&&p.join()===PROJ.prog.join()); PROJ.prog=p.slice(); }
 const HAT_KIND={'8':'8th','8ths':'8th',eighth:'8th',eighths:'8th','8th':'8th','16':'16th','16ths':'16th',sixteenth:'16th',sixteenths:'16th','16th':'16th',quarters:'quarter',quarter:'quarter','4':'quarter',offbeat:'offbeat',offbeats:'offbeat',shuffle:'shuffle16',shuffled:'shuffle16',shuffle16:'shuffle16',trap:'trap',rolls:'trap',drill:'drill',none:'none',off:'none'};
@@ -98,7 +98,7 @@ function regenTrack(t,opts={}){
 const loadI=id=>{ const I=INST.get(id); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); return I; };
 const ACT={
   vibe(a){ const {s,artist}=resolveVibe(a); if(!artist&&!pickStyle(a.style)) return; PROJ.style=s; if(artist) PROJ.ref=artist.name;
-    if(!BATCH.tempo) setTempo(+a.bpm&&Math.abs(+a.bpm-BATCH.startBpm)>0.5?+a.bpm:(artist?artist.bpm:STYLES[s].bpm)); BATCH.vibe=true; const k=parseKey(a.key)||(artist?parseKey(artist.key):null); if(k&&!PROJ.key) setKey(k); ensureProg(true);
+    if(!BATCH.tempo) setTempo(+a.bpm&&Math.abs(+a.bpm-BATCH.startBpm)>0.5?+a.bpm:(artist?artist.bpm:STYLES[s].bpm)); BATCH.vibe=true; const k=parseKey(a.key)||(artist?parseKey(artist.key):null); if(k&&!PROJ.key&&(a.key||!keyStatus().key)) setKey(k,'vibe'); ensureProg(true); /* SE-7a: an artist's key never overrides the key your own notes are in */
     return artist?`Vibe: ${artist.name}, ${artist.desc} (${CTRL.bpm} BPM, ${keyName(projectKey())})`:`Vibe: ${STYLES[s].name}, ${CTRL.bpm} BPM`; },
   add_drums(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a,true);
     const rec=grooveRecipe(s,artist,grooveOver(a,grooveRecipe(s,artist).swing)), seed=+a.seed||newSeed();
@@ -126,16 +126,16 @@ const ACT={
     if(t.role==='drums'&&t.recipe&&typeof swingSaid==='function'&&swingSaid(LAST_TEXT.text)!=null){ const prev=+t.recipe.swing||0, v=swingOver({},prev);
       if(v!==undefined){ const d=regenTrack(t,{recipe:{swing:v}}); BATCH.swingShown=true; return d?`${swingWords(v,prev)}; ${t.name}: ${d}`:null; } }
     const d=regenTrack(t); return d?`${t.name}: ${d}`:null; },
-  add_bass(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'bass')||(artist&&artist.sounds.bass)||STYLES[s].bass, I=loadI(id), seed=+a.seed||newSeed();
+  add_bass(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); keysPickKey(); ensureProg(); const id=resolveInst(a.instrument,'bass')||(artist&&artist.sounds.bass)||STYLES[s].bass, I=loadI(id), seed=+a.seed||newSeed();
     addPart({role:'bass',inst:id,gen:true,name:'Bassline',events:genBass(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},Object.assign({},a,{replace:a.replace!==false&&!a.new})); return `Bassline on ${I.name} in ${keyName(projectKey())}`; },
-  add_chords(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.chords)||STYLES[s].chords, I=loadI(id), seed=+a.seed||newSeed();
+  add_chords(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); keysPickKey(); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.chords)||STYLES[s].chords, I=loadI(id), seed=+a.seed||newSeed();
     const held=/choir|strings|pad|organ|cello|brass|darkpad/i.test(id+' '+I.name), cs=held&&!/pads|seventh|sustain/.test(STYLES[s].chordStyle)?'pads':undefined;
     const t=addPart({role:'chords',inst:id,gen:true,name:a.instrument?I.name:'Chords',events:genChords(s,L_(),seed,cs),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name} in ${keyName(projectKey())}`; },
-  add_melody(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.lead)||STYLES[s].lead||'lead', I=loadI(id), seed=+a.seed||newSeed();
+  add_melody(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); keysPickKey(); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.lead)||STYLES[s].lead||'lead', I=loadI(id), seed=+a.seed||newSeed();
     const t=addPart({role:'melody',inst:id,gen:true,name:a.instrument?I.name:'Melody',events:genMelody(L_(),seed,s),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name}`; },
   tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
   bars(a){ setBars(+a.bars||+a.value||4); return `${PROJ.bars} bars`; },
-  key(a){ const k=parseKey(a.key||a.value); if(!k) return; setKey(k); BATCH.key=true; return `Key ${keyName(k)}`; },
+  key(a){ const k=parseKey(a.key||a.value); if(!k) return; setKey(k,'you'); BATCH.key=true; return `Key ${keyName(k)}`; },
   style(a){ const s=pickStyle(a.style||a.value)||(findArtist(a.style||a.value)||{}).style; if(!s) return; PROJ.style=s; if(a.keepTempo!==true && !a.bpm) setTempo(STYLES[s].bpm); return `${STYLES[s].name} style`; },
   drum_pattern(a){ const rows=a.rows||a.pattern||{}; const spec={};
     for(const [name,str] of Object.entries(rows)){ const n=DRUM_WORD[String(name).toLowerCase()]||parsePitch(name)||(+name||null); if(n&&typeof str==='string') spec[n]=str.replace(/[^xo.|X-]/g,'').replace(/X/g,'x').replace(/-/g,'.'); }

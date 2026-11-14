@@ -41,7 +41,7 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
   if(!has('melody')) return `A melody or hook next? Add one, or hum it while it plays.`;
   return `Shape it with effects (“more reverb on the chords”), mix it, or download the MP3.`; }
 function projectState(){
-  return {name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:PROJ.key?keyName(PROJ.key):`auto (${keyName(projectKey())})`,style:PROJ.style||null,playing:TR.running,
+  return {name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:keyContext(),style:PROJ.style||null,playing:TR.running,
     tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute})),
     taste:TASTE.profile?{artists:(TASTE.profile.artists||[]).slice(0,12),styles:(TASTE.profile.styles||[]).map(s=>s.style),playlists:(TASTE.profile.playlists||[]).map(p=>p.name+(p.style?' ('+p.style+')':'')).slice(0,8)}:null,
     vibe:PROJ.ref||null,
@@ -135,7 +135,8 @@ setInterval(()=>{
   const endBeat=Math.max(...ev.map(e=>e.b+e.d));
   if(!PROJ.tracks.length&&!playing){ const bars=[1,2,4,8].find(b=>b*4>=endBeat)||8; PROJ.bars=bars; $('#barsSel').value=String(bars); }
   const L=PROJ.bars*4; ev=ev.filter(e=>e.b<L).map(e=>Object.assign(e,{d:Math.min(e.d,L-e.b)}));
-  const key=PROJ.key||(ev.length>=4?detectKey(ev):null); if(!PROJ.key&&key) setKey(key);
+  /* SE-7a: a hum gives a soft key from 8+ notes (with the song's other parts); a short hum never locks the key */
+  const key=takeKey(ev);
   if(key) ev.forEach(e=>e.n=snapToKey(e.n,key));
   ev.sort((a,b)=>a.b-b.b);
   const count=PROJ.tracks.filter(t=>/^Hummed melody/.test(t.name)).length, inst=partInst('melody');

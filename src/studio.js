@@ -34,13 +34,18 @@ function setBars(n){
   PROJ.tracks.forEach(t=>{ if(t.kind!=='notes') return; t.events=fit(t.events); Object.values(t.patterns||{}).forEach(p=>{ p.events=fit(p.events||[]); }); });
   PROJ.bars=n; $('#barsSel').value=String(n); saveProject(); renderTracks(); uiLoop();
 }
-function setKey(k){
-  const old=PROJ.key; PROJ.key=k;
-  if(old && k && old.tonic!==k.tonic){ let d=mod(k.tonic-old.tonic,12); if(d>6) d-=12; PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && !(INST.get(t.inst)||{}).percussive) [t.events,...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(ev=>ev.forEach(e=>e.n+=d)); }); }
-  $('#keySel').value=k?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks();
+/* SE-7a: setKey(k, from). from: 'you' (chosen; the default), 'keys' (Keys picked it), 'vibe', 'song', or 'notes' (a soft key from
+   a sung take: it never locks and never moves notes). Changing a key that was set moves the parts with it, as before;
+   {move:false} only relabels (the key popover's "Set": the notes are already in that key). setKey(null) goes back to auto. */
+function setKey(k,from,opts){
+  from=from||'you'; const old=PROJ.key, hard=x=>x&&x.tonic!=null&&KEY_HARD.includes(x.from||'you');
+  if(k&&from==='notes'&&hard(old)) return; /* a sung take never overrides a key that was set */
+  PROJ.kv=2; PROJ.key=k?Object.assign({tonic:k.tonic,mode:k.mode,from},from==='notes'&&k.hum?{hum:true}:{}):null;
+  if(hard(old) && k && from!=='notes' && old.tonic!==k.tonic && !(opts&&opts.move===false)){ let d=mod(k.tonic-old.tonic,12); if(d>6) d-=12; PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && !(INST.get(t.inst)||{}).percussive) [t.events,...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(ev=>ev.forEach(e=>e.n+=d)); }); }
+  $('#keySel').value=hard(PROJ.key)?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks();
 }
 $('#keySel').innerHTML='<option value="">Key: auto</option>'+['major','minor'].map(m=>PC_NAMES.map((n,i)=>`<option value="${i}:${m}">${n} ${m}</option>`).join('')).join('');
-$('#keySel').addEventListener('change',e=>{ const v=e.target.value; setKey(v?{tonic:+v.split(':')[0],mode:v.split(':')[1]}:null); });
+$('#keySel').addEventListener('change',e=>{ const v=e.target.value; setKey(v?{tonic:+v.split(':')[0],mode:v.split(':')[1]}:null,'you'); });
 $('#barsSel').addEventListener('change',e=>setBars(+e.target.value));
 $('#projName').addEventListener('input',e=>{ PROJ.name=e.target.value.slice(0,60)||'Untitled song'; saveProject(); });
 $('#addBars').onclick=()=>setBars(PROJ.bars*2);
@@ -239,8 +244,9 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     if(part==='voice'){ const n=PROJ.tracks.filter(t=>/^Voice note/.test(t.name)).length+1; const at=makeTrack({kind:'audio',role:'voice',inst:null,name:'Voice note '+n,events:[],cyc:0,start:0,trim:0}); PROJ.tracks.push(at); AUD.set(at.id,makeBuf(pcm,sr)); IDB.put('aud:'+at.id,{sr,data:pcm},'audio').catch(()=>{});
       this.chunks=[]; this.notes=[]; LOOP.state='playing'; saveProject(); renderTracks(); uiLoop(); $('#micStatus').textContent=`Saved “${at.name}”.`; this.backSong();
       ASSIST.say(`Saved “${at.name}”. It plays with the loop. Say “${ASSIST.name}, turn the voice note into a bassline” to play it on an instrument.`,{chips:[at.name]}); return; }
-    const key=PROJ.key||(part==='melody'?detectKey(notes):null); if(!PROJ.key && key && notes.length>=3) setKey(key);
-    if($('#micSnap').checked||part!=='melody') notes=shapePart(notes,part,PROJ.key||key);
+    /* SE-7a: a take only gives a soft key ("from your humming"), worked out with the song's other parts, and only from 8+ notes */
+    const key=takeKey(notes,part==='melody');
+    if($('#micSnap').checked||part!=='melody') notes=shapePart(notes,part,key);
     notes.forEach(e=>e.cyc=0);
     const prevTake=PROJ.tracks.find(t=>t.take===part), prevParts=prevTake?JSON.stringify(songSections().map(s=>[s.id,s.parts[prevTake.id]])):null;
     PROJ.tracks.filter(t=>t.take===part||t.take===part+'-voice').forEach(t=>removeTrack(t.id)); /* a new take of the same part replaces the last one */
@@ -253,7 +259,7 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     this.backSong();
     const what=part==='chords'?`${new Set(notes.map(e=>e.b)).size} chords built on the notes you sang`:`${notes.length} notes`;
     $('#micStatus').textContent=`Take saved: ${what} on “${PART_NAME[part]}”. It’s playing back now.`;
-    ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
+    const ks=keyStatus(); ASSIST.say(notes.length?`Got it: ${what}${ks.key?(ks.from==='notes'&&!ks.hum?' (it sounds like '+keyName(ks.key)+')':' in '+keyName(ks.key)):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
   }
 };
 function makeBuf(pcm,sr){ const b=new AudioBuffer({length:Math.max(1,pcm.length),numberOfChannels:1,sampleRate:sr}); b.copyToChannel(pcm,0); return b; }
@@ -411,7 +417,7 @@ async function exportZip(){
     if(nt.length){ files.push({name:`${base}/MIDI/${base} All tracks.mid`,data:buildMidi(nt,bpm,L,base)});
       nt.forEach((t,i)=>files.push({name:`${base}/MIDI/${String(i+1).padStart(2,'0')} ${safeName(t.name)}.mid`,data:buildMidi([t],bpm,L,t.name)})); }
     files.push({name:`${base}/song.json`,data:new TextEncoder().encode(JSON.stringify(Object.assign(serialize(PROJ),{bpm}),null,1))});
-    files.push({name:`${base}/README.txt`,data:new TextEncoder().encode(`${PROJ.name}\nMade in Studio Keys\n\nTempo: ${bpm} BPM\nKey: ${keyName(projectKey())}\nLength: ${bars} bar${bars>1?'s':''} in 4/4 (${(L*60/bpm).toFixed(3)} s)\nTracks: ${tracks.map((t,i)=>`${i+1}. ${t.name}`).join(', ')}\n\nIn Ableton Live: set the project tempo to ${bpm}, then drag the WAV files (Mix or Stems) or the MIDI files into clip slots. Every file is exactly one loop long and loops seamlessly, including reverb and echo tails. Volume, EQ and effects are printed into the WAV files; the MIDI files keep the notes editable.\n`)});
+    files.push({name:`${base}/README.txt`,data:new TextEncoder().encode(`${PROJ.name}\nMade in Studio Keys\n\nTempo: ${bpm} BPM\nKey: ${keyStatus().key?keyName(keyStatus().key)+' (DJ key '+djKey(keyStatus().key)+')':'none yet'}\nLength: ${bars} bar${bars>1?'s':''} in 4/4 (${(L*60/bpm).toFixed(3)} s)\nTracks: ${tracks.map((t,i)=>`${i+1}. ${t.name}`).join(', ')}\n\nIn Ableton Live: set the project tempo to ${bpm}, then drag the WAV files (Mix or Stems) or the MIDI files into clip slots. Every file is exactly one loop long and loops seamlessly, including reverb and echo tails. Volume, EQ and effects are printed into the WAV files; the MIDI files keep the notes editable.\n`)});
     st.textContent='Packing the zip…'; await nextFrame();
     const r=await saveFile(`${base}.zip`,zipBytes(files)); st.textContent=r==='declined'?'Download cancelled.':`Downloaded ${base}.zip`;
   }catch(e){ console.error(e); st.textContent='Export failed: '+e.message; }

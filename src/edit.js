@@ -65,8 +65,9 @@ function transcribeTrack(t,part){
   let ev=audioToNotes(buf).map(n=>({b:Math.round((st+(n.t0-trim)/s)/q)*q,d:Math.max(q,Math.round((n.t1-n.t0)/s/q)*q),n:n.n,v:n.v})).filter(e=>e.b>=0&&e.b<L);
   if(!ev.length) return {count:0};
   for(let i=0;i<ev.length-1;i++) if(ev[i].b+ev[i].d>ev[i+1].b) ev[i].d=Math.max(q,ev[i+1].b-ev[i].b);
-  const key=PROJ.key||detectKey(ev); if(!PROJ.key&&key&&ev.length>=4) setKey(key);
-  part=part||'melody'; ev=shapePart(ev,part,PROJ.key||key);
+  /* SE-7a: notes from a recording give a soft key ("from your humming") from 8+ notes with the song's other parts; they never lock it */
+  const key=takeKey(ev);
+  part=part||'melody'; ev=shapePart(ev,part,key);
   const inst=partInst(part); { const I=INST.get(inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); }
   const nt=addTrack({role:part,inst,name:`${t.name} → ${part==='bass'?'bassline':part==='chords'?'chords':'notes'}`,events:ev});
   PROJ.tracks.splice(PROJ.tracks.indexOf(nt),1); PROJ.tracks.splice(PROJ.tracks.indexOf(t)+1,0,nt);
