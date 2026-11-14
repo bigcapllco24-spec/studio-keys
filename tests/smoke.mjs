@@ -65,6 +65,13 @@ try {
   const lb = await E(async () => { await newSong('Smoke loop button'); runActions(localBrain('add drums').actions); const B = document.querySelector('#loopBtn'), R = document.querySelector('#recBtn'), st = () => LOOP.state + (TR.running ? ' run' : ' idle');
     const r = {}; LOOP.lastPress = 0; B.click(); r.p1 = st(); r.lbl = $('#loopLbl').textContent; LOOP.lastPress = 0; B.click(); r.p2 = st(); LOOP.lastPress = 0; B.click(); R.click(); r.rec = st(); R.click(); r.kept = st(); loopStop(); return r; });
   ok('loop button: press 1 plays a beat, press 2 stops, Rec overdubs', lb.p1 === 'playing run' && lb.lbl === 'Stop loop' && lb.p2 === 'stopped idle' && lb.rec === 'overdub run' && lb.kept === 'playing run', JSON.stringify(lb));
+  // 4e. looper-pedal flow on an empty song still overdubs on the big button; once stopped and replayed, the button stops (UX-8)
+  const lf = await E(async () => { await newSong('Smoke looper'); const ll = CTRL.loopLen; CTRL.loopLen = 1; const B = document.querySelector('#loopBtn'), Wt = ms => new Promise(r => setTimeout(r, ms)), st = () => LOOP.state + '/' + $('#loopLbl').textContent;
+    const until = async s => { for (let i = 0; i < 100 && LOOP.state !== s; i++) await Wt(100); }; const r = {};
+    LOOP.lastPress = 0; B.click(); await until('recording'); noteOn(60, 100, 'smk'); await Wt(150); noteOff(60, 'smk'); await until('playing'); r.closed = st();
+    LOOP.lastPress = 0; B.click(); r.dub = st(); noteOn(64, 100, 'smk'); await Wt(150); noteOff(64, 'smk'); LOOP.lastPress = 0; B.click(); r.kept = st() + '/' + PROJ.tracks.length;
+    loopStop(); LOOP.lastPress = 0; B.click(); r.replay = st(); LOOP.lastPress = 0; B.click(); r.stop = st(); CTRL.loopLen = ll; return r; });
+  ok('looper flow: Record loop → "Overdub" → overdub → keep; replayed, the button stops', lf.closed === 'playing/Overdub' && /^overdub\//.test(lf.dub) && /^playing\/Overdub\/\d+$/.test(lf.kept) && lf.replay === 'playing/Stop loop' && lf.stop === 'stopped/Play loop', JSON.stringify(lf));
   // 5. import MIDI and audio, audio → notes
   await E(() => newSong('Smoke import')); await W(300);
   const inp = await p.$('#importFile'); await inp.uploadFile(fx('test.mid')); await W(800); await inp.uploadFile(fx('sing.wav')); await W(1500);
@@ -156,7 +163,8 @@ try {
   ok('song: sing the chords in Song mode → plays in the selected section like an added part, and a toast says so', sg.mode === 'song' && sg.sung === 'Intro' && sg.sung === sg.ref && /^“Sung chords” plays in Intro\. Click its empty parts/.test(sg.toast || ''), JSON.stringify(sg));
   const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
   await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(1500);
-  await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 15000 }).catch(() => {}); // keepLastSong is async: wait for it on a busy machine
+  // keepLastSong is async: wait for it on a busy machine (QA, 15 Nov: 15 s wasn't always enough with parallel checks running; the reopen then read the old copy)
+  await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 40000 }).catch(() => {});
   const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null; try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r) await loadNamed(id);
     return { n0, name0, listed: !!r, name: PROJ.name, n: PROJ.tracks.length, s: songSections().length, label: $('#saveState').textContent }; }, before.id);
   ok('song: opening the app starts a new empty song; the last one reopens from the list intact', rl.n0 === 0 && rl.listed && rl.name === 'Before reload' && rl.n === before.n && rl.s === before.s, `new song had ${rl.n0} tracks; reopened "${rl.name}" ${rl.n} tracks, ${rl.s} sections`);
