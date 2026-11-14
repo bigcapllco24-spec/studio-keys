@@ -206,6 +206,26 @@ try {
         const bpm0 = CTRL.bpm; await handleRequest(s); loopStop(); R[s] = { bpm: CTRL.bpm - bpm0, back: drums().recipe.back }; }
       return R; } finally { ASSIST.engine = eng; } });
   ok('"faster" about a part keeps the tempo, "add a snare roll" keeps the clap', n23['make the bass faster'].bpm === 0 && n23['faster chords'].bpm === 0 && n23['make it faster'].bpm === 5 && n23['add a snare roll'].back !== 'snare' && n23['add a snare'].back === 'snare', JSON.stringify(n23));
+  // SE-7a: the honest key (chip, every pitched part counts, short hums don't lock it, old songs don't move)
+  const hk = await E(async () => { await newSong('Smoke key'); const R = { empty: keyStatusText(), chip: $('#keyInfo').textContent.trim() };
+    const ev = [], bs = []; [[5, 9, 0], [10, 2, 5], [0, 4, 7], [5, 9, 0]].forEach((c, i) => { c.forEach(pc => ev.push({ b: i * 4, d: 3.9, n: nearestAbove(pc, 57), v: 0.7 })); [0, 2].forEach(o => bs.push({ b: i * 4 + o, d: 1.9, n: nearestAbove(c[0], 36), v: 0.9 })); });
+    addTrack({ role: 'chords', inst: 'piano', name: 'My chords', events: ev }); addTrack({ role: 'bass', inst: 'bass', name: 'My bass', events: bs }); R.det = keyStatusText(); R.detChip = $('#keyInfo').textContent;
+    runActions([{ type: 'add_melody' }]); loopStop(); const sc = scaleOf({ tonic: 5, mode: 'major' }), m = PROJ.tracks.find(t => t.role === 'melody'); R.n = m.events.length; R.out = m.events.filter(e => !sc.includes(mod(e.n, 12))).length;
+    await newSong('Smoke hum'); takeKey([60, 64, 67].map((n, i) => ({ b: i, d: 1, n, v: 0.8 }))); R.hum = keyStatusText(); R.humKey = PROJ.key;
+    /* a song saved before SE-7: parts generated in the old default key (A minor), no key stored */
+    await newSong('Smoke old'); PROJ.style = 'house'; PROJ.key = { tonic: 9, mode: 'minor' }; PROJ.prog = [0, 5, 2, 6];
+    const old = { id: 'psmokeold', name: 'Smoke old key', bars: 4, key: null, style: 'house', prog: [0, 5, 2, 6], tracks: [
+      { id: 'to1', kind: 'notes', role: 'bass', inst: 'pluckbass', gen: true, name: 'Bassline', events: genBass('house', 16, 5), vol: 0.8, lo: 0, mid: 0, hi: 0, fx: {} },
+      { id: 'to2', kind: 'notes', role: 'chords', inst: 'piano', gen: true, name: 'Chords', events: genChords('house', 16, 9), vol: 0.6, lo: 0, mid: 0, hi: 0, fx: {} }] };
+    const before = JSON.stringify(old.tracks.map(t => t.events)); PROJ.key = null;
+    await IDB.put(old.id, { key: old.id, name: old.name, bpm: 124, bars: 4, tracks: 2, savedAt: Date.now(), proj: old }, 'projects'); await newSong('Smoke other'); await loadNamed(old.id);
+    R.oldSame = JSON.stringify(PROJ.tracks.map(t => t.events)) === before; R.old = keyStatusText();
+    runActions([{ type: 'add_bass', new: true }]); loopStop(); const nb = PROJ.tracks[PROJ.tracks.length - 1], am = scaleOf({ tonic: 9, mode: 'minor' }); R.oldNew = nb.events.filter(e => !am.includes(mod(e.n, 12))).length;
+    return R; });
+  ok('key: an empty song says "no key yet"', hk.empty === 'no key yet' && hk.chip === 'no key yet', hk.chip);
+  ok('key: F major chords + bass (no melody) read F major, and a new melody uses only F major notes', /^F major/.test(hk.det) && hk.n > 4 && hk.out === 0, `${hk.det} (chip "${hk.detChip}"), melody ${hk.n} notes, ${hk.out} outside F major`);
+  ok('key: a 3-note hum does not lock the key', hk.hum === 'no key yet' && hk.humKey === null, hk.hum);
+  ok('key: a song saved before SE-7 reopens without its parts moving, and new parts stay in its old key', hk.oldSame && hk.old === 'A minor · Keys picked' && hk.oldNew === 0, `${hk.old}, parts unchanged ${hk.oldSame}, new bass ${hk.oldNew} notes outside A minor`);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
