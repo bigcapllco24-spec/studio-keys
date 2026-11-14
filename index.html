@@ -885,7 +885,7 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
         <button class="btn small" type="button" id="edClose">Close</button>
       </div>
       <div class="ed-pat" id="edPat" hidden></div>
-      <div class="ed-wrap" id="edWrap"><canvas id="edCanvas" aria-label="Note editor"></canvas><div class="ed-play" id="edPlay"></div></div>
+      <div class="ed-wrap" id="edWrap"><canvas id="edCanvas" tabindex="0" aria-label="Note editor: Ctrl+A selects all notes, Delete removes the selected ones, Space plays or stops"></canvas><div class="ed-play" id="edPlay"></div></div>
     </div>
 
     <div class="song-menu" id="songMenu" role="menu" hidden></div>
@@ -3838,14 +3838,15 @@ function songUniqueName(base,S,except){ S=S||songSections(); base=String(base||'
   const root=base.replace(/\s+\d+$/,''); for(let i=2;i<99;i++){ const n=root+' '+i; if(!taken(n)) return n; } return base; }
 /* keep sections in step with the tracks: drop parts of deleted tracks, switch new tracks on, follow the loop length while
    the song is still one automatic section. Runs before every undo snapshot (edit.js) */
-let songFreshT=0;
+let songFreshT=0, songFreshN=[]; /* names of new tracks waiting for one note (a MIDI file adds its tracks one save at a time) */
 function songSync(){ const p=PROJ; migrateSong(p); const S=p.sections, ids=new Set(p.tracks.map(t=>t.id));
   S.forEach(s=>{ for(const k in s.parts) if(!ids.has(k)) delete s.parts[k]; if(s.auto) s.bars=p.bars; });
   const fresh=p.tracks.filter(t=>!S.some(s=>s.parts[t.id]));
   if(fresh.length){ const sel=songSel(), on=S.length===1||!sel?S:[sel];
     fresh.forEach(t=>S.forEach(s=>{ s.parts[t.id]={on:on.includes(s),variant:'A'}; }));
-    if(on.length<S.length&&songOn()){ const nm=fresh.map(t=>`“${t.name}”`).join(', '); clearTimeout(songFreshT);
-      songFreshT=setTimeout(()=>toast(`${nm} play${fresh.length>1?'':'s'} in ${on.map(s=>s.name).join(', ')}. Click its empty parts to add it elsewhere.`),900); } }
+    if(on.length<S.length&&songOn()){ fresh.forEach(t=>{ if(!songFreshN.includes(t.name)) songFreshN.push(t.name); }); const where=on.map(s=>s.name).join(', '); clearTimeout(songFreshT);
+      songFreshT=setTimeout(()=>{ const N=songFreshN.map(n=>`“${n}”`), many=N.length>1; songFreshN=[]; if(!N.length) return;
+        toast(`${many?N.slice(0,-1).join(', ')+' and '+N[N.length-1]:N[0]} play${many?'':'s'} in ${where}. Click ${many?'their':'its'} empty parts to add ${many?'them':'it'} elsewhere.`); },900); } }
   SONG.ver++; }
 function songCopyParts(fromId,toId){ songSections().forEach(s=>{ if(s.parts[fromId]) s.parts[toId]=JSON.parse(JSON.stringify(s.parts[fromId])); }); }
 
@@ -4211,7 +4212,7 @@ function songStartRename(id){ const el=document.querySelector(`#songStrip .sec[d
     if(L.chip&&L.chip.tok===UNDO.last) songChip(L.chip.text); };
   box.addEventListener('click',e=>{ const el=e.target.closest('.part'); if(!el) return; clearTimeout(pT); if(e.detail===0){ togglePart(el); return; } if(e.detail>1) return; pLast=null; pT=setTimeout(()=>togglePart(el),230); });
   box.addEventListener('dblclick',e=>{ const el=e.target.closest('.part'); if(!el) return; clearTimeout(pT); untogglePart(el.dataset.sid,el.dataset.tid); const t=PROJ.tracks.find(x=>x.id===el.dataset.tid); if(!t) return;
-    songSelect(el.dataset.sid,{cursor:!TR.running}); if(t.kind==='notes') openEditor(t.id,{sid:el.dataset.sid}); else toast('That’s a recording: switch it on or off here. Use “Turn into notes” to edit it as notes.'); });
+    songSelect(el.dataset.sid,{cursor:!TR.running}); if(t.kind==='notes'){ openEditor(t.id,{sid:el.dataset.sid}); edFocus(); } else toast('That’s a recording: switch it on or off here. Use “Turn into notes” to edit it as notes.'); });
   /* the song area takes the keyboard while it has focus; clicking the piano gives the keys back */
   pl.addEventListener('pointerdown',e=>{ if(!songOn()||e.target.closest('input,select,textarea,button,.slane')) return; if(e.target.closest('.th,.tfx')) return; pl.focus({preventScroll:true}); });
   document.addEventListener('pointerdown',e=>{ const a=document.activeElement; if(a&&a!==document.body&&pl.contains(a)&&!pl.contains(e.target)&&!e.target.closest('#songMenu')) a.blur(); },true); /* e.g. the piano: its keys play notes again */
@@ -4358,6 +4359,8 @@ function openEditor(id,o={}){ const t=PROJ.tracks.find(x=>x.id===id); if(!t||t.k
   if(!isDrumTrack(t) && t.events.length){ const ns=t.events.map(e=>e.n).sort((a,b)=>a-b); ED.top=clamp(Math.max(ns[ns.length-1]+4,ns[0]+30),40,120); } else if(!isDrumTrack(t)) ED.top=t.role==='bass'?60:84;
   $('#editor').hidden=false; $('#edTitle').textContent=t.name; edHint(); setEdMode(ED.mode);
   document.querySelectorAll('.trk').forEach(r=>r.classList.toggle('sel',r.dataset.tid===id)); drawEditor(); $('#editor').scrollIntoView({behavior:'smooth',block:'nearest'}); }
+/* give the keyboard to the note editor (e.g. after a double-click on a song part), so Delete / Ctrl+D act on its notes, not on the song's sections (UX-7) */
+function edFocus(){ const cv=$('#edCanvas'); if(cv&&!$('#editor').hidden&&document.activeElement!==cv) cv.focus({preventScroll:true}); }
 function closeEditor(){ ED.tid=null; ED.sel=new Set(); ED.pat='A'; ED.sid=null; $('#editor').hidden=true; document.querySelectorAll('.trk.sel').forEach(r=>r.classList.remove('sel')); }
 $('#edClose').onclick=closeEditor;
 /* patterns: which version of this track's notes the section plays (A is the main one; B, C… belong to some sections only) */
@@ -4380,7 +4383,7 @@ $('#edQuant').onclick=()=>{ const t=edTrack(); if(!t) return; const q=ED.grid; e
 $('#edUp').onclick=()=>edShift(1); $('#edDown').onclick=()=>edShift(-1);
 function edShift(s){ const t=edTrack(); if(!t||isDrumTrack(t)) return; edTargets(t).forEach(e=>e.n+=s); if(!ED.sel.size) ED.top+=s; edChanged(); }
 $('#edClear').onclick=()=>{ const t=edTrack(); if(!t) return; const b=$('#edClear'); if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Confirm clear'; setTimeout(()=>{ delete b.dataset.armed; b.textContent='Clear notes'; },3000); return; } delete b.dataset.armed; b.textContent='Clear notes'; t.events=[]; ED.sel=new Set(); edChanged(); };
-function edChanged(){ if(typeof undoBoundary==='function') undoBoundary(); const t=edTrack(), real=PROJ.tracks.find(x=>x.id===ED.tid); if(real) real.gen=false; if(t){ t.events.forEach(e=>{ if(e.cyc!==undefined && !TR.running) delete e.cyc; }); } saveProject(); drawEditor(); drawRolls(); const r=document.querySelector(`.trk[data-tid="${ED.tid}"] .trole`); if(r&&t) r.textContent=`${ROLE_NAME[t.role]||'Part'} · ${t.events.length} notes`; }
+function edChanged(){ if(typeof undoBoundary==='function'&&!ED.oneStep) undoBoundary(); ED.oneStep=false; const t=edTrack(), real=PROJ.tracks.find(x=>x.id===ED.tid); if(real) real.gen=false; if(t){ t.events.forEach(e=>{ if(e.cyc!==undefined && !TR.running) delete e.cyc; }); } saveProject(); drawEditor(); drawRolls(); const r=document.querySelector(`.trk[data-tid="${ED.tid}"] .trole`); if(r&&t) r.textContent=`${ROLE_NAME[t.role]||'Part'} · ${t.events.length} notes`; }
 function drumRows(t){ const rows=DRUM_ROWS.slice(); t.events.forEach(e=>{ if(!rows.some(r=>r[0]===e.n)) rows.unshift([e.n,DRUM_LABEL[drumPiece(e.n)]+' '+noteName(e.n)]); }); return rows; }
 function edGeom(){ const t=edTrack(), L=PROJ.bars*4, K=78, wrap=$('#edWrap'), vh=ED.velH;
   if(isDrumTrack(t)){ const rows=drumRows(t), steps=L*4, cw=Math.max(16,(wrap.clientWidth-K-2)/steps), rh=24, gh=rows.length*rh; return {drum:true,rows,steps,cw,rh,K,L,W:K+steps*cw,gh,H:gh+vh+8,bw:cw*4}; }
@@ -4417,7 +4420,7 @@ function drawEditor(){
 function previewNote(t,n){ const c=ensureAudio(); if(!c) return; const I=INST.get(t.inst); if(!I) return; try{ const v=I.play(c,trackStrip(t).inp,n,0.8,c.currentTime); if(v&&!v.oneShot) v.release(c.currentTime+0.25); }catch(e){} }
 function edCopy(){ const t=edTrack(); if(!t||!ED.sel.size) return false; const ev=[...ED.sel], b0=Math.min(...ev.map(e=>e.b)), end=Math.max(...ev.map(e=>e.b+e.d));
   ED.clip={tid:t.id,notes:ev.map(e=>({b:e.b-b0,d:e.d,n:e.n,v:e.v})),span:Math.max(ED.grid,Math.ceil((end-b0)/1-1e-6)*1),at:b0}; return true; }
-function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bars*4; let base=at!=null?at:ED.clip.at+ED.clip.span; if(base>=L){ if(PROJ.bars<16){ toast('No room after the end of the song, so I doubled its length first'); const oldL=L; setBars(PROJ.bars*2); L=PROJ.bars*4; t.events=t.events.filter(e=>e.b<oldL); } else { toast('The song is already 16 bars long. Move the playhead or select less.'); return; } } ED.clip.at=base;
+function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bars*4; let base=at!=null?at:ED.clip.at+ED.clip.span; if(base>=L){ if(PROJ.bars<16){ toast('No room after the end of the song, so I doubled its length first'); const oldL=L; undoBoundary(); setBars(PROJ.bars*2); ED.oneStep=true; /* the longer loop and the pasted notes are one Undo step (UX-7) */ L=PROJ.bars*4; t.events=t.events.filter(e=>e.b<oldL); } else { toast('The song is already 16 bars long. Move the playhead or select less.'); return; } } ED.clip.at=base;
   const add=ED.clip.notes.map(x=>({b:base+x.b,d:x.d,n:x.n,v:x.v})).filter(e=>e.b<L); t.events.push(...add); ED.sel=new Set(add); edChanged(); }
 (function(){
   const cv=$('#edCanvas');
@@ -4428,7 +4431,7 @@ function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bar
   const setVel=(t,G,p,e)=>{ const vy=G.gh+8, v=clamp(1-(p.y-vy-3)/(ED.velH-6),0.05,1); const targets=ED.sel.has(e)&&ED.sel.size>1&&ED.drag&&ED.drag.group?[...ED.sel]:[e]; targets.forEach(x=>x.v=Math.round(v*100)/100); };
   cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('pointerdown',e=>{
-    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e); e.preventDefault(); ensureAudio(); cv.focus&&cv.focus();
+    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e); e.preventDefault(); ensureAudio(); edFocus();
     if(p.y>G.gh+4){ const v=velHit(t,G,p); if(v){ ED.drag={mode:'vel',group:e.altKey}; setVel(t,G,p,v); drawEditor(); try{ cv.setPointerCapture(e.pointerId); }catch(_){} } return; }
     if(p.x<G.K){ const n=G.drum?(G.rows[Math.floor(p.y/G.rh)]||[])[0]:ED.top-Math.floor(p.y/G.rh); if(n!=null) previewNote(t,n); return; }
     const h=hit(t,G,p);
@@ -4482,6 +4485,7 @@ function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bar
   document.addEventListener('keydown',e=>{
     if(!ED.tid||$('#editor').hidden) return; const tg=e.target; if(tg&&/INPUT|SELECT|TEXTAREA/.test(tg.tagName)) return; const t=edTrack(); if(!t) return;
     const mod_=e.ctrlKey||e.metaKey, k=e.key.toLowerCase();
+    if(e.key===' '&&!mod_&&tg===cv){ e.preventDefault(); if(!e.repeat){ ensureAudio(); if(TR.running) loopStop(); else loopPlay(); } return; } /* the editor has the keyboard: Space plays or stops, as in the song area */
     if(mod_&&k==='a'){ ED.sel=new Set(t.events); drawEditor(); e.preventDefault(); return; }
     if(mod_&&k==='c'){ if(edCopy()){ toast(`Copied ${ED.sel.size} note${ED.sel.size>1?'s':''}`); e.preventDefault(); } return; }
     if(mod_&&k==='x'){ if(edCopy()){ t.events=t.events.filter(x=>!ED.sel.has(x)); ED.sel=new Set(); edChanged(); e.preventDefault(); } return; }
