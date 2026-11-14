@@ -1,0 +1,11 @@
+# SE-7a fix brief (sound-engine-dev) · 15 Nov 2026
+
+Read `.claude/standards/dev-standards.md` first. Work in your worktree `/home/claude/wt-se-7` on `preview-se-7` (`git pull --rebase` first: the tester pushed a smoke line and its report `.claude/work/reports/SE-7-test.md`). Verdict READY, but the owner will sing over a beat first thing, so fix these before he tries it:
+
+1. (medium) A sung melody on its own can read as the wrong key and Keys then locks it in: `detectKey` counts melody notes at a bar start as bass roots (`barRoot`, `why`), and `keysPickKey` stored "G major · Keys picked" from a 7-note take (A C G E G A C G G should read C major or A minor), so the bassline was built in G major. Only count real bass parts (role bass, or the lowest voice of a chord part) as bass roots; with too few notes, Keys picking a key should still respect the notes that exist (a key those notes fit), not lock in a wrong one.
+2. (low) Reasons say "the bass lands on X" when there's no bass part; and with F♯m–E–D–E chords only, the second guess was E major (has D♯ against a played D) over A major. Reasons must describe what's really there (chords, melody), and a second guess shouldn't clash with played notes when a same-notes key exists.
+3. (low) "from your humming" shows when the key came from chords, or from an imported audio file turned into notes (`takeKey` always stores `hum:true`). Label it by its real source.
+4. (low, you may edit `src/assistant.js` ~line 144) The hum reply states a guess as fact ("Got your hum: 12 notes in D minor"); word it like the sung-take reply ("it sounds like …").
+Optional if quick: the i-VI-III-VII progressions (Dm–B♭–F–C, Am–F–C–G with bass on the roots) read only "maybe" although right; the owner's genre lives on these, so see if sureness can be fairer without hurting the accuracy numbers (re-run your 864-loop test and report it).
+
+Commit and push WIP to `preview-se-7`; never push main. `bash .claude/tools/check.sh` until CHECK OK; add smoke lines for #1 and #3. Retake the two screenshots in `/home/claude/se7-shots/` if the chip text changed. Append a "Fix 1" section to `.claude/work/reports/SE-7a-build.md`, commit, push. Final message: what you fixed with numbers, the accuracy re-run, and the branch head.
