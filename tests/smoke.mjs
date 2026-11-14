@@ -209,7 +209,7 @@ try {
   // SE-7a: the honest key (chip, every pitched part counts, short hums don't lock it, old songs don't move)
   const hk = await E(async () => { await newSong('Smoke key'); const R = { empty: keyStatusText(), chip: $('#keyInfo').textContent.trim() };
     const ev = [], bs = []; [[5, 9, 0], [10, 2, 5], [0, 4, 7], [5, 9, 0]].forEach((c, i) => { c.forEach(pc => ev.push({ b: i * 4, d: 3.9, n: nearestAbove(pc, 57), v: 0.7 })); [0, 2].forEach(o => bs.push({ b: i * 4 + o, d: 1.9, n: nearestAbove(c[0], 36), v: 0.9 })); });
-    addTrack({ role: 'chords', inst: 'piano', name: 'My chords', events: ev }); addTrack({ role: 'bass', inst: 'bass', name: 'My bass', events: bs }); R.det = keyStatusText(); R.detChip = $('#keyInfo').textContent;
+    addTrack({ role: 'chords', inst: 'piano', name: 'My chords', events: ev }); addTrack({ role: 'bass', inst: 'bass', name: 'My bass', events: bs }); R.det = keyStatusText(); R.detChip = $('#keyInfo').innerText.replace(/\s+/g, ' ').trim();
     runActions([{ type: 'add_melody' }]); loopStop(); const sc = scaleOf({ tonic: 5, mode: 'major' }), m = PROJ.tracks.find(t => t.role === 'melody'); R.n = m.events.length; R.out = m.events.filter(e => !sc.includes(mod(e.n, 12))).length;
     await newSong('Smoke hum'); takeKey([60, 64, 67].map((n, i) => ({ b: i, d: 1, n, v: 0.8 }))); R.hum = keyStatusText(); R.humKey = PROJ.key;
     /* a song saved before SE-7: parts generated in the old default key (A minor), no key stored */
@@ -226,6 +226,14 @@ try {
   ok('key: F major chords + bass (no melody) read F major, and a new melody uses only F major notes', /^F major/.test(hk.det) && hk.n > 4 && hk.out === 0, `${hk.det} (chip "${hk.detChip}"), melody ${hk.n} notes, ${hk.out} outside F major`);
   ok('key: a 3-note hum does not lock the key', hk.hum === 'no key yet' && hk.humKey === null, hk.hum);
   ok('key: a song saved before SE-7 reopens without its parts moving, and new parts stay in its old key', hk.oldSame && hk.old === 'A minor · Keys picked' && hk.oldNew === 0, `${hk.old}, parts unchanged ${hk.oldSame}, new bass ${hk.oldNew} notes outside A minor`);
+  // SE-7a (QA): the key popover's Set only relabels (notes stay), Undo goes back to auto, Back to auto works; Keys picks a key for a bass on a drums-only song
+  const kpop = await E(async () => { await newSong('Smoke key pop'); const ch = []; [[9, 0, 4], [5, 9, 0], [0, 4, 7], [7, 11, 2]].forEach((c, i) => c.forEach(pc => ch.push({ b: i * 4, d: 3.9, n: nearestAbove(pc, 55), v: 0.7 }))); addTrack({ role: 'chords', inst: 'piano', name: 'My chords', events: ch });
+    const R = { auto: keyStatusText() }, n0 = JSON.stringify(PROJ.tracks.map(t => t.events.map(e => e.n))); await new Promise(r => setTimeout(r, 200));
+    $('#keyInfo').click(); R.open = !$('#keyPop').hidden; R.rows = document.querySelectorAll('#keyPop [data-kset]').length; document.querySelector('#keyPop [data-kset="1"]').click();
+    R.set = keyStatusText(); R.menu = $('#keySel').value; R.same = JSON.stringify(PROJ.tracks.map(t => t.events.map(e => e.n))) === n0; R.closed = $('#keyPop').hidden;
+    await new Promise(r => setTimeout(r, 200)); undo(); R.undo = keyStatusText(); redo(); $('#keyInfo').click(); document.querySelector('#keyPop [data-kauto]').click(); R.back = keyStatusText();
+    await newSong('Smoke key picked'); runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_bass' }]); loopStop(); R.picked = keyStatusText(); R.chip = $('#keyInfo').innerText.trim(); return R; });
+  ok('key: popover Set relabels without moving notes, Undo goes back to auto, "Back to auto" works; Keys picks a key for a bass on a drums-only beat', kpop.open && kpop.rows === 3 && / · set$/.test(kpop.set) && kpop.menu !== '' && kpop.same && kpop.closed && kpop.undo === kpop.auto && kpop.back === kpop.auto && /· Keys picked$/.test(kpop.picked) && kpop.chip === 'Keys picked', `${kpop.auto} → ${kpop.set} → undo ${kpop.undo} → back ${kpop.back}; drums + bass: ${kpop.picked}`);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
