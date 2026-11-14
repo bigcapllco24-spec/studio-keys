@@ -32,7 +32,9 @@ try {
   await W(300); const un = await E(() => { undo(); return PROJ.tracks.find(t => t.role === 'chords').events.length; });
   ok('note editor copy/paste and undo', ed.open && ed.n1 === ed.n0 + 3 && un === ed.n0, `${ed.n0}→${ed.n1}→${un}`);
   // 3a. velocity lane fits in the editor box; dragging a selected bar moves all selected notes in one undo step (UX-2)
-  await W(400); const vl = await E(() => { const t = PROJ.tracks.find(t => t.role === 'chords'); openEditor(t.id); $('#editor').scrollIntoView({ block: 'center' }); t.events.forEach((e, i) => e.v = i % 2 ? 0.5 : 0.7); ED.sel = new Set(t.events.slice(0, 6)); drawEditor(); saveProject();
+  await W(400); await E(() => { const t = PROJ.tracks.find(t => t.role === 'chords'); openEditor(t.id); $('#editor').scrollIntoView({ block: 'center' }); t.events.forEach((e, i) => e.v = i % 2 ? 0.5 : 0.7); ED.sel = new Set(t.events.slice(0, 6)); drawEditor(); saveProject(); });
+  await W(400); // QA: measure after the page settles (on a busy machine the drag missed the bar: flaky FAIL 15 Nov)
+  const vl = await E(() => { const t = PROJ.tracks.find(t => t.role === 'chords'); $('#editor').scrollIntoView({ block: 'center' });
     const w = $('#edWrap'), G = edGeom(), cr = $('#edCanvas').getBoundingClientRect(), e = t.events[0], vy = cr.top + G.gh + 8;
     return { fits: w.scrollHeight <= w.clientHeight && cr.top + G.gh + 8 + ED.velH <= innerHeight, x: cr.left + G.K + e.b * G.bw + 1, y0: vy + 3 + 0.3 * (ED.velH - 6), y1: vy + 3 + 0.1 * (ED.velH - 6), u0: UNDO.stack.length }; });
   await W(300); await p.mouse.move(vl.x, vl.y0); await p.mouse.down(); await p.mouse.move(vl.x, vl.y1, { steps: 4 }); await p.mouse.up(); await W(200);
@@ -153,7 +155,9 @@ try {
   const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
   await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(1500);
   await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 15000 }).catch(() => {}); // keepLastSong is async: wait for it on a busy machine
-  const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null; try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r) await loadNamed(id);
+  const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null;
+    for (let i = 0; i < 30; i++) { try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r && r.name === 'Before reload') break; await new Promise(q => setTimeout(q, 500)); } // QA: keepLastSong may still be writing on a busy machine (flaky FAIL 15 Nov)
+    if (r) await loadNamed(id);
     return { n0, name0, listed: !!r, name: PROJ.name, n: PROJ.tracks.length, s: songSections().length, label: $('#saveState').textContent }; }, before.id);
   ok('song: opening the app starts a new empty song; the last one reopens from the list intact', rl.n0 === 0 && rl.listed && rl.name === 'Before reload' && rl.n === before.n && rl.s === before.s, `new song had ${rl.n0} tracks; reopened "${rl.name}" ${rl.n} tracks, ${rl.s} sections`);
   // QA, 13 Nov: after opening a song from the list, Undo must step back inside that song, never to the empty song opened before it
@@ -220,12 +224,17 @@ try {
       R.gap = pre.end && pre.end.to; R.inGap = PROJ.tracks.filter(t => t.kind === 'notes' && t.role !== 'drums').reduce((a, t) => a + songFlat(t).filter(e => e.B >= end - 1 && e.B < end).length, 0) + songFlat(dr).filter(e => e.B >= end - 1 && e.B < end).length;
       undo(); undo(); R.undo = songSections().length === n0 && !songFind('drop 2');
       R.loop = localBrain('make the loop 8 bars').actions.map(a => a.type + ':' + a.bars).join();
+      /* QA 15 Nov: the gap before a drop must be silent with the drums playing. Count every note that starts in the last beat, including hits the drummer pushes up to 1/16 early */
+      await say('make it a full track'); const SB = songSections(), bu = SB.find(s => s.kind === 'build'), bEnd = songStartOf(bu) + bu.bars * 4;
+      const early = () => PROJ.tracks.filter(t => t.kind === 'notes').reduce((a, t) => a + songFlat(t).filter(e => e.B >= bEnd - 1.0625 && e.B < bEnd).length, 0);
+      R.gapRoll = bu.end && bu.end.gap ? early() : 'no gap'; await say('add some silence before the first drop'); const bu2 = songSections().find(s => s.kind === 'build'); R.gapKick = (bu2.end && bu2.end.to) + ':' + early();
       await newSong('Smoke AI-1b'); const u0 = UNDO.stack.length; runActions([{ type: 'vibe', ref: 'Ben Böhmer' }, { type: 'add_drums' }, { type: 'add_bass' }, { type: 'add_chords' }, { type: 'add_melody' }, { type: 'arrange', template: 'full' }, { type: 'transport', do: 'play' }]); loopStop(); R.one = UNDO.stack.length - u0; R.oneLen = songBars();
     } finally { ASSIST.engine = eng; } return R; });
   ok('AI-1: "8-bar intro, then build up and drop" → Intro 8 · Build 8 · Drop 16 in Song mode, with the song map and one Undo chip', ai1.lay1 === 'Intro 8 · Build 8 · Drop 16' && ai1.mode === 'song' && ai1.map === 3 && ai1.chip && ai1.s1 === 1, JSON.stringify({ lay: ai1.lay1, map: ai1.map, steps: ai1.s1 }));
   ok('AI-1: "full track" is 96 bars; "make the break longer" adds 8; "drop the drums in the outro" switches them off', ai1.full === 96 && ai1.brk === 8 && ai1.outro === false && ai1.s2 === 1 && ai1.s3 === 1, JSON.stringify({ full: ai1.full, brk: ai1.brk, outro: ai1.outro }));
   ok('AI-1: "add a second drop" (after the break) adds Drop 2 before the Outro; Hinglish silence = a gap before it; Undo goes back', ai1.tail === 'Break,Drop 2,Outro' && ai1.added === 1 && ai1.s4 === 1 && ai1.gap === 'kickdrop' && ai1.inGap <= 1 && ai1.undo, JSON.stringify({ tail: ai1.tail, gap: ai1.gap, notesInGap: ai1.inGap, undo: ai1.undo }));
   ok('AI-1: "make the loop 8 bars" still sets the loop; arrange with four new parts is one undo step (Böhmer: long break)', ai1.loop === 'bars:8' && ai1.one === 1 && ai1.oneLen >= 96, JSON.stringify({ loop: ai1.loop, steps: ai1.one, bars: ai1.oneLen }));
+  ok('AI-1: the gap before the drop is empty: no hit starts in the last beat, even one the drummer pushes early (roll + gap, kick drop)', ai1.gapRoll === 0 && ai1.gapKick === 'kickdrop:0', JSON.stringify({ rollGap: ai1.gapRoll, kickdrop: ai1.gapKick }));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
