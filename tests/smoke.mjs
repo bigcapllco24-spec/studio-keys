@@ -206,6 +206,21 @@ try {
         const bpm0 = CTRL.bpm; await handleRequest(s); loopStop(); R[s] = { bpm: CTRL.bpm - bpm0, back: drums().recipe.back }; }
       return R; } finally { ASSIST.engine = eng; } });
   ok('"faster" about a part keeps the tempo, "add a snare roll" keeps the clap', n23['make the bass faster'].bpm === 0 && n23['faster chords'].bpm === 0 && n23['make it faster'].bpm === 5 && n23['add a snare roll'].back !== 'snare' && n23['add a snare'].back === 'snare', JSON.stringify(n23));
+  // UX-9: a controller's Start (0xFA) plays the studio, Stop (0xFC) stops it; MMC Play/Stop too; Continue on an empty song does nothing (fake MIDI input, kept last)
+  const mt = await E(async () => { const Wt = ms => new Promise(r => setTimeout(r, ms)), pe = [], onErr = e => pe.push(e.message), old = { access: M.access, inputs: M.inputs, state: M.state };
+    const inp = { id: 'smoke-in', name: 'Smoke Keys 49', manufacturer: 'Smoke', type: 'input', state: 'connected', connection: 'open', onmidimessage: null };
+    const send = d => setTimeout(() => inp.onmidimessage({ data: new Uint8Array(d), timeStamp: performance.now() }), 0), R = {};
+    window.addEventListener('error', onErr);
+    try { await newSong('Smoke MIDI transport'); runActions([{ type: 'add_drums', style: 'house', seed: 5170 }]); loopStop();
+      attachAccess({ inputs: new Map([[inp.id, inp]]), outputs: new Map(), onstatechange: null });
+      send([0xFA]); await Wt(400); R.start = LOOP.state === 'playing' && TR.running;
+      send([0xFC]); await Wt(200); R.stop = LOOP.state === 'stopped' && !TR.running;
+      send([0xF0, 0x7F, 0x7F, 0x06, 0x02, 0xF7]); await Wt(300); R.mmcPlay = TR.running;
+      send([0xF0, 0x7F, 0x7F, 0x06, 0x01, 0xF7]); await Wt(200); R.mmcStop = !TR.running;
+      await newSong('Smoke MIDI empty'); send([0xFB]); await Wt(200); R.emptyQuiet = !TR.running;
+    } finally { loopStop(); inp.onmidimessage = null; Object.assign(M, old); window.removeEventListener('error', onErr); }
+    R.errors = pe; return R; });
+  ok('controller Start plays, Stop stops (and MMC Play/Stop), no errors', mt.start && mt.stop && mt.mmcPlay && mt.mmcStop && mt.emptyQuiet && !mt.errors.length, JSON.stringify(mt));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

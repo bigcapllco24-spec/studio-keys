@@ -98,14 +98,16 @@ function doAction(t,inp){
   else if(t==='loop') loopPress(); else if(t==='stop') loopStop();
 }
 
+/* controller Play/Start, Continue and MMC Play: same as the Play button (Song mode included); nothing to play, or already busy, does nothing */
+function midiPlay(){ if(LOOP.state==='stopped') loopPlay(); }
 function onMIDI(e,inp){
   if(M.selected!=='all' && inp.id!==M.selected) return;
   const d=e.data, st=d[0]; if(!d.length) return;
   const S=seenFor(inp);
   if(st===0xF8){ clockTick(e.timeStamp||performance.now()); if(!S.clock){ S.clock=true; scheduleSeen(); } return; }
   if(st===0xFE) return;
-  if(st===0xFA||st===0xFB){ if(LOOP.layers.length) loopPlay(); return; }
-  if(st===0xFC){ loopStop(); return; }
+  if(st===0xFA||st===0xFB){ log(st===0xFA?'Start':'Continue','','transport','cc'); midiPlay(); return; }
+  if(st===0xFC){ log('Stop','','transport','cc'); loopStop(); return; }
   if(st===0xF0){ handleSysex(d,inp); return; }
   const type=st&0xF0, ch=(st&0x0F)+1, a=d[1]|0, b=d[2]|0; S.channels.add(ch);
   const ds=settingsFor(inp), aux=isAux(inp), isPad=isPadNote(ds,ch,a);
@@ -190,7 +192,7 @@ function clockTick(ts){
 setInterval(()=>{ if(M.clkSeen && performance.now()-M.clkSeen>1000){ M.clkSeen=0; $('#clockLed').className='led'; } },500);
 function handleSysex(d,inp){
   if(d[1]===0x7F && d[3]===0x06){ const cmd=d[4]; log('MMC','',{1:'Stop',2:'Play',3:'Play',6:'Record',9:'Pause'}[cmd]||('cmd '+cmd),'cc');
-    if(cmd===1||cmd===9) loopStop(); else if(cmd===2||cmd===3){ if(LOOP.layers.length) loopPlay(); } else if(cmd===6) loopPress(); return; }
+    if(cmd===1||cmd===9) loopStop(); else if(cmd===2||cmd===3) midiPlay(); else if(cmd===6) loopPress(); return; }
   log('SysEx','',`${d.length} bytes`,'cc');
   if(!(d[1]===0x7E && d[3]===0x06 && d[4]===0x02)) return;
   M.awaitId=null; let o=5, id;
