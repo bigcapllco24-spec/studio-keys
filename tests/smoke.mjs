@@ -102,6 +102,13 @@ try {
     t.patterns.B.events.push({ b: 0.5, d: 0.25, n: 40, v: 0.9 }); saveProject(); const st = songStartOf(s), d1 = songStartOf(songFind('drop')), fl = songFlat(t);
     return { L, same: JSON.stringify(t.events) === a0, inB: fl.some(e => e.n === 40 && Math.abs(e.B - st - 0.5) < 1e-6), inA: fl.some(e => e.n === 40 && Math.abs(e.B - d1 - 0.5) < 1e-6) }; });
   ok('song: Make unique gives Drop 2 its own pattern B; the other drops keep A', mu.L === 'B' && mu.same && mu.inB && !mu.inA, JSON.stringify(mu));
+  // QA, 14 Nov: "MIDI only" in Song mode exports the whole layout (96 bars), not the 4-bar loop; Drop 2 carries pattern B
+  const mx = await E(() => { songMode('song'); const tr = PROJ.tracks.filter(trackAudible), fl = songFlatTracks(tr), u = buildMidi(fl, CTRL.bpm, songBeats(), 'qa');
+    let i = 14, t = 0; if (String.fromCharCode(...u.slice(i, i + 4)) === 'MTrk') { const end = i + 8 + ((u[i + 4] << 24) | (u[i + 5] << 16) | (u[i + 6] << 8) | u[i + 7]); i += 8;
+      while (i < end) { let v = 0, c; do { c = u[i++]; v = (v << 7) | (c & 127); } while (c & 128); t += v; if (u[i] === 0xff) { i += 2; let l = 0; do { c = u[i++]; l = (l << 7) | (c & 127); } while (c & 128); i += l; } else break; } }
+    const last = Math.max(...fl.flatMap(x => x.events.map(e => e.b + e.d))), bass = fl.find(x => x.role === 'bass' || x.take === 'bass'), d2 = songStartOf(songFind('drop 2'));
+    return { bars: t / 480 / 4, song: songBars(), last: +last.toFixed(2), beats: songBeats(), b40: !!bass && bass.events.some(e => e.n === 40 && Math.abs(e.b - d2 - 0.5) < 1e-6) }; });
+  ok('song: MIDI only exports the whole song, pattern B where it plays', mx.bars === mx.song && mx.song === 96 && mx.last <= mx.beats && mx.last > mx.beats - 8 && mx.b40, JSON.stringify(mx));
   const sp = await E(async () => { setTempo(124); songTemplate('short'); const t0 = performance.now(); const dr = PROJ.tracks.filter(t => trackAudible(t) && t.role === 'drums'); const m = await makeSongMp3(dr, null, { context: PROJ.tracks.filter(trackAudible) }); /* drums only keeps the check fast */ const ms = performance.now() - t0;
     const u = new Uint8Array(await m.blob.arrayBuffer()), d = await A.ctx.decodeAudioData(u.buffer.slice(0)); let pk = 0; for (let c = 0; c < d.numberOfChannels; c++) { const x = d.getChannelData(c); for (let i = 0; i < x.length; i++) { const a = Math.abs(x[i]); if (a > pk) pk = a; } }
     return { dec: d.duration, pk: 20 * Math.log10(pk || 1e-9), rms: 20 * Math.log10(m.rms || 1e-9), sec: ms / 1000 }; });
