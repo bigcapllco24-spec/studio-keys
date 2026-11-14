@@ -1,5 +1,5 @@
 # Studio Keys board (mirror of Studio Keys HQ)
-Last updated: 14 Nov 2026, 02:45 IST
+Last updated: 14 Nov 2026, 10:00 IST
 
 ## Awaiting build OK (owner tries the test link, in HQ). All links include the Song view (main 50b6315).
 - UX-4 · studio-ux-dev · L · Phone layout with Keys first (tabs Keys · Song · Mix · Play · More, mini transport, sheets, full-screen editor) + iPhone talking fixes. Round 2. https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-4/ · head 3bf75ff (main + UX-2 + UX-5) · tester READY after 4 fixes (`UX-4-retest.md`), 39 smoke + 13 phone checks. Ships after UX-2 and UX-5.
@@ -8,11 +8,12 @@ Last updated: 14 Nov 2026, 02:45 IST
 - SE-3 · sound-engine-dev · S · Real drummer feel + swing ladder. Round 2. https://studio-keys.bigcapllco24.workers.dev/p/preview-se-3/ · head edbef43 (main merged in, 39 checks). Deploy the Worker on release.
 - AI-4 · assistant-dev · S · Assistant bug fixes (offline brain). Round 1. https://studio-keys.bigcapllco24.workers.dev/p/preview-ai-4/ · head 18e0ad3 (main merged in). Deploy the Worker and run the Llama check on release.
 - UX-6 · studio-ux-dev · S · Install on the phone's home screen (manifest, service worker, icons, More → Add to Home Screen, one-time tip; Worker routes for the app files). Round 1. https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-6/ · head 391561d (8d7c605 + tester's tests/pwa.mjs) on top of UX-4 · tester READY, no bugs (`UX-6-test.md`). The real install needs the Worker routing update: early deploy was blocked by the safety check, held for the owner's 'deploy the UX-6 Worker' or the release. Rough edges: weak signal waits for the network; tip can cover Keys' first reply at 360x640.
-- Merge order: UX-2, UX-5, UX-4, then UX-6 (Worker deploy); SE-3 then AI-4 (maker.js/worker.js). Rebuild index.html after each.
+- UX-7 · studio-ux-dev · S · Bug fix (tester, 14 Nov): after double-clicking a song part, Delete removed the section instead of the notes; keys now go to the note editor (Space plays there), MIDI-import note names every track, Ctrl+D past the end is one Undo step, Tab focus ring. Round 1. https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-7/ · head aaea57c · tester READY (`UX-7-test.md`), 36 checks. Leftover (same as live): song area focused with the editor open, Ctrl+A highlights notes but Delete removes the section.
+- Merge order: UX-2, UX-5, UX-4, then UX-6 (Worker deploy); SE-3 then AI-4 (maker.js/worker.js); UX-7 any time. Rebuild index.html after each.
 
 ## Awaiting design OK (owner, in HQ)
 - SE-7 · sound-engine-dev (+ studio-ux-dev, assistant-dev) · L · Key and chord finder (owner request 14 Nov: 'the key detector ain't working'). Bug confirmed: key label reads only melody tracks, shows 'detected A minor' as a default. Phases 7a honest key chip (bug fix, first test link), 7b analyse a dropped-in song, 7c chord strip + voice actions. Round 1. Market: great 4/5. Proposal `.claude/work/proposals/SE-7.md`, research RES-6.
-- AI-1 · assistant-dev · L · Song sections by voice. Round 1. Market: great 5/5. Proposal `.claude/work/proposals/AI-1.md`. Builds together with UX-1.
+- AI-1 · assistant-dev · L · Song sections by voice (also: 'another one' per section, replies say which sections play a change; tester 14 Nov). Round 1. Market: great 5/5. Proposal `.claude/work/proposals/AI-1.md`. Builds together with UX-1.
 - SE-4 · sound-engine-dev · S-M · Producer chords (open voicings, more progressions) and organic house percussion feel, from the owner's PML packs (RES-4). Round 1. Proposal `.claude/work/proposals/SE-4.md`. Builds right after SE-3.
 
 ## Top priority (owner feedback, 13 Nov)
@@ -36,10 +37,10 @@ Last updated: 14 Nov 2026, 02:45 IST
 - RES-2 · done 13 Nov · Song structure: arrangement views and arranging by voice (`.claude/research/RES-2-song-structure.md`).
 
 ## Ongoing
-- QA-1 · qa-tester · daily session on the live build, bugs and up to 3 ideas a day. 13 Nov: 8 bugs (6 fixed in UX-2/AI-4, 1 → UX-3, 1 → SE-1), 2 ideas in requests (Capture MIDI, variation history), 1 folded into AI-3 (`QA-1-daily-2026-11-13.md`).
+- QA-1 · qa-tester · daily session on the live build, bugs and up to 3 ideas a day. 13 Nov: 8 bugs (6 fixed in UX-2/AI-4, 1 → UX-3, 1 → SE-1), 2 ideas in requests (Capture MIDI, variation history), 1 folded into AI-3 (`QA-1-daily-2026-11-13.md`). 14 Nov: Song view solid; 1 high bug → UX-7, 2 low → AI-1/UX-7; 3 ideas (song builds energy, Extended mix, Drop as a variation) (`QA-1-daily-2026-11-14.md`).
 
 ## Follow-ups noted (not on the board yet)
-- Space bar play/stop shortcut. Live AI can't see track EQ/low cut (add to projectState or a relative EQ field). Channel EQ is before the compressor, no 200-500 Hz band (SE-1). A re-sung take moves to the bottom of the track list. newSong() always opens in Loop mode. Loop recording makes one undo step per note. Offline parser reads '...at 124' as 122 bpm (maker.js). Song-mode editor shows 'Pattern for Intro: A' next to 'Pattern A plays only in Drop'. Sideways Keys chat 41 px tall on phones. Keys orb has a gradient (owner's call).
+- Space bar play/stop shortcut. Song area focused with the editor open: Ctrl+A highlights notes, Delete removes the section. ~11 px sideways scroll at 390/360 px. newSong() keeps the last song's tempo. Short/Just the loop replaces an edited layout without asking. Live AI can't see track EQ/low cut (add to projectState or a relative EQ field). Channel EQ is before the compressor, no 200-500 Hz band (SE-1). A re-sung take moves to the bottom of the track list. newSong() always opens in Loop mode. Loop recording makes one undo step per note. Offline parser reads '...at 124' as 122 bpm (maker.js). Song-mode editor shows 'Pattern for Intro: A' next to 'Pattern A plays only in Drop'. Sideways Keys chat 41 px tall on phones. Keys orb has a gradient (owner's call).
 
 ## Done
 - 13 Nov 2026 · UX-1 Song view (Loop/Song switch, Make it a song, sections, parts, patterns A/B) · 50b6315.
