@@ -6,7 +6,7 @@ const SRc=window.SpeechRecognition||window.webkitSpeechRecognition;
 const ASSIST={
   name:store.get('asName','Keys'), listening:false, voice:store.get('asVoice',true), hum:store.get('asHum',true),
   engine:null, rec:null, awakeUntil:0, speaking:false, busy:false, history:[], humNotes:[], humLast:0, speechAt:0,
-  say(msg,opts={}){ addBubble('as',msg,opts.chips); if(this.voice && opts.speak!==false) speak(msg); },
+  say(msg,opts={}){ addBubble('as',msg,opts.chips,opts.map); if(this.voice && opts.speak!==false) speak(msg); },
   run(text){ return handleRequest(text); },
   onMicNote(n,on){ if(ASSIST.listening||LOOP.state==='take') showSung(n,on); humNote(n,on); }
 };
@@ -16,9 +16,9 @@ function isSpeechy(text){ const w=(String(text).toLowerCase().match(/[a-z']+/g)|
 function showSung(n,on){ const box=$('#asNotes'); if(!box) return; if(on){ ASSIST.sung=(ASSIST.sung||[]).concat(n).slice(-14); }
   box.hidden=false; box.innerHTML=`<span class="as-mic${on?' live':''}">🎤 ${on?noteName(n):'listening'}</span>`+(ASSIST.sung||[]).map((x,i,a)=>`<i${i===a.length-1&&on?' class="now"':''}>${noteName(x)}</i>`).join('');
   clearTimeout(ASSIST.sungT); ASSIST.sungT=setTimeout(()=>{ if(!MIC.active&&LOOP.state!=='take'){ box.hidden=true; ASSIST.sung=[]; } },6000); }
-function addBubble(who,text,chips){
+function addBubble(who,text,chips,map){
   const box=$('#asChat'); const d=document.createElement('div'); d.className='bub '+who;
-  d.innerHTML=`<span class="who">${who==='me'?'You':esc(ASSIST.name)}</span><span>${esc(text)}</span>${chips&&chips.length?`<span class="done">${chips.map(c=>`<i>${esc(c)}</i>`).join('')}</span>`:''}`;
+  d.innerHTML=`<span class="who">${who==='me'?'You':esc(ASSIST.name)}</span><span>${esc(text)}</span>${chips&&chips.length?`<span class="done">${chips.map(c=>`<i>${esc(c)}</i>`).join('')}</span>`:''}${map||''}`;
   box.appendChild(d); while(box.children.length>14) box.firstChild.remove(); box.scrollTop=box.scrollHeight;
 }
 function setOrb(state,text){ const o=$('#asOrb'); o.dataset.state=state; $('#asStatus').textContent=text; }
@@ -32,6 +32,9 @@ function speak(msg){
     speechSynthesis.speak(u); }catch(e){ ASSIST.speaking=false; }
 }
 function afterSpeak(fn){ const t0=performance.now(); const w=()=>{ if(ASSIST.speaking&&performance.now()-t0<9000) return setTimeout(w,150); setTimeout(fn,250); }; w(); }
+/* the mini song map under a reply that changed the song (AI-1): blocks sized by bars, the changed ones outlined. The Undo is the chip in the song view */
+function songMapHTML(changed){ if(typeof songArranged!=='function'||!songArranged()) return ''; const S=songSections(), sh=S.length>4?songShortNames(S):null, ch=new Set(changed||[]);
+  return `<span class="as-map" role="img" aria-label="${esc('Song: '+S.map(s=>s.name+' '+s.bars+' bars').join(', '))}">${S.map(s=>`<i class="k-${s.kind}${ch.has(s.id)?' ch':''}" style="flex-grow:${s.bars}" title="${esc(s.name)} · ${s.bars} bars"><b>${esc(sh?sh[s.id]:s.name)}</b>${s.bars}</i>`).join('')}</span>`; }
 /* what to suggest next, one element at a time */
 function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
   if(!PROJ.tracks.length) return `Start with “drums”, name an artist, or hum an idea.`;
@@ -39,9 +42,11 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
   if(!has('bass')) return `Bassline next? Say “add a bassline”, or sing it: “let me sing the bassline”.`;
   if(!has('chords')) return `Chords next? Say “add chords”, or “let me sing the chords”.`;
   if(!has('melody')) return `A melody or hook next? Add one, or hum it while it plays.`;
-  return `Shape it with effects (“more reverb on the chords”), mix it, or download the MP3.`; }
+  if(typeof songArranged==='function'&&songArranged()) return `Shape the song: “make the break longer”, “drop the drums in the outro”, “add a second drop”, or download the MP3.`;
+  return `Shape it with effects (“more reverb on the chords”), mix it, make it a full track, or download the MP3.`; }
 function projectState(){
-  return {name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:PROJ.key?keyName(PROJ.key):`auto (${keyName(projectKey())})`,style:PROJ.style||null,playing:TR.running,
+  /* the song layout first, so the Worker's 7,000-character cut never drops it */
+  return {arrangement:typeof songSummary==='function'?songSummary():null,name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:PROJ.key?keyName(PROJ.key):`auto (${keyName(projectKey())})`,style:PROJ.style||null,playing:TR.running,
     tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute})),
     taste:TASTE.profile?{artists:(TASTE.profile.artists||[]).slice(0,12),styles:(TASTE.profile.styles||[]).map(s=>s.style),playlists:(TASTE.profile.playlists||[]).map(p=>p.name+(p.style?' ('+p.style+')':'')).slice(0,8)}:null,
     vibe:PROJ.ref||null,
@@ -66,9 +71,14 @@ async function handleRequest(text){
       done=runActions(j.actions||[]); reply=j.reply||'';
     }catch(e){ console.warn('assistant AI failed, using offline brain',e); const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
   } else { const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
-  if(!reply) reply=done.length?'Done: '+done.join(', ')+'. '+nextStep():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
+  /* what the executor knows and the AI didn't: a clamped length, a riser played as a roll, a missing part (AI-1) */
+  const notes=(BATCH.notes||[]).filter(n=>!(n.unless&&n.unless.test(reply))).map(n=>n.text);
+  if(reply&&notes.length) reply=reply.replace(/\s*$/,'')+' '+notes.join(' ');
+  else if(!reply&&!done.length&&notes.length) reply=notes.join(' ');
+  if(!reply) reply=done.length?'Done: '+done.join(', ')+'. '+(notes.length?notes.join(' ')+' ':'')+nextStep():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
   ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false; LAST_TEXT.text='';
-  if(BATCH.take){ ASSIST.say(reply,{chips:done,speak:false}); if(ASSIST.voice) speak('Sing after the count-in.'); } else ASSIST.say(reply,{chips:done}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());
+  const map=BATCH.song?songMapHTML(BATCH.song.changed):'';
+  if(BATCH.take){ ASSIST.say(reply,{chips:done,speak:false,map}); if(ASSIST.voice) speak('Sing after the count-in.'); } else ASSIST.say(reply,{chips:done,map}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());
   if(BATCH.take){ const part=BATCH.take; LAST_TAKE.part=part; afterSpeak(()=>TAKE.start(part)); }
 }
 /* ---- speech recognition with a wake name ---- */

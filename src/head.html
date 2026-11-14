@@ -314,6 +314,11 @@ input[type=checkbox]{accent-color:var(--accent)}
 .bub.as{align-self:flex-start;background:var(--t3);border:1px solid var(--line)}
 .bub .done{display:flex;flex-wrap:wrap;gap:4px}
 .bub .done i{font:normal 500 11px var(--mono);color:var(--signal);border:1px solid color-mix(in srgb,var(--signal) 40%,transparent);border-radius:5px;padding:1px 6px}
+/* AI-1: the mini song map under a reply that changed the song (section colours come from .k-* in the Song view) */
+.as-map{display:flex;gap:2px;width:100%;min-width:200px;margin-top:3px}
+.as-map i{flex:1 1 0;min-width:0;overflow:hidden;white-space:nowrap;font:normal 500 10px var(--mono);color:var(--ink);background:var(--sc,var(--t5));border:1px solid transparent;border-radius:5px;padding:2px 5px}
+.as-map i b{display:block;font:600 11px var(--body);overflow:hidden;text-overflow:ellipsis}
+.as-map i.ch{border-color:var(--signal)}
 .as-form{display:flex;gap:8px}
 .as-form .input{font-size:15px;padding:10px 12px}
 .as-opts{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:var(--muted)}
