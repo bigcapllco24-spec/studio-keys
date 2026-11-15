@@ -4664,6 +4664,10 @@ function swingSaid(raw){ const t=' '+String(raw||'').toLowerCase().replace(/per 
   if(!/\b(swing|swings|swinging|swingin|swung|swingy|swingier|shuffle|straight|straighten)\b/.test(t)) return null;
   if((m=t.match(/\b(\d{2,3}(?:\.\d+)?)\s*%?\s*(?:of\s+)?(?:swing|shuffle)\b/))||(m=t.match(/\b(?:swing|shuffle)\s*(?:to|at|of|on|by)?\s*(\d{2,3}(?:\.\d+)?)\b(?!\s*(?:bars?|bpm|beats?))/))) return m[1]+'%';
   if(/\b(no|no more|without|remove|kill|lose|drop|turn off|zero)( the| any| all)? (swing|shuffle)\b|\btake out (the |all the |all )?(swing|shuffle)\b|\btake (the |all the |all )?(swing|shuffle) out\b|\bget rid of (the |all the )?(swing|shuffle)\b|\b(beat|groove|drums|hats|rhythm)s? straight\b(?! to\b)|\bswing off\b|\bstraighten\b|\bstraight (beat|groove|hats|drums|16th|timing|feel|again)\b|\b(make|play|keep|put|go) (it|the (beat|groove|drums|hats)) (back )?straight\b|\bnot swung\b|^\s*(play |go |keep it |make it )?straight( please| again| now| then)?\s*$/.test(t)) return 0;
+  /* Hinglish: "swing thoda kam karo", "thoda kam swing" = one step less; "zyada swing", "swing badhao" = more; "swing hatao" = straight */
+  if(/\b(swing|shuffle)( [a-z]+){0,2} (hatao|hata do|band karo|nikalo|nikal do)\b|\b(bina|no) swing\b/.test(t)) return 0;
+  if(/\b(swing|shuffle)( (ko|ka|thoda|thodi|thora|bahut|aur|zara))* kam\b|\bkam (swing|shuffle)\b/.test(t)) return 'less';
+  if(/\b(zyada|jyada|aur|thoda aur|thodi aur) (swing|shuffle)\b|\b(swing|shuffle)( (ko|ka|thoda|thodi|aur))* (zyada|jyada|badhao|badha do|barhao)\b/.test(t)) return 'more';
   if(/\b(a (little|bit|touch|tad)|slightly|little|bit) less (swing|shuffle|swung|swingy)\b|\bswing (it )?a (bit|little) less\b/.test(t)) return 'a bit less';
   if(/\b(less|lighter|softer|lower|reduce|lower the|reduce the|turn down the|tone down the) (swing|shuffle|swingy|swung)\b|\bswing(s|ing)? too (much|hard|heavy|strong)\b|\btoo (much )?(swing|swingy|swung|heavy)\b|\bswing (is )?too (much|heavy|strong)\b|\bless swung\b/.test(t)) return 'less';
   if(/\b(a (little|bit|touch|tad)( more)?( of)?|slightly( more)?|little more|bit more) (swing|shuffle)\b|\bswing it a (bit|little)( more)?\b/.test(t)) return 'a bit more';
@@ -4672,7 +4676,7 @@ function swingSaid(raw){ const t=' '+String(raw||'').toLowerCase().replace(/per 
 /* is the request only about swing? (then it is one groove change; anything else said goes through the parser too) */
 function swingOnly(raw,hasDrums){ let s=' '+String(raw||'').toLowerCase().replace(/per ?cent/g,'%').replace(/[’']/g,'')+' '; const addPart=SWING_ADD_PART.test(s.replace(/[^a-z0-9 ]+/g,' ').replace(/ +/g,' '));
   s=s.replace(/\b\d{2,3}(\.\d+)?\s*%/g,' ').replace(/\b(swing|shuffle)\s*(to|at|of|on|by)?\s*\d{2,3}(\.\d+)?\b(?!\s*(bars?|bpm|beats?))/g,' ').replace(/\b\d{2,3}\s*(of\s+)?(swing|shuffle)\b/g,' ').replace(/\bswing(s|ing)? (it )?(more|harder)\b/g,' ');
-  s=s.replace(/\b(swing|swings|swinging|swingin|swung|swingy|swingier|shuffle|shuffled|shuffly|straight|straighter|straighten|bounce|bouncy|bouncey|bouncier|more|less|lighter|softer|lower|reduce|turn|down|up|off|tone|a|an|the|bit|little|touch|tad|slightly|some|lots|loads|of|heavy|heavier|full|max|maximum|triplet|with|big|too|much|strong|is|its|it|make|put|play|keep|go|back|again|now|then|please|can|could|would|you|give|me|us|take|out|remove|kill|lose|drop|get|rid|no|without|any|all|zero|not|set|to|at|on|by|just|bring|this|that|yeah|ok|okay|hey|so|and|plus|add|adding|i|want|need|lets|amount|way|feel|timing|percent|hard)\b/g,' ');
+  s=s.replace(/\b(swing|swings|swinging|swingin|swung|swingy|swingier|shuffle|shuffled|shuffly|straight|straighter|straighten|bounce|bouncy|bouncey|bouncier|more|less|lighter|softer|lower|reduce|turn|down|up|off|tone|a|an|the|bit|little|touch|tad|slightly|some|lots|loads|of|heavy|heavier|full|max|maximum|triplet|with|big|too|much|strong|is|its|it|make|put|play|keep|go|back|again|now|then|please|can|could|would|you|give|me|us|take|out|remove|kill|lose|drop|get|rid|no|without|any|all|zero|not|set|to|at|on|by|just|bring|this|that|yeah|ok|okay|hey|so|and|plus|add|adding|i|want|need|lets|amount|way|feel|timing|percent|hard|thoda|thodi|thora|kam|karo|kar|kardo|ko|ka|zyada|jyada|aur|zara|badhao|badha|barhao|hatao|hata|band|nikalo|nikal|bina|na|yaar|bhai|bahut)\b/g,' ');
   /* "more swing on the chords", "make the bass swing more", "less swing in the hats": the part named is filler (the swing goes to the drums);
      a part is only a request of its own after an add verb ("add a bassline with some swing", "make a bassline with swing") */
   if(!addPart) s=s.replace(/\b(bass ?lines?|bass|basses|chords?|pads?|harmony|progression|melody|melodies|lead|hook|riff|keys|piano|synths?|arps?|parts?|other|everything|whole|entire|song|track|tune|in|into|for|across|onto)\b/g,' ');
@@ -4743,9 +4747,9 @@ function brainCore(raw,sws){
   if(/\bsave\b/.test(t)) A.push({type:'save'});
   if(/\b(stop|pause)\b/.test(t)) A.push({type:'transport',do:'stop'});
   const role=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
-  const mixVerb=(t.match(/\b(louder|turn up|boost|quieter|softer|turn down|lower|mute|unmute|solo|remove|delete|drop)\b/)||[])[1];
+  const mixVerb=(t.match(/\b(louder|turn up|boost|quieter|softer|turn down|lower|mute|unmute|solo|remove|delete|drop)\b/)||[])[1], shapeAsk=LEVEL_CREATE.test(t)||LEVEL_SHAPE.test(t)&&!LEVEL_EXPLICIT.test(t);
   const swap=iw && role && /\b(use|change|switch|swap|make|turn)\b/.test(t) && !/\badd\b/.test(t) && PROJ.tracks.some(x=>x.role===role);
-  if(mixVerb && role){
+  if(mixVerb && role && !(shapeAsk&&/^(louder|turn up|boost|quieter|softer|turn down|lower)$/.test(mixVerb))){
     if(/louder|turn up|boost/.test(mixVerb)) A.push({type:'mix',track:role,change:12});
     else if(/quieter|softer|turn down|lower/.test(mixVerb)) A.push({type:'mix',track:role,change:-12});
     else if(mixVerb==='mute') A.push({type:'mix',track:role,mute:true}); else if(mixVerb==='unmute') A.push({type:'mix',track:role,mute:false});
@@ -4777,10 +4781,12 @@ function audioConvert(t){
   if((m=s.match(new RegExp('\\b(?:make|turn|build|write|create|give me|get|do)(?: me)? (?:a |an |the |some )?(?:[a-z]+ )?('+AUD_TARGET+') (?:out of|from|with|using|based on|off) (.+)$')))) C.push([m[2],m[1]]);
   if((m=s.match(new RegExp('^(?:(?:can|could|would) you |please |now |ok |okay |hey )*(.+?) (?:in ?to|to|as) (?:a |an |the )?('+AUD_TARGET+')\\b')))) C.push([m[1],m[2]]);
   if((m=s.match(/\btranscribe (.+)$/))) C.push([m[1],'melody']);
+  /* Hinglish: "voice note ko bassline bana do", "is recording se chords banao", "meri recording ko melody mein badlo" */
+  if((m=s.match(new RegExp('^(?:(?:please|ok|okay|hey|keys|yaar|bhai|zara|ab|abhi) )*((?:is|iss|meri|mera|mere|apni|apna|ye|yeh|woh|wo|us|uss) )?(.+?) (?:ko|se|say|ka|ki|ke|sey) (?:ek |a |an |the )?(?:[a-z]+ )?('+AUD_TARGET+')(?: (?:mein|me|main|men|mai))? (?:bana|banao|banado|banade|banaa|banaao|bana do|bana de|bana dena|badlo|badal|badal do|badaldo|convert|kar|karo|kardo|kar do)\\b')))) C.push([m[2],m[3]]);
   const nm=v=>String(v).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), aud=PROJ.tracks.filter(y=>y.kind==='audio'), newest=aud[aud.length-1];
   const hum=ASSIST.lastHum?PROJ.tracks.findIndex(y=>y.id===ASSIST.lastHum):-1, humNewer=hum>PROJ.tracks.indexOf(newest);
   for(let [x,to] of C){
-    x=nm(x.replace(/\b(please|for me|now|again)\b/g,' ')).replace(/^(?:(?:can|could|would) you |please )+/,'').replace(/^(the|my|this|that|our|your|a) /,'').trim();
+    x=nm(x.replace(/\b(please|for me|now|again)\b/g,' ')).replace(/^(?:(?:can|could|would) you |please )+/,'').replace(/^(the|my|this|that|our|your|a|is|iss|meri|mera|mere|apni|apna|ye|yeh|woh|wo|us|uss) /,'').trim();
     const canon=/^bas/.test(to)?'bass':/^chord/.test(to)?'chords':'melody', roleWord=/^(drums?|beat|bass(line)?|chords?|pads?|melody|lead|hook|it|that|this)$/.test(x);
     const bare=x.replace(/ (recording|voice ?note|memo|audio|track|clip|take|file)$/,'');
     const named=[...aud].reverse().find(a=>{ const n=nm(a.name); return n===x||n===bare||(!roleWord&&x.length>=4&&((' '+n+' ').includes(' '+x+' ')||n.length>=4&&(' '+x+' ').includes(' '+n+' '))); });
@@ -4795,33 +4801,50 @@ function audioConvert(t){
    (kick: low, snare and clap: mid, hats: high); punch is more compressor plus a little low end, same pattern. */
 const DRUM_VOICE=[['kick',/\b(kicks?|kick drum|bass drum)\b/,'low','the kick'],['hats',/\bhats\b/,'high','the hats'],['snare',/\b(snares?|claps?|rims?|rimshots?)\b/,'mid','the snare and clap']];
 const LEVEL_NOT=/\b(octaves?|semitones?|pitch|key|tempo|bpm|speed|slow|faster|slower|quicker|swing|shuffle|bounce|energy|busy|busier|reverb|delay|echo|filter|cutoff|sidechain|patch|preset|instrument|switch|shake|build|notes|transpose|register|deeper|higher|another|different|variation|regenerate|new one|one more|mute|unmute|solo|remove|delete|pump|break|strip|warm|open|move|shift|8th|16th|quarter|offbeat|trap)\b|\bmix it up\b|\bnote (up|down)\b|\b(softer|calmer|chill(er)?) (groove|beat)\b/;
-const LEVEL_UP=/\b(louder|turn(?: [a-z']+){0,3} up|bring(?: [a-z']+){0,3} up|push(?: [a-z']+){0,3} up|boost|raise|lift|more volume|too (quiet|soft|low|weak)|(is|are|sounds?|feels?|seems?)( a bit| a little| way| so| really| kind of)? (quiet|soft|buried|lost|weak)|can'?t hear|cannot hear|hard to hear|hardly hear|barely hear|buried|more (kicks?|snares?|claps?|bass)(?! ?lines?)|up)\b/;
-const LEVEL_DOWN=/\b(quieter|softer|less loud|turn(?: [a-z']+){0,3} down|bring(?: [a-z']+){0,3} down|pull(?: [a-z']+){0,3} (down|back)|back off|lower|reduce|tone down|too loud|too much|too hot|too strong|too big|overpowering|drowning|(is|are|sounds?|feels?|seems?)( a bit| a little| way| so| really| kind of)? loud|down)\b/;
+/* level words need a level meaning: "turn/bring/push X up", "louder", "too loud", "bass up a bit". A bare up/down that describes a
+   part's shape ("a bassline that goes down", "a melody going up") is never a fader move. Hinglish: "bahut loud hai", "awaaz kam karo",
+   "thoda upar karo", "soft karo". */
+const LEVEL_INT='(?: (?:a|bit|little|way|so|really|kind|of|kinda|very|super|pretty|quite|too|much|far|rather|slightly|bahut|thoda|zyada|jyada))*';
+const LEVEL_PART='(?:bass ?lines?|bass|drums?|kicks?|snares?|claps?|hats|chords?|pads?|melody|lead|vocals?|voice|beat|keys|piano|volume|master|everything)';
+const LEVEL_UP=new RegExp("\\b(louder|turn(?: [a-z']+){0,3} up|bring(?: [a-z']+){0,3} up|push(?: [a-z']+){0,3} up|crank(?: [a-z']+){0,3}( up)?|boost|raise|lift|more volume|too (quiet|soft|low|weak)|(is|are|sounds?|feels?|seems?|it'?s|they'?re)"+LEVEL_INT+" (quiet|soft|buried|lost|weak)|can'?t hear|cannot hear|hard to hear|hardly hear|barely hear|buried|more (kicks?|snares?|claps?|bass)(?! ?lines?)|"+LEVEL_PART+"(?: (?:a (?:bit|little|touch|tad|notch)|slightly|\\d+(?:\\.\\d)? ?db))? up|upar|oopar|badhao|badha do|barhao|(zyada|jyada|tez|loud|louder) (karo|kar do|kardo)|awaaz (badhao|zyada|tez|upar)|kam (hai|lag raha|lagta))\\b");
+const LEVEL_DOWN=new RegExp("\\b(quieter|softer|less loud|turn(?: [a-z']+){0,3} down|bring(?: [a-z']+){0,3} down|pull(?: [a-z']+){0,3} (down|back)|back off|lower|reduce|tone down|too loud|too much|too hot|too strong|too big|overpowering|drowning|(is|are|sounds?|feels?|seems?|it'?s|they'?re)"+LEVEL_INT+" loud|"+LEVEL_PART+"(?: (?:a (?:bit|little|touch|tad|notch)|slightly|\\d+(?:\\.\\d)? ?db))? down|kam (karo|kar do|kardo|karna|kijiye)|ghatao|ghata do|neeche|niche|(soft|halka|dheema|dheemi|dheere) (karo|kar do|kardo)|(bahut|zyada|jyada|kaafi) (loud|tez)|loud hai|tez hai)\\b");
+/* asking for a part ("write a melody that goes down", "i need a bassline that steps down", "sing the bass going up") is never a level change */
+const LEVEL_CREATE=/\b(add|give me|make(?: me)? (?:a|an|some)|write|compose|create|generate|sing|hum|whistle|record|let me (?:do|try)|try (?:a|an|some)|play(?: me)? (?:a|an|some)|i (?:want|need) (?:a|an|some|another|new|to))\b(?: (?!(?:to|on|in|for|of|with)\b)[\w'-]+){0,3}? (bass ?lines?|bass|808|chords?|melod(?:y|ies)|drums?|beat|groove|pads?|leads?|hook|riff|pluck|piano|keys|strings|choir|arp)\b/;
+const LEVEL_SHAPE=/\b(goes|going|go|went|walks?|walking|steps?|stepping|climbs?|climbing|rises?|rising|falls?|falling|moves?|moving|runs?|running|slides?|sliding|glides?|gliding|ascends?|ascending|descends?|descending|jumps?|jumping|travels?|heads?|heading)( [a-z]+){0,2} (up|down|higher|lower)\b/;
+const LEVEL_EXPLICIT=/\b(louder|quieter|volume|db|decibels?|fader|too (loud|quiet|soft)|turn|awaaz)\b/;
 const PUNCH=/\b(punch(y|ier|iest|iness)?|snappier|snappy|more snap|more knock|knockier|hits? harder|hit hard|more thump|thumpier|more impact)\b/;
 function levelFix(t){
-  if(LEVEL_NOT.test(t)||/\b(add|give me|make(?: me)? (?:a|an|some))\b(?: (?!(?:to|on|in|for|of|with)\b)[\w-]+){0,3}? (bass ?lines?|bass|808|chords?|melod(?:y|ies)|drums?|beat|groove|pads?|leads?|hook|riff|pluck|piano|keys|strings|choir|arp)\b/.test(t)) return null;
+  if(LEVEL_NOT.test(t)||LEVEL_CREATE.test(t)||LEVEL_SHAPE.test(t)&&!LEVEL_EXPLICIT.test(t)) return null;
   const punch=PUNCH.test(t), up=!punch&&LEVEL_UP.test(t), down=!punch&&!/\bdown ?beat\b/.test(t)&&LEVEL_DOWN.test(t);
   if(!punch&&up===down) return null;
   const dv=DRUM_VOICE.find(([k,re])=>re.test(t)); let role=dv?'drums':(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
-  const small=/\b(a (little|bit|touch|tad|notch|hair)( bit)?|slightly|just a bit|tiny bit|bit|little|somewhat)\b/.test(t), big=/\b(a lot|lots|way|much|loads|really|heaps|so)\b/.test(t);
+  const small=/\b(a (little|bit|touch|tad|notch|hair)( bit)?|slightly|just a bit|tiny bit|bit|little|somewhat|thoda|thodi|thora)\b/.test(t), big=/\b(a lot|lots|way|much|loads|really|heaps|so)\b/.test(t);
   const dbm=t.match(/(\d+(?:\.\d)?) ?(?:db|decibels?)\b/), n=dbm?Math.min(12,+dbm[1]):small?3:big?8:5, sign=up?1:-1;
-  const master=!role&&!punch&&/\b(louder|quieter|too loud|too quiet|(turn|bring) (it|everything|the (whole )?(song|track|mix|master|volume|thing)|the master|the volume|master|volume) (up|down)|(turn|bring) (up|down) (the )?(volume|master|song|mix|everything)|volume (up|down))\b/.test(t);
+  const master=!role&&!punch&&(/\b(louder|quieter|too loud|too quiet|(turn|bring) (it|everything|the (whole )?(song|track|mix|master|volume|thing)|the master|the volume|master|volume) (up|down)|(turn|bring) (up|down) (the )?(volume|master|song|mix|everything)|volume (up|down))\b/.test(t)||/\b(awaaz|aawaz|awaz|volume|gaana|gana)\b/.test(t));
   if(!role&&!punch&&!master) return null;
-  if(master){ const v0=MIX.master?MIX.master.vol:1; if(up&&v0>=0.999) return {actions:[],reply:'The master is already at full volume. Turn your speakers up, or say “make it louder” after turning a part down.'}; return {actions:[{type:'mix',track:'master',db:sign*n}],reply:`Turned the whole song ${up?'up':'down'} ${n} dB.`}; }
+  /* the whole song: every part's fader moves by the same dB (part of the song, so Undo puts it back exactly); going up stops when the loudest part reaches full */
+  if(master){ if(!PROJ.tracks.length) return {actions:[],reply:'There’s nothing in the song yet. Say “make a house beat” to start.'};
+    const got=songDbStep(sign*n);
+    if(Math.abs(got)<0.05) return {actions:[],reply:up?'The loudest part is already at full volume, so I can’t raise the whole song without changing the balance. Turn your speakers up, or turn one part down to make room.':'The song is already silent.'};
+    return {actions:[{type:'mix',track:'all',db:sign*n}],reply:`Turned the whole song ${up?'up':'down'} ${dbTxt(got)} dB${up&&Math.abs(got)<n-0.05?' (the loudest part is now at full volume)':''}, same balance.`}; }
   if(punch&&!role) role='drums';
   const list=PROJ.tracks.filter(x=>x.role===role), part=dv?dv[3]:(TONE_PART[role]||'the '+role), Part=part[0].toUpperCase()+part.slice(1);
   if(!list.length) return {actions:[],reply:role==='voice'?'There’s no vocal yet. Say “record a voice note” to add one.':role==='drums'||role==='chords'?`There are no ${role} yet. Want me to add some?`:`There’s no ${part.replace(/^the /,'')} yet. Want me to add one?`};
-  const A=[];
+  const A=[], EQF={low:'lo',mid:'mid',high:'hi'}, eqStep=(T,b,d)=>{ const v0=Math.round(+T[EQF[b]]||0); return clamp(v0+d,-EQ_DB,EQ_DB)-v0; };
+  /* punch: compressor +20 up to 90%, and +2 dB low end (mids for the snare) up to +6 dB at most */
   if(punch){ const c=Math.round(((list[0].fx&&list[0].fx.comp)||0)*100), band=role!=='drums'?null:dv&&dv[0]==='snare'?'mid':dv&&dv[0]==='hats'?null:'low';
-    list.forEach(T=>{ if(c<90) A.push({type:'track_fx',track:T.id,effect:'compressor',change:20}); if(band) A.push({type:'mix',track:T.id,eq:{[band]:2}}); });
-    if(!A.length) return {actions:[],reply:`${Part} is already compressed as far as I’d go. Try “${dv?dv[0]+' louder':part.replace(/^the /,'')+' louder'}”.`};
-    return {actions:A,reply:`Punchier ${part.replace(/^the /,'')}: ${c<90?`compressor on ${role==='drums'?'the drums':part} up to ${Math.min(100,c+20)}%`:''}${c<90&&band?' and ':''}${band?`2 dB more ${band==='low'?'low end':'mids'}`:''}, same ${role==='drums'?'pattern':'notes'}.`}; }
-  if(dv){ const d=sign*(small?2:big?5:3); list.forEach(T=>A.push({type:'mix',track:T.id,eq:{[dv[2]]:d}}));
-    return {actions:A,reply:`${up?'Brought up':'Softened'} ${part}: ${Math.abs(d)} dB ${up?'more':'less'} ${dv[2]==='low'?'low end':dv[2]==='mid'?'mids':'highs'} on the drums, same pattern.`}; }
+    const bd=band?Math.max(0,Math.min(2,6-Math.round(+list[0][EQF[band]]||0))):0;
+    list.forEach(T=>{ if(c<90) A.push({type:'track_fx',track:T.id,effect:'compressor',change:20}); if(bd) A.push({type:'mix',track:T.id,eq:{[band]:bd}}); });
+    if(!A.length) return {actions:[],reply:`${Part} is already as punchy as I’d push it. Try “${dv?dv[0]+' louder':part.replace(/^the /,'')+' louder'}”.`};
+    return {actions:A,reply:`Punchier ${part.replace(/^the /,'')}: ${c<90?`compressor on ${role==='drums'?'the drums':part} up to ${Math.min(100,c+20)}%`:''}${c<90&&bd?' and ':''}${bd?`${bd} dB more ${band==='low'?'low end':'mids'}`:''}, same ${role==='drums'?'pattern':'notes'}.`}; }
+  if(dv){ const want=sign*(small?2:big?5:3), d=eqStep(list[0],dv[2],want), bandW=dv[2]==='low'?'low end':dv[2]==='mid'?'mids':'highs';
+    if(!d) return {actions:[],reply:`The drums’ ${bandW} are already as ${up?'high':'low'} as they go (${up?'+':'-'}${EQ_DB} dB). Try “drums ${up?'louder':'quieter'}”.`};
+    list.forEach(T=>A.push({type:'mix',track:T.id,eq:{[dv[2]]:d}}));
+    return {actions:A,reply:`${up?'Brought up':'Softened'} ${part}: ${Math.abs(d)} dB ${up?'more':'less'} ${bandW} on the drums, same pattern.`}; }
   if(up&&list.every(T=>T.vol>=0.999)) return {actions:[],reply:`${Part} is already at full volume. Say “turn the ${list.some(x=>x.role!=='drums')&&PROJ.tracks.some(x=>x.role==='drums'&&x!==list[0])?'drums':'others'} down a bit” to make room for it.`};
   list.forEach(T=>A.push({type:'mix',track:T.id,db:sign*n}));
-  const v0=list[0].vol, got=Math.abs(40*Math.log10(clamp(v0*Math.pow(10,sign*n/40),0.001,1)/Math.max(0.001,v0)));
-  return {actions:A,reply:`${up?'Brought':'Turned'} ${part} ${up?'up':'down'} ${got<n-0.4?got.toFixed(1)+' dB (that’s full volume)':n+' dB'}, same ${role==='drums'?'pattern':'notes'}.`}; }
+  const v0=list[0].vol, got=Math.abs(faderDb(v0,sign*n));
+  return {actions:A,reply:`${up?'Brought':'Turned'} ${part} ${up?'up':'down'} ${dbTxt(got)} dB${got<n-0.05?' (that’s full volume)':''}, same ${role==='drums'?'pattern':'notes'}.`}; }
 /* mixing words: "the bass is muddy", "cut the lows on the bass", "the mix is harsh". Changes EQ and low cut with the
    existing track_fx / mix actions and keeps the notes. Each repeat ("still muddy") goes a step further. */
 const TONE_PART={drums:'the drums',bass:'the bass',chords:'the chords',melody:'the melody',voice:'the vocal'};
@@ -4915,6 +4938,12 @@ function normAction(a){
   return {type:k,[field]:v};
 }
 const L_=()=>PROJ.bars*4;
+/* dB words shared by the replies and the chips, so they always say the same number: 2.8, 3, 5 */
+function dbTxt(x){ const r=Math.round(Math.abs(+x||0)*10)/10; return r%1?r.toFixed(1):String(r); }
+/* the dB a fader really moves for a step (gain is vol², so dB/40 is the fader step; full volume caps it) */
+function faderDb(v0,db){ const v1=clamp(v0*Math.pow(10,clamp(+db,-24,12)/40),0,1); return v0>0&&v1>0?40*Math.log10(v1/v0):0; }
+/* the whole song moves every part by the same dB; going up stops when the loudest part reaches full volume */
+function songDbStep(db){ db=clamp(+db||0,-24,12); if(db<=0) return db; const top=Math.max(0,...PROJ.tracks.map(t=>t.vol>0?t.vol:0)); return top>0?Math.min(db,40*Math.log10(1/top)):0; }
 const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
 let BATCH={}; const LAST_TEXT={text:''}; const LAST_TAKE={part:null};
 const newSeed=()=>1+Math.floor(Math.random()*2e9);
@@ -5023,14 +5052,22 @@ const ACT={
     return `${list.length} notes on ${t.name}`; },
   instrument(a){ const t=findTrack(a.track); if(!t||t.kind!=='notes') return; const id=resolveInst(a.instrument||a.value,t.role==='drums'?'drums':t.role==='bass'?'bass':null); if(!id) return;
     const I=INST.get(id); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); t.inst=id; return `${t.name} now on ${I.name}`; },
-  mix(a){ const ref=String(a.track||'').toLowerCase(); const id=['master','keys','pads'].includes(ref)?ref:(findTrack(a.track)||{}).id; if(!id) return; const cfg=chCfg(id); const out=[];
+  mix(a){ const ref=String(a.track||'').toLowerCase().trim();
+    /* the whole song ("turn it down a bit", "make it louder"): every part's fader moves by the same dB, so it is part of the song and
+       Undo restores it exactly. The master fader itself is a studio setting outside Undo, so relative moves on "master" come here too. */
+    if(/^(all|song|the song|whole song|the whole song|everything|mix|the mix)$/.test(ref)||ref==='master'&&a.volume==null&&(a.db!=null||a.change!=null)){
+      const db=a.db!=null?+a.db:40*Math.log10(clamp(0.8+(+a.change||0)/100,0.05,1)/0.8); if(!isFinite(db)||!db||!PROJ.tracks.length) return;
+      const got=songDbStep(db); if(Math.abs(got)<0.05) return `Whole song: ${db>0?'the loudest part is already at full volume':'already silent'}`;
+      const k=Math.pow(10,got/40); PROJ.tracks.forEach(t=>{ if(t.vol>0) chSet(t.id,'vol',clamp(t.vol*k,0,1)); });
+      return `Whole song: ${got>0?'up':'down'} ${dbTxt(got)} dB (every part, same balance)`; }
+    const id=['master','keys','pads'].includes(ref)?ref:(findTrack(a.track)||{}).id; if(!id) return; const cfg=chCfg(id); const out=[];
     if(a.volume!=null){ chSet(id,'vol',clamp(+a.volume/100,0,1)); out.push(`volume ${Math.round(cfg.vol*100)}`); }
     if(a.change!=null){ chSet(id,'vol',clamp(cfg.vol+(+a.change)/100,0,1)); out.push(`volume ${Math.round(cfg.vol*100)}`); }
     /* db: a relative fader move in decibels ("a bit quieter" = -3); the fader's gain is vol² so dB/40 is the fader step */
     if(a.db!=null&&isFinite(+a.db)&&+a.db){ const v0=cfg.vol, v1=clamp(v0*Math.pow(10,clamp(+a.db,-24,12)/40),0,1); chSet(id,'vol',v1); const got=v0>0&&v1>0?40*Math.log10(v1/v0):0;
-      out.push(Math.abs(got)<0.05?(+a.db>0?'already at full volume':'already silent'):`${got>0?'up':'down'} ${Math.abs(got).toFixed(Math.abs(got)<1?1:0)} dB (volume ${Math.round(v1*100)})`); }
+      out.push(Math.abs(got)<0.05?(+a.db>0?'already at full volume':'already silent'):`${got>0?'up':'down'} ${dbTxt(got)} dB (volume ${Math.round(v1*100)})`); }
     /* eq: relative EQ steps in dB, {low:+3} ("more kick" on the drums), {high:-3} ("softer hats") */
-    if(a.eq&&typeof a.eq==='object') ['low','mid','high'].forEach(b=>{ const d=+a.eq[b]; if(!d||!isFinite(d)) return; const f={low:'lo',mid:'mid',high:'hi'}[b], v=clamp(Math.round((+cfg[f]||0)+d),-15,15); chSet(id,f,v); out.push(`${b} EQ ${v>0?'+':''}${v} dB`); });
+    if(a.eq&&typeof a.eq==='object') ['low','mid','high'].forEach(b=>{ const d=+a.eq[b]; if(!d||!isFinite(d)) return; const f={low:'lo',mid:'mid',high:'hi'}[b], v0=Math.round(+cfg[f]||0), v=clamp(Math.round(v0+d),-15,15); chSet(id,f,v); out.push(v===v0?`${b} EQ already at ${v>0?'+':''}${v} dB`:`${b} EQ ${v>v0?'+':'-'}${Math.abs(v-v0)} dB (now ${v>0?'+':''}${v})`); });
     ['low','mid','high'].forEach(b=>{ if(a[b]!=null){ chSet(id,{low:'lo',mid:'mid',high:'hi'}[b],clamp(+a[b],-15,15)); out.push(`${b} ${a[b]>0?'+':''}${a[b]} dB`); } });
     if(a.mute!=null){ cfg.mute=!!a.mute; chApply(id); out.push(a.mute?'muted':'unmuted'); }
     if(a.solo!=null){ cfg.solo=!!a.solo; refreshTrackGains(); out.push(a.solo?'solo':'solo off'); }

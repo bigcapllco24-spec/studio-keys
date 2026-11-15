@@ -41,6 +41,12 @@ function normAction(a){
   return {type:k,[field]:v};
 }
 const L_=()=>PROJ.bars*4;
+/* dB words shared by the replies and the chips, so they always say the same number: 2.8, 3, 5 */
+function dbTxt(x){ const r=Math.round(Math.abs(+x||0)*10)/10; return r%1?r.toFixed(1):String(r); }
+/* the dB a fader really moves for a step (gain is vol², so dB/40 is the fader step; full volume caps it) */
+function faderDb(v0,db){ const v1=clamp(v0*Math.pow(10,clamp(+db,-24,12)/40),0,1); return v0>0&&v1>0?40*Math.log10(v1/v0):0; }
+/* the whole song moves every part by the same dB; going up stops when the loudest part reaches full volume */
+function songDbStep(db){ db=clamp(+db||0,-24,12); if(db<=0) return db; const top=Math.max(0,...PROJ.tracks.map(t=>t.vol>0?t.vol:0)); return top>0?Math.min(db,40*Math.log10(1/top)):0; }
 const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
 let BATCH={}; const LAST_TEXT={text:''}; const LAST_TAKE={part:null};
 const newSeed=()=>1+Math.floor(Math.random()*2e9);
@@ -149,14 +155,22 @@ const ACT={
     return `${list.length} notes on ${t.name}`; },
   instrument(a){ const t=findTrack(a.track); if(!t||t.kind!=='notes') return; const id=resolveInst(a.instrument||a.value,t.role==='drums'?'drums':t.role==='bass'?'bass':null); if(!id) return;
     const I=INST.get(id); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); t.inst=id; return `${t.name} now on ${I.name}`; },
-  mix(a){ const ref=String(a.track||'').toLowerCase(); const id=['master','keys','pads'].includes(ref)?ref:(findTrack(a.track)||{}).id; if(!id) return; const cfg=chCfg(id); const out=[];
+  mix(a){ const ref=String(a.track||'').toLowerCase().trim();
+    /* the whole song ("turn it down a bit", "make it louder"): every part's fader moves by the same dB, so it is part of the song and
+       Undo restores it exactly. The master fader itself is a studio setting outside Undo, so relative moves on "master" come here too. */
+    if(/^(all|song|the song|whole song|the whole song|everything|mix|the mix)$/.test(ref)||ref==='master'&&a.volume==null&&(a.db!=null||a.change!=null)){
+      const db=a.db!=null?+a.db:40*Math.log10(clamp(0.8+(+a.change||0)/100,0.05,1)/0.8); if(!isFinite(db)||!db||!PROJ.tracks.length) return;
+      const got=songDbStep(db); if(Math.abs(got)<0.05) return `Whole song: ${db>0?'the loudest part is already at full volume':'already silent'}`;
+      const k=Math.pow(10,got/40); PROJ.tracks.forEach(t=>{ if(t.vol>0) chSet(t.id,'vol',clamp(t.vol*k,0,1)); });
+      return `Whole song: ${got>0?'up':'down'} ${dbTxt(got)} dB (every part, same balance)`; }
+    const id=['master','keys','pads'].includes(ref)?ref:(findTrack(a.track)||{}).id; if(!id) return; const cfg=chCfg(id); const out=[];
     if(a.volume!=null){ chSet(id,'vol',clamp(+a.volume/100,0,1)); out.push(`volume ${Math.round(cfg.vol*100)}`); }
     if(a.change!=null){ chSet(id,'vol',clamp(cfg.vol+(+a.change)/100,0,1)); out.push(`volume ${Math.round(cfg.vol*100)}`); }
     /* db: a relative fader move in decibels ("a bit quieter" = -3); the fader's gain is vol² so dB/40 is the fader step */
     if(a.db!=null&&isFinite(+a.db)&&+a.db){ const v0=cfg.vol, v1=clamp(v0*Math.pow(10,clamp(+a.db,-24,12)/40),0,1); chSet(id,'vol',v1); const got=v0>0&&v1>0?40*Math.log10(v1/v0):0;
-      out.push(Math.abs(got)<0.05?(+a.db>0?'already at full volume':'already silent'):`${got>0?'up':'down'} ${Math.abs(got).toFixed(Math.abs(got)<1?1:0)} dB (volume ${Math.round(v1*100)})`); }
+      out.push(Math.abs(got)<0.05?(+a.db>0?'already at full volume':'already silent'):`${got>0?'up':'down'} ${dbTxt(got)} dB (volume ${Math.round(v1*100)})`); }
     /* eq: relative EQ steps in dB, {low:+3} ("more kick" on the drums), {high:-3} ("softer hats") */
-    if(a.eq&&typeof a.eq==='object') ['low','mid','high'].forEach(b=>{ const d=+a.eq[b]; if(!d||!isFinite(d)) return; const f={low:'lo',mid:'mid',high:'hi'}[b], v=clamp(Math.round((+cfg[f]||0)+d),-15,15); chSet(id,f,v); out.push(`${b} EQ ${v>0?'+':''}${v} dB`); });
+    if(a.eq&&typeof a.eq==='object') ['low','mid','high'].forEach(b=>{ const d=+a.eq[b]; if(!d||!isFinite(d)) return; const f={low:'lo',mid:'mid',high:'hi'}[b], v0=Math.round(+cfg[f]||0), v=clamp(Math.round(v0+d),-15,15); chSet(id,f,v); out.push(v===v0?`${b} EQ already at ${v>0?'+':''}${v} dB`:`${b} EQ ${v>v0?'+':'-'}${Math.abs(v-v0)} dB (now ${v>0?'+':''}${v})`); });
     ['low','mid','high'].forEach(b=>{ if(a[b]!=null){ chSet(id,{low:'lo',mid:'mid',high:'hi'}[b],clamp(+a[b],-15,15)); out.push(`${b} ${a[b]>0?'+':''}${a[b]} dB`); } });
     if(a.mute!=null){ cfg.mute=!!a.mute; chApply(id); out.push(a.mute?'muted':'unmuted'); }
     if(a.solo!=null){ cfg.solo=!!a.solo; refreshTrackGains(); out.push(a.solo?'solo':'solo off'); }
