@@ -243,17 +243,21 @@ try {
     try { ASSIST.engine = null; await full();
       R.hs = await steps('drop ke baad break daal do'); const S = songSections(), di = S.findIndex(s => s.kind === 'drop'); R.hAdd = S.length === 7 && S[di + 1].kind === 'break';
       R.hs += await steps('outro mein drums mat bajao'); R.hOut = !songFind('outro').parts[dr().id].on;
-      await full(); R.ls = await steps('make it longer'); R.longer = songBars(); R.ls += await steps('make it shorter'); R.shorter = songBars();
+      await full(); R.ls = await steps('make it longer'); R.longer = songBars(); R.ls += await steps('make it shorter'); R.shorter = songBars(); R.phr = songSections().map(x => x.bars).join(',');
       await full(); await steps('make the break longer', { reply: 'The break is 8 bars longer now. Want a filter sweep into the second drop?', actions: [{ type: 'section', do: 'length', section: 'break', change: 8 }] }); R.guard = /snare roll/.test(reply()) && !/sweep/i.test(reply());
       await steps('drop the drums in the outro', { reply: 'Drums are out of the outro.', actions: [{ type: 'mix', track: 'drums', mute: true }] }); R.mute = !dr().mute && !songFind('outro').parts[dr().id].on && !!songFind('drop').parts[dr().id].on;
       await newSong('Smoke AI-1d'); runActions([{ type: 'vibe', ref: 'Stephan Bodzin' }, { type: 'add_drums', ref: 'Stephan Bodzin' }, { type: 'add_bass' }]); loopStop();
       await steps('make an 8-bar intro, then build up and drop', { reply: 'Intro, build and drop.', actions: [{ type: 'arrange', template: 'custom', sections: [{ name: 'Intro', bars: 8 }, { name: 'Build' }, { name: 'Drop' }] }, { type: 'transition', section: 'Build', to: 'snareroll' }, { type: 'transport', do: 'play' }] }); /* real Llama 3.3 output, 15 Nov */
       const bu = songFind('build'); R.llmGap = JSON.stringify(bu.end);
+      /* fix 2: "out of the build" mutes the section only; a drop the AI adds after the Break is numbered in song order */
+      await full(); const bs = () => PROJ.tracks.find(t => t.role === 'bass'); await steps('take the bass out of the build', { reply: 'ok', actions: [{ type: 'mix', track: 'bass', mute: true }] }); R.outOf = !bs().mute && !songFind('build').parts[bs().id].on && !!songFind('drop').parts[bs().id].on;
+      await steps('break ke baad ek aur drop daal do', { reply: 'ok', actions: [{ type: 'section', do: 'add', name: 'Drop 3', after: 'Break' }, { type: 'parts', section: 'Drop 3', in: ['all'] }, { type: 'transition', section: 'Break', to: 'snareroll' }] }); R.order = names(); R.brkEnd = JSON.stringify(songFind('break').end);
     } finally { ASSIST.engine = eng; window.fetch = of; } return R; });
   ok('AI-1: offline Hinglish with the verb last ("drop ke baad break daal do", "outro mein drums mat bajao"), one undo step each', ai1c.hAdd && ai1c.hOut && ai1c.hs === 2, JSON.stringify({ add: ai1c.hAdd, outro: ai1c.hOut, steps: ai1c.hs }));
   ok('AI-1: "make it longer" on a 96-bar song is about 4 minutes, "make it shorter" goes back under 3', ai1c.longer >= 120 && ai1c.longer <= 136 && ai1c.shorter < 96 && ai1c.ls === 2, JSON.stringify({ longer: ai1c.longer, shorter: ai1c.shorter }));
   ok('AI-1: the AI\'s "filter sweep" offer becomes a snare roll; its "mute the drums" said about the outro only takes them out of the outro', ai1c.guard && ai1c.mute, JSON.stringify({ guard: ai1c.guard, mute: ai1c.mute }));
   ok('AI-1: when the AI adds its own snare roll to a new layout, the Build still ends in a beat of silence', /"gap":true/.test(ai1c.llmGap) || /kickdrop/.test(ai1c.llmGap), ai1c.llmGap);
+  ok('AI-1: "make it shorter" keeps 8/16/32-bar phrases; "take the bass out of the build" (AI mix mute) takes it out of the Build only; an added drop is numbered in song order and the Break keeps its gap', /^((8|16|32),)*(8|16|32)$/.test(ai1c.phr) && ai1c.outOf && /Break,Drop 2,Drop 3,Outro/.test(ai1c.order) && /"gap":true/.test(ai1c.brkEnd), JSON.stringify({ phrases: ai1c.phr, outOf: ai1c.outOf, order: ai1c.order, brk: ai1c.brkEnd }));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
