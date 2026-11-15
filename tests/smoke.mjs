@@ -153,7 +153,8 @@ try {
   const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
   await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(1500);
   await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 15000 }).catch(() => {}); // keepLastSong is async: wait for it on a busy machine
-  const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null; try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r) await loadNamed(id);
+  // keepLastSong writes the list in the background: poll up to 5 s for the renamed song (QA 15 Nov: 1 run in 4 read the list before the write landed)
+  const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null; for (let i = 0; i < 20; i++) { try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r && r.name === 'Before reload') break; await new Promise(x => setTimeout(x, 250)); } if (r) await loadNamed(id);
     return { n0, name0, listed: !!r, name: PROJ.name, n: PROJ.tracks.length, s: songSections().length, label: $('#saveState').textContent }; }, before.id);
   ok('song: opening the app starts a new empty song; the last one reopens from the list intact', rl.n0 === 0 && rl.listed && rl.name === 'Before reload' && rl.n === before.n && rl.s === before.s, `new song had ${rl.n0} tracks; reopened "${rl.name}" ${rl.n} tracks, ${rl.s} sections`);
   // QA, 13 Nov: after opening a song from the list, Undo must step back inside that song, never to the empty song opened before it
@@ -247,6 +248,15 @@ try {
     takeKey(tune, true, 'sing'); R.overChords = keyStatusText(); return R; });
   ok('key: a sung tune alone reads C major or A minor (no fake bass roots), and Keys builds a bass for 7 sung notes in a key they fit', kfix.tuneOk && kfix.pickOk, `tune: ${kfix.tune}; 7 notes + bass: ${kfix.picked}`);
   ok('key: the label names its real source (singing, recording; chords that already gave the key stay plain)', / · from your singing$/.test(kfix.sung) && / · from your recording$/.test(kfix.rec) && /^A minor/.test(kfix.overChords) && !/from your/.test(kfix.overChords), `${kfix.sung} / ${kfix.rec} / chords then a sung take: ${kfix.overChords}`);
+  // SE-7a fix 1 (QA retest): with no bass part the reasons never mention a bass, and F♯m–E–D–E's second guess is A major (same notes);
+  // a 12-note hum on an empty song says "it sounds like D minor" (a guess), not "in D minor"
+  const kwhy = await E(async () => { await newSong('Smoke why'); const ch = []; [[6, 9, 1], [4, 8, 11], [2, 6, 9], [4, 8, 11]].forEach((c, i) => c.forEach(pc => ch.push({ b: i * 4, d: 3.8, n: nearestAbove(pc, 55), v: 0.7 }))); addTrack({ role: 'chords', inst: 'piano', name: 'My chords', events: ch });
+    const st = keyStatus(), R = { text: keyStatusText(st), why: st.cands.map(c => c.why).join(' / ') };
+    await newSong('Smoke hum reply'); Object.assign(ASSIST, { listening: true, hum: true, speaking: false, busy: false, speechAt: -99 });
+    for (const n of [62, 65, 69, 67, 65, 64, 62, 60, 62, 65, 64, 62]) { humNote(n, true); await new Promise(r => setTimeout(r, 150)); humNote(n, false); await new Promise(r => setTimeout(r, 30)); }
+    for (let i = 0; i < 20 && !PROJ.tracks.length; i++) await new Promise(r => setTimeout(r, 250)); ASSIST.listening = false;
+    const bub = [...document.querySelectorAll('#asChat .bub.as')].pop(); R.reply = bub ? bub.textContent : ''; R.hum = keyStatusText(); return R; });
+  ok('key: reasons name what is there (no bass → no "bass" reason, F♯m–E–D–E second guess A major); a hum\'s key is a guess', /^F♯ minor · \w[\w ]* · or A major$/.test(kwhy.text) && !/bass/.test(kwhy.why) && /it sounds like D minor/.test(kwhy.reply) && !/ in D minor/.test(kwhy.reply) && kwhy.hum === 'D minor · from your humming', `${kwhy.text} (${kwhy.why}); hum: ${kwhy.hum}`);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
