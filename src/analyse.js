@@ -29,7 +29,7 @@ function anaJob(x,sr,opt){
   'use strict';
   var md=function(a,n){ return ((a%n)+n)%n; };
   /* tuning knobs (fitted on our renders with tools/ana-node.mjs; opt.p overrides them for testing) */
-  var CF={chLo:130,chHi:2000,bsLo:40,bsHi:250,beta:10,lam:3,mv:1,inKey:0.6,nPen:0.18,keyCh:0.2,keyBass:0.3,keyFirst:0.25,keyDia:1,tk1:1,tk2:0.5,tk4:0.5,tk8:0,tc:124,ts:0.8,tb:1.05,snW:1,kickW:0.6,kickGap:0.08,qGap:0.15}, ck;
+  var CF={chLo:130,chHi:2000,bsLo:40,bsHi:250,beta:10,lam:3,mv:1,inKey:0.6,nPen:0.18,keyCh:0.2,keyBass:0.3,keyFirst:0.25,keyDia:1,tk1:1,tk2:0.5,tk4:0.5,tk8:0,tc:124,ts:0.8,tb:1.05,snW:1,kickW:0.6,kickGap:0.08,qGap:0.15,hpBeat:0.12,hpClip:0.15,hpBands:4}, ck;
   if(opt&&opt.p) for(ck in opt.p) CF[ck]=opt.p[ck];
   var now=(typeof performance!=='undefined'&&performance.now)?function(){ return performance.now(); }:function(){ return Date.now(); };
   /* ---- pass 1: harmony frames ---- */
@@ -42,6 +42,12 @@ function anaJob(x,sr,opt){
   var N2=1024, H2=512, F2=Math.max(1,Math.floor(len/H2)+1), win2=new Float32Array(N2); for(i=0;i<N2;i++) win2[i]=0.5-0.5*Math.cos(2*Math.PI*i/N2);
   var fft2=makeFFT(N2), re2=new Float32Array(N2), im2=new Float32Array(N2), mA2=new Float32Array(N2/2+1), mB2=new Float32Array(N2/2+1), prevL=new Float32Array(N2/2+1), ON=new Float32Array(F2), ONL=new Float32Array(F2), ONM=new Float32Array(F2);
   var kLow2=Math.max(2,Math.round(150/(sr/N2))), kMid2=Math.round(1200/(sr/N2));
+  /* ---- pass 3 (fix 1): harmonic vs percussive (median filtering, after Fitzgerald, "Harmonic/Percussive Separation using
+     Median Filtering", DAFx 2010): a cell of the short spectrogram is harmonic when its median over ~390 ms of time beats
+     its median over ~370 Hz of frequency. Drums are short or noisy and fall on the percussive side; a tuned tom or cowbell
+     that rings is harmonic but sits on the same few pitches all clip long (see finish). 200 Hz-2 kHz only. */
+  var HPW=8, hk0=Math.floor(200/(sr/N2)), hk1=Math.ceil(2000/(sr/N2)), hs0=Math.max(1,hk0-HPW), hs1=Math.min(N2/2,hk1+HPW), HNS=hs1-hs0+1, HNK=hk1-hk0+1;
+  var HPM=new Float32Array(F2*HNS), HS=new Float32Array(F2*HNK), hpi=0, hpWin=null, hpTot=0, hpHar=0;
   var fi=0, oi=0, done=false, result=null;
   /* two real frames in one complex FFT (frame a in the real part, frame b in the imaginary part), magnitudes of bins k0..k1 */
   function spec2(sa,sb,Nn,w,f,R,I,MA,MB,k0,k1){
@@ -69,17 +75,30 @@ function anaJob(x,sr,opt){
     var pe=0; for(j=0;j<n;j++){ if(pf[j]>=200&&pf[j]<1000) pe+=pa[j]*pa[j]; } PE[i]=pe;
   }
   function framePair(i){ spec2(i*H-N/2,(i+1)*H-N/2,N,win,fft,re,im,magA,magB,k40,k2k+1); framePeaks(i,magA); if(i+1<F) framePeaks(i+1,magB); }
-  function flux(i,M){ var fl=0, ll=0, ml=0; for(k=1;k<=N2/2;k++){ var L=Math.log(1+M[k]), d=L-prevL[k]; if(d>0){ fl+=d; if(k<=kLow2) ll+=d; else if(k<=kMid2) ml+=d; } prevL[k]=L; } ON[i]=fl; ONL[i]=ll; ONM[i]=ml; }
+  function flux(i,M){ var fl=0, ll=0, ml=0, o3=i*HNS-hs0; for(k=hs0;k<=hs1;k++) HPM[o3+k]=M[k]; for(k=1;k<=N2/2;k++){ var L=Math.log(1+M[k]), d=L-prevL[k]; if(d>0){ fl+=d; if(k<=kLow2) ll+=d; else if(k<=kMid2) ml+=d; } prevL[k]=L; } ON[i]=fl; ONL[i]=ll; ONM[i]=ml; }
   function oframePair(i){ spec2(i*H2-N2/2,(i+1)*H2-N2/2,N2,win2,fft2,re2,im2,mA2,mB2,1,N2/2); flux(i,mA2); if(i+1<F2) flux(i+1,mB2); }
+  /* a sorted window: take one value out, put one in (both O(window)) */
+  function swap(w,n,out,inn){ var a=0; while(a<n&&w[a]!==out) a++; if(a<n){ for(;a<n-1;a++) w[a]=w[a+1]; } var b=n-1; while(b>0&&w[b-1]>inn){ w[b]=w[b-1]; b--; } w[b]=inn; }
+  var hpF=new Float32Array(2*HPW+1);
+  function hpFrame(i){
+    var W=2*HPW+1, q, z, cl=function(f){ return f<0?0:f>=F2?F2-1:f; };
+    if(!hpWin){ hpWin=[]; for(k=0;k<HNK;k++){ var w0=new Float32Array(W); for(z=-HPW;z<=HPW;z++) w0[z+HPW]=HPM[cl(z)*HNS+hk0+k-hs0]; w0.sort(); hpWin.push(w0); } }
+    else for(k=0;k<HNK;k++) swap(hpWin[k],W,HPM[cl(i-1-HPW)*HNS+hk0+k-hs0],HPM[cl(i+HPW)*HNS+hk0+k-hs0]);
+    var row=i*HNS-hs0; for(z=0;z<W;z++) hpF[z]=HPM[row+hk0-HPW+z]; hpF.sort();
+    for(k=hk0;k<=hk1;k++){ if(k>hk0) swap(hpF,W,HPM[row+k-1-HPW],HPM[row+k+HPW]);
+      var m=HPM[row+k], e=m*m; hpTot+=e; if(hpWin[k-hk0][HPW]>hpF[HPW]){ HS[i*HNK+k-hk0]=e; hpHar+=e; } }
+  }
   function step(budget){
     var t0=now();
     while(fi<F){ framePair(fi); fi+=2; if((fi&3)===0&&now()-t0>budget) return false; }
     fi=F; PO[F]=PF.length;
     while(oi<F2){ oframePair(oi); oi+=2; if((oi&15)===0&&now()-t0>budget) return false; }
-    oi=F2; if(!done){ result=finish(); done=true; }
+    oi=F2;
+    while(hpi<F2){ hpFrame(hpi); hpi++; if((hpi&63)===0&&now()-t0>budget) return false; }
+    if(!done){ result=finish(); done=true; }
     return true;
   }
-  function progress(){ return Math.min(0.99,(fi/F)*0.62+(oi/F2)*0.33); }
+  function progress(){ return Math.min(0.99,(fi/F)*0.6+(oi/F2)*0.3+(hpi/F2)*0.07); }
 
   function finish(){
     var j, f, b, pc;
@@ -164,6 +183,24 @@ function anaJob(x,sr,opt){
       if(n0){ for(pc=0;pc<12;pc++){ BC[q*12+pc]/=n0; BB[q*12+pc]/=n0; } } var pv=[]; for(i=Math.max(0,Math.floor(ta*sr/H));i<F&&fc(i)<tz;i++){ if(fc(i)>=ta) pv.push(PE[i]); } pv.sort(function(a,b){ return a-b; }); BL[q]=pv.length?pv[pv.length>>1]:0;
       var oc=Math.round(ta*sr/H2), om=0; for(i=Math.max(0,oc-3);i<=Math.min(T-1,oc+3);i++) om=Math.max(om,ONL[i]); BO[q]=om; }
     var bls=Array.prototype.slice.call(BL).sort(function(a,b){ return a-b; }), bl80=bls.length?bls[Math.floor(bls.length*0.8)]||1:1; for(q=0;q<NB;q++) BL[q]=Math.min(1,BL[q]/bl80/0.25); /* 1 = a normal tonal beat; under 0.3 = drums only */
+    /* ---- fix 1: drums only, from the harmonic spectrogram ----
+       Per beat, the harmonic energy of each 21.5 Hz band. A band that rings in nearly every beat (>= 85% of beats above a fifth
+       of its own loud level) is a drum's fixed pitch (cowbell, tom, an 808's overtones) or a drone: it is left out. A beat
+       whose remaining harmonic energy, averaged over it and the two beats before it or the two after it (the quieter of the two), is under 12% of the clip's busy beats is
+       drums only. The clip as a whole needs harmonic energy (>= 15% of 200 Hz-2 kHz) spread over several pitches (80% of it
+       in >= 4 bands); a drum loop has 2-8% (or one 808 pitch) and gets no key. Fitted on 6 drum loops and 16 of our songs. */
+    var hpB=new Float64Array(NB*HNK), hpSpec=new Float64Array(HNK), fpo=sr/H2;
+    for(q=0;q<NB;q++){ var i0=Math.max(0,Math.ceil(beats[q]*fpo)), i1=Math.min(F2,Math.ceil((beats[q]+spb)*fpo)); for(i=i0;i<i1;i++) for(k=0;k<HNK;k++){ var hv=HS[i*HNK+k]; if(hv){ hpB[q*HNK+k]+=hv; hpSpec[k]+=hv; } } }
+    var hpStatic=new Uint8Array(HNK), nStatic=0;
+    for(k=0;k<HNK;k++){ var col=[]; for(q=0;q<NB;q++) col.push(hpB[q*HNK+k]); col.sort(function(a,b){ return a-b; }); var p90=col.length?col[Math.floor(col.length*0.9)]:0;
+      if(p90>0){ var on=0; for(q=0;q<NB;q++) if(hpB[q*HNK+k]>0.2*p90) on++; if(on>=0.85*NB){ hpStatic[k]=1; nStatic++; } } }
+    var hpMv=new Float64Array(NB); for(q=0;q<NB;q++){ var a3=0; for(k=0;k<HNK;k++) if(!hpStatic[k]) a3+=hpB[q*HNK+k]; hpMv[q]=a3; }
+    var hps=Array.prototype.slice.call(hpMv).sort(function(a,b){ return a-b; }), hp80=hps.length?hps[Math.floor(hps.length*0.8)]:0, drumBeats=0;
+    var hpAvg=function(a5,z5){ var t5=0, n5=0; for(var q5=Math.max(0,a5);q5<=Math.min(NB-1,z5);q5++){ t5+=hpMv[q5]; n5++; } return n5?t5/n5:0; };
+    if(hp80>0) for(q=0;q<NB;q++){ if(Math.min(hpAvg(q-2,q),hpAvg(q,q+2))<CF.hpBeat*hp80&&BL[q]>=0.3){ BL[q]=0.29; drumBeats++; } }
+    var hpOrd=[], hpSum=0; for(k=0;k<HNK;k++){ hpOrd.push(hpSpec[k]); hpSum+=hpSpec[k]; } hpOrd.sort(function(a,b){ return b-a; });
+    var hpN80=0, hpAcc=0; while(hpN80<HNK&&hpAcc<0.8*hpSum){ hpAcc+=hpOrd[hpN80]; hpN80++; }
+    var hpRatio=hpTot>0?hpHar/hpTot:0, pitched=hpRatio>=CF.hpClip&&hpN80>=CF.hpBands;
     /* the kick sits on one pitch all song: take each bass pitch's floor (20th percentile over tonal beats) away */
     var floorB=new Float32Array(12); for(pc=0;pc<12;pc++){ var vals=[]; for(q=0;q<NB;q++) if(BL[q]>0.3) vals.push(BB[q*12+pc]); vals.sort(function(a,b){ return a-b; }); floorB[pc]=vals.length?vals[Math.floor(vals.length*0.2)]:0; }
     for(q=0;q<NB;q++) for(pc=0;pc<12;pc++) BB[q*12+pc]=Math.max(0,BB[q*12+pc]-floorB[pc]);
@@ -258,7 +295,7 @@ function anaJob(x,sr,opt){
     if(!sameScale(HM.scored[0],K1)){ var HM2=harmony(HM.scored[0]); if(sameScale(HM2.scored[0],HM.scored[0])) HM=HM2; }
     var dph=HM.dph, chordsOut=HM.chordsOut, scored=HM.scored, loop=HM.loop, firstBar=HM.firstBar, nov=HM.nov;
     /* a key needs about 8 beats of music with pitch in it (a short clip or a drum loop has none) */
-    var tonalBeats=0; for(q=0;q<NB;q++) if(BL[q]>=0.3) tonalBeats++; var keyOk=hasBeat&&tonalBeats>=8&&mxs.length>0;
+    var tonalBeats=0; for(q=0;q<NB;q++) if(BL[q]>=0.3) tonalBeats++; var keyOk=hasBeat&&tonalBeats>=8&&mxs.length>0&&pitched;
     var KB1=scored[0], KB2=scored[1]||scored[0], kconf=KB1.s>0?Math.max(0,Math.min(1,(KB1.s-KB2.s)/KB1.s)):0;
     var level=kconf<0.02?1:kconf<0.06?2:kconf<0.14?3:4; if(!mxs.length) level=0;
     var NAMES=['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
@@ -271,7 +308,7 @@ function anaJob(x,sr,opt){
       var root=mx5>0.2?bi4:null; if(bassRoots.length&&bassRoots[bassRoots.length-1].root===root) bassRoots[bassRoots.length-1].d+=4; else bassRoots.push({b:bi3*4,d:4,root:root}); }
     return {v:1,dur:Math.round(len/sr*100)/100,bpm:hasBeat?BPM:null,bpmConf:Math.round(bpmConf*100)/100,bpmAlt:hasBeat?bpmAlt:null,tonalBeats:tonalBeats,beats:(hasBeat?beats:[]).map(function(t){ return Math.round(t*1000)/1000; }),
       downbeat:NB&&hasBeat?Math.round(beats[dph]*1000)/1000:0,key:keyOk?{tonic:KB1.tonic,mode:KB1.mode,conf:Math.round(kconf*1000)/1000,level:level,alt:{tonic:KB2.tonic,mode:KB2.mode},cands:cands,why:cands[0].why}:null,
-      chords:keyOk?chords:[],loop:keyOk?loop:null,bassRoots:keyOk?bassRoots:[],tuning:Math.round(tune),debug:opt&&opt.debug?{ON:ON,ONL:ONL,H2:H2,TE:TE,BE:BE,gate:gate,BL:BL,H:H,sr:sr,PF:PF,PA:PA,PO:PO,CH:CH}:undefined,how:{tempo:cand.filter(function(c,ix){ return ix>0&&ix<cand.length-1&&c[2]>=cand[ix-1][2]&&c[2]>=cand[ix+1][2]; }).sort(function(a,b){ return b[2]-a[2]; }).slice(0,6).map(function(c){ return c[0]+':'+(c[2]/(best[2]||1)).toFixed(2)+'/'+(c[1]/(best[1]||1)).toFixed(2); }).join(' '),frames:F,tonal:mxs.length,onsetFrames:F2,fold:dbg,nov:Array.prototype.map.call(nov,function(v){ return Math.round(v*100)/100; }),dph:dph}};
+      chords:keyOk?chords:[],loop:keyOk?loop:null,bassRoots:keyOk?bassRoots:[],tuning:Math.round(tune),debug:opt&&opt.debug?{ON:ON,ONL:ONL,H2:H2,TE:TE,BE:BE,gate:gate,BL:BL,H:H,sr:sr,PF:PF,PA:PA,PO:PO,CH:CH}:undefined,how:{tempo:cand.filter(function(c,ix){ return ix>0&&ix<cand.length-1&&c[2]>=cand[ix-1][2]&&c[2]>=cand[ix+1][2]; }).sort(function(a,b){ return b[2]-a[2]; }).slice(0,6).map(function(c){ return c[0]+':'+(c[2]/(best[2]||1)).toFixed(2)+'/'+(c[1]/(best[1]||1)).toFixed(2); }).join(' '),frames:F,tonal:mxs.length,onsetFrames:F2,pitch:{harm:Math.round(hpRatio*1000)/1000,bands:hpN80,fixed:nStatic,drumBeats:drumBeats},fold:dbg,nov:Array.prototype.map.call(nov,function(v){ return Math.round(v*100)/100; }),dph:dph}};
   }
   /* refinish: the last stage again with other knobs (tools/ana-node.mjs sweeps them without redoing the FFTs) */
   return {step:step,progress:progress,result:function(){ return result; },refinish:function(p){ var d0={}, z; for(z in p){ d0[z]=CF[z]; CF[z]=p[z]; } var r0=finish(); for(z in d0) CF[z]=d0[z]; return r0; }};
