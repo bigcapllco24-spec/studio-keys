@@ -74,9 +74,12 @@ function swingOver(a,curSwing){
   if(BATCH.swing!=null) return a.swing==null?undefined:BATCH.swing;
   const said=typeof swingSaid==='function'?swingSaid(LAST_TEXT.text):null;
   const v=resolveSwing(said!=null?said:a.swing,curSwing); if(v!==undefined&&said!=null) BATCH.swing=v; return v; }
+/* SE-8: hats the user named ("16th hats", "change the hats to 16ths") stay exactly as asked, through "another one" too
+   (the flag lives in the drums recipe). Hats the AI picked on its own, with no hat words in the request, still vary. */
+const hatsSaid=()=>{ const t=String(LAST_TEXT.text||'').toLowerCase(); return !t||/hat|\b16|sixteenth|\b8th|\b8s\b|eighth|\b8\s*\/\s*8|off ?-?beat|shuffle|quarter|\brolls?\b/.test(t); };
 function grooveOver(a,curSwing){
   const o={kick:a.kick,back:a.back||(a.claps===true||a.clap===true?'clap':a.snare===true?'snare':undefined),open:a.open,shaker:a.shaker,ghost:a.ghost,swing:swingOver(a,curSwing),energy:a.energy,fill:a.fill,ride:a.ride};
-  if(a.hats===false) o.hats='none'; else if(typeof a.hats==='string'){ const k=HAT_KIND[a.hats.toLowerCase()]||a.hats.toLowerCase(); if(k==='open') o.open=true; else if(k==='shaker') o.shaker=true; else o.hats=k; }
+  if(a.hats===false) o.hats='none'; else if(typeof a.hats==='string'){ const k=HAT_KIND[a.hats.toLowerCase()]||a.hats.toLowerCase(); if(k==='open') o.open=true; else if(k==='shaker') o.shaker=true; else { o.hats=k; if(a.hatsAsked===true||hatsSaid()) o.hatsAsked=true; } }
   const pw=[a.perc,a.percussion,a.congas===true?'congas':null].filter(x=>typeof x==='string').join(' ').toLowerCase();
   if(pw){ const set=[]; [[45,/conga|bongo|hand/],[37,/rim/],[47,/tom/],[56,/cowbell/],[50,/high tom|timbale/]].forEach(([n,re])=>{ if(re.test(pw)) set.push(n); }); if(set.length){ o.percSet=set; o.perc=set.length; } else o.perc=2; }
   else if(a.perc!=null) o.perc=clamp(Math.round(+a.perc),0,3);
@@ -107,8 +110,8 @@ const ACT={
     addTrack({role:'drums',inst:kit,zone:'pads',gen:true,name:'Drums',events:g.events,recipe:rec,seed:g.seed,style:s,ref:artist?artist.name:undefined,desc:g.desc},{replaceRole:'drums'});
     return `${artist?artist.name+'-style':STYLES[s].name} drums on ${I.name}: ${g.desc}`; },
   hats(a){ const kind=HAT_KIND[String(a.pattern||a.value||'8th').toLowerCase()]||String(a.pattern||a.value||'8th').toLowerCase();
-    let t=findTrack('drums'); if(!t||!t.recipe){ return ACT.add_drums(Object.assign({},a,{hats:kind})); }
-    const over=kind==='open'?{open:true}:kind==='shaker'?{shaker:true}:{hats:kind};
+    let t=findTrack('drums'); if(!t||!t.recipe){ return ACT.add_drums(Object.assign({},a,{hats:kind,hatsAsked:true})); }
+    const over=kind==='open'?{open:true}:kind==='shaker'?{shaker:true}:{hats:kind,hatsAsked:true};
     regenTrack(t,{seed:t.seed,recipe:over}); return kind==='none'?'Hi-hats removed':`Hi-hats: ${t.desc}`; },
   groove(a){ const t=findTrack(a.track||'drums'); if(!t||t.role!=='drums') return;
     if(!t.recipe) return ACT.add_drums(a);

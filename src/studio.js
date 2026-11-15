@@ -356,7 +356,7 @@ async function makeSongMp3(tracks,onProgress,opts={}){
     for(let i=0;i<n&&o+i<total;i++){ const a=l[i], b=r[i], m=a>b?(a>-b?a:-b):(b>-a?b:-a); if(m>pk) pk=m; L16[o+i]=clamp(Math.round(a*16384),-32768,32767); R16[o+i]=clamp(Math.round(b*16384),-32768,32767);
       if((i&16383)===0&&performance.now()-tk>20){ await yieldMain(); tk=performance.now(); } }
     await yieldMain(); }
-  const g=pk>0.94?0.94/pk:1, /* MP3 decoders overshoot a little: keep the encoded peak at -0.5 dBFS */ k=2*g/32768, fade=Math.round(sr*1.5);
+  const g=pk>0.89?0.89/pk:1, /* MP3 decoders overshoot (inter-sample peaks): keep the encoded peak at -1 dBFS */ k=2*g/32768, fade=Math.round(sr*1.5);
   const enc=new lamejs.Mp3Encoder(2,sr,192), out=[], B=1152, LB=new Int16Array(B), RB=new Int16Array(B); let sq=0, tk=performance.now();
   for(let i=0;i<total;i+=B){ const m=Math.min(B,total-i);
     for(let j=0;j<m;j++){ const p=i+j; let f=k; if(p>total-fade) f*=(total-p)/fade; const a=clamp(L16[p]*f,-1,1), b=clamp(R16[p]*f,-1,1); sq+=a*a+b*b; LB[j]=a<0?a*0x8000:a*0x7FFF; RB[j]=b<0?b*0x8000:b*0x7FFF; }

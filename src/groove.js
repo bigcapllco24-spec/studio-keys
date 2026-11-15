@@ -251,17 +251,20 @@ function makeGroove(rec,L,seed){
   const kickPat=pick(KICKS[rec.kick]||KICKS.four), kickPatB=V.kickB?pickR(D(99),(KICKS[rec.kick]||[]).filter(k=>k!==kickPat))||kickPat:kickPat, hc=sh.hatc;
   const trapRollAt=[pickR(rH,[10,12,14]),pickR(rH,[6,13,15])];
   const hatAcc=s=>V.hatAcc==='off'?(s%4===2?1.18:0.9):V.hatAcc==='drive'?(s%2===0?1.06:0.9):1;
+  let kickExtra=0;
   for(let bar=0;bar<bars;bar++){
     const phrase=bar%8, isB=V.ab==='phrase'?phrase>=4:V.ab==='alt'?bar%2===1:V.ab==='last'?bar%4===3:false;
     const isFill=!!fillEvery&&((bar+1)%fillEvery===0||(loopFill&&bar===bars-1)), fl=loopFill&&bars<fillEvery?1:fillLen, f0=16-4*fl;
     const lastBeatFill=isFill&&fillKind!=='openhat'&&fillKind!=='kickroll';
     const odd=bar%2===1, turn=bar%4===3||bar===bars-1;
     /* kick: the style's pattern, plus this groove's kick idea */
-    const kp=pat(isB?kickPatB:kickPat,bar);
-    for(let s=0;s<16;s++){ if(kp[s]==='.'||!kp[s]) continue; if(isFill&&fillKind==='drop'&&s>=f0) continue; if(V.kick==='dropout'&&turn&&s===12&&!isFill) continue; at(bar,s,36,s%4===0?0.95:0.8,0.25,false); }
-    if(V.kick==='pickup'&&(isB||odd)&&!(isFill&&fillKind==='drop')) V.pickupAt.forEach(s=>at(bar,s,36,0.42+RR.kick()*0.12,0.15,false));
-    if(V.kick==='ghost'&&(V.ab==='none'||!isB||odd)) V.ghostKick.forEach(s=>at(bar,s,36,0.3+RR.kick()*0.06,0.12,false));
-    if(V.kick==='double'&&odd&&!isFill) at(bar,V.doubleAt,36,0.6,0.2,false);
+    const kp=pat(isB?kickPatB:kickPat,bar), kOn=new Set();
+    for(let s=0;s<16;s++){ if(kp[s]==='.'||!kp[s]) continue; if(isFill&&fillKind==='drop'&&s>=f0) continue; if(V.kick==='dropout'&&turn&&s===12&&!isFill) continue; at(bar,s,36,s%4===0?0.95:0.8,0.25,false); kOn.add(s); }
+    /* the kick idea only adds kicks where the pattern has none (a ghost on top of the main kick is not heard, and the reply would name it) */
+    const kx=(s,v,d)=>{ if(kOn.has(s)||isFill&&fillKind==='drop'&&s>=f0){ RR.kick(); return; } at(bar,s,36,v,d,false); kOn.add(s); kickExtra++; };
+    if(V.kick==='pickup'&&(isB||odd)&&!(isFill&&fillKind==='drop')) V.pickupAt.forEach(s=>kx(s,0.42+RR.kick()*0.12,0.15));
+    if(V.kick==='ghost'&&(V.ab==='none'||!isB||odd)) V.ghostKick.forEach(s=>kx(s,0.3+RR.kick()*0.06,0.12));
+    if(V.kick==='double'&&odd&&!isFill) kx(V.doubleAt,0.6,0.2);
     /* backbeat */
     const backSteps=rec.back==='dembow'?[3,6,11,14]:(rec.kick==='halftime'||rec.kick==='trap'||rec.kick==='drill'?(rec.kick==='drill'?[8,14]:[8]):[4,12]);
     const backNote=rec.back==='snare'?38:rec.back==='rim'?37:39;
@@ -313,6 +316,10 @@ function makeGroove(rec,L,seed){
     }
   }
   ev.sort((a,b)=>a.b-b.b);
+  /* one hit per drum per moment: where two layers land on the same drum at the same time (a fill's hat roll over the 8th hats,
+     a trap roll over a hat), keep the louder one */
+  { const last={}; let w=0; for(let i=0;i<ev.length;i++){ const e=ev[i], p=last[e.n]; if(p&&e.b-p.b<0.02){ if(e.v>p.v) p.v=e.v; if(e.d>p.d) p.d=e.d; continue; } last[e.n]=e; ev[w++]=e; } ev.length=w; }
+  if(!kickExtra&&V.kick!=='dropout') V.kick='plain';
   const words=[];
   words.push(({four:'four-to-the-floor kick',broken:'broken garage kick',boombap:'boom-bap kick',trap:'trap kick',drill:'drill kick',pop:'pop kick',halftime:'half-time kick',dnb:'two-step drum & bass kick',bhangra:'bhangra kick'}[rec.kick]||'kick')
     +({pickup:' with kick pickups',ghost:' with ghost kicks',dropout:' with a dropout on beat 4',double:' with a double kick every other bar'}[V.kick]||'')+(V.kickB?' (a second kick pattern in the B bars)':''));
