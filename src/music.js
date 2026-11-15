@@ -232,7 +232,7 @@ function parseChord(s){
   let t=String(s==null?'':s).trim().replace(/\s+chord$/i,''); if(!t) return null;
   if(/^(n\.?\s?c\.?|none|no chord|nothing|rest|silence|off)$/i.test(t)) return {root:null,q:'none'};
   let bass=null; const sl=/^(.+?)\s*\/\s*([A-Ga-g])\s*(#|♯|b|♭)?$/.exec(t); if(sl){ bass=mod('C D EF G A B'.indexOf(sl[2].toUpperCase())+(sl[3]?(/[#♯]/.test(sl[3])?1:-1):0),12); t=sl[1]; }
-  const m=/^([A-Ga-g])\s*(#|♯|b(?![a-z])|♭|b(?=m|maj|min|M|7|5|9|6|sus|dim|add|°|ø|$)|\s+sharp|\s+flat)?\s*(.*)$/.exec(t); if(!m) return null;
+  const m=/^([A-Ga-g])\s*(#|♯|b(?![a-z])|♭|b(?=m|maj|min|M|7|5|9|6|sus|dim|add|°|ø|$)|sharp|flat)?\s*(.*)$/i.exec(t); if(!m) return null;
   let root='C D EF G A B'.indexOf(m[1].toUpperCase()); if(m[2]) root+=/[#♯]|sharp/i.test(m[2])?1:-1; root=mod(root,12);
   let rest=m[3].trim().replace(/\s+/g,''); const lower=rest.toLowerCase();
   let q;
@@ -267,16 +267,28 @@ function chordPlanFrom(src,key){
   /* cut [b, b+d) where the chord changes (the span repeats) */
   const cuts=[...new Set(ch.flatMap(c=>[c.b,c.b+c.d]).map(x=>mod(x,S)).concat([0]))].sort((a,b)=>a-b);
   const segs=(b,d)=>{ const out=[], e=b+d; let x=b; let guard=0;
-    while(x<e-1e-6&&guard++<64){ const base=Math.floor(x/S)*S, rel=x-base; let nx=base+S; for(const c of cuts){ if(c>rel+1e-6){ nx=base+c; break; } } nx=Math.min(nx,e); out.push({b:x,d:nx-x,c:at(x)}); x=nx; }
+    while(x<e-1e-6&&guard++<64){ const base=Math.floor(x/S)*S, rel=x-base; let nx=base+S; for(const c of cuts){ if(c>rel+1e-6){ nx=base+c; break; } } const last=nx>=e-1e-6; nx=Math.min(nx,e); out.push({b:x,d:last&&x===b?d:Math.round((nx-x)*1e6)/1e6,c:at(x)}); x=last?e:nx; }
     return out.length?out:[{b,d,c:at(b)}]; };
   return {key,plan,at,segs,fromChords:true};
 }
 /* the song's chords as blocks over the whole loop, for the chord strip and for fixing: PROJ.chords repeated to the loop
    length, or Keys' progression written out one chord per bar (from 'keys'). Copies; changing them changes nothing. */
 function triadQ(pcs){ if(!pcs||pcs.length<3) return 'maj'; const t=mod(pcs[1]-pcs[0],12), f=mod(pcs[2]-pcs[0],12); return f===6?'dim':t===3?'min':'maj'; }
+/* Keys' progression as the parts play it now: per bar, the key's chord that best fits the notes of the chords track Keys made
+   (else its bassline's root), else the progression. Parts made at different times can differ, since the old chordPlan bends
+   towards melodies; reading the parts keeps every bar you don't touch exactly as it sounds. */
+function keysChordBars(){
+  const key=projectKey(), L=PROJ.bars*4, {plan}=chordPlan(), ct=PROJ.tracks.find(t=>t.gen&&t.kind==='notes'&&t.role==='chords'), bt=PROJ.tracks.find(t=>t.gen&&t.kind==='notes'&&t.role==='bass');
+  const degs=[0,1,2,3,4,5,6].filter(d=>!((key.mode==='major'&&d===6)||(key.mode==='minor'&&d===1)));
+  const out=[]; for(let bar=0;bar<L/4;bar++){ let deg=plan[bar%plan.length].deg;
+    const inBar=t=>t?(t.events||[]).filter(e=>e.b>=bar*4-1e-6&&e.b<bar*4+4-1e-6):[], ce=inBar(ct), be=inBar(bt);
+    if(ce.length){ let best=-1e9; degs.forEach(d=>{ const pcs=triad(key,d); let sc=0; ce.forEach(e=>{ sc+=(pcs.includes(mod(e.n,12))?1:-0.6)*(e.d||0.25); if(mod(e.n,12)===pcs[0]) sc+=0.01; }); if(sc>best+1e-9){ best=sc; deg=d; } }); }
+    else if(be.length){ const w=new Array(12).fill(0); be.forEach(e=>w[mod(e.n,12)]+=(e.d||0.25)*(e.b%4<0.01?2:1)); const r=w.indexOf(Math.max(...w)), d=degs.find(d=>triad(key,d)[0]===r); if(d!=null) deg=d; }
+    const pcs=triad(key,deg); out.push({b:bar*4,d:4,root:pcs[0],q:triadQ(pcs),conf:1,from:'keys'}); }
+  return out; }
 function chordBlocks(){
   const L=PROJ.bars*4, src=Array.isArray(PROJ.chords)&&PROJ.chords.length?PROJ.chords:null;
-  if(!src){ const {plan}=chordPlan(); return plan.slice(0,L/4).map((p,bar)=>({b:bar*4,d:4,root:p.root,q:triadQ(p.pcs),conf:1,from:'keys'})); }
+  if(!src) return keysChordBars();
   const ch=src.slice().sort((a,b)=>a.b-b.b), S=chordSpanBars(ch)*4, out=[];
   for(let off=0;off<Math.max(L,S);off+=S){ if(off>0&&off>=L) break; ch.forEach(c=>{ const b=c.b+off; if(off>0&&b>=L) return; const o=Object.assign({},c,{b}); if(off>0&&b+o.d>L) o.d=L-b; out.push(o); }); }
   return out;

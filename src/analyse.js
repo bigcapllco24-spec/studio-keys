@@ -325,5 +325,82 @@ function anaStamp(buf){ const d=buf.getChannelData(0), n=d.length; let s=0; for(
 function anaCache(res,buf){ const o=Object.assign({},res); delete o.beats; delete o.how; o.beat0=res.beats&&res.beats.length?res.beats[0]:0; o.stamp=anaStamp(buf); o.at=Date.now(); return o; }
 function anaCached(t,buf){ const a=t&&t.ana; if(!a||a.v!==ANA_VER||!buf) return null; const s=anaStamp(buf); return a.stamp&&a.stamp.len===s.len&&a.stamp.sum===s.sum?a:null; }
 /* names for the strip and Keys' replies: "Em", "C", "G7", "Dsus4", "N.C." */
-const ANA_Q={maj:'',min:'m','7':'7',m7:'m7',maj7:'maj7',sus4:'sus4','5':'5'};
+const ANA_Q={maj:'',min:'m','7':'7',m7:'m7',maj7:'maj7',sus4:'sus4',sus2:'sus2',dim:'dim','5':'5'};
 function anaChordName(c){ return !c||c.root==null||c.q==='none'?'N.C.':PC_NAMES[c.root]+(ANA_Q[c.q]!=null?ANA_Q[c.q]:''); }
+
+/* ---------- SE-7c: a song's chords on your song ----------
+   Analysed beats count from the song's first downbeat; song beats count from bar 1 of your loop. A clip at t.start (beats)
+   that skips t.trim seconds of its recording puts analysed beat 0 at song beat anaClipOffset(t, ana). For PROJ.chords the song
+   is assumed to be at the analysed tempo ("Use 124 BPM"); anaSongChords uses the real tempo (for the strip over the clip). */
+function anaClipOffset(t,ana){ ana=ana||(t&&t.ana); if(!ana||!ana.bpm) return 0; return ((t&&t.start)||0)+((ana.downbeat||0)-((t&&t.trim)||0))*ana.bpm/60; }
+/* the analysed chords where they sit under the clip in the song, at the song's tempo now: [{b, d, root, q, conf, alt}] in song
+   beats (blocks before the song's start are cut). For the chord strip over an audio track; changes nothing. */
+function anaSongChords(t,ana){ ana=ana||(t&&t.ana); if(!ana||!ana.bpm||!ana.chords) return [];
+  const k=CTRL.bpm/ana.bpm, o=((t&&t.start)||0)+((ana.downbeat||0)-((t&&t.trim)||0))*CTRL.bpm/60;
+  return ana.chords.map(c=>{ let b=o+c.b*k, d=c.d*k; if(b+d<=0) return null; if(b<0){ d+=b; b=0; } return Object.assign({},c,{b:Math.round(b*1000)/1000,d:Math.round(d*1000)/1000}); }).filter(Boolean); }
+/* chordsFromAna(ana, {bars, to, at, track, bass, align}) -> PROJ.chords [{b, d, root, q, conf, from:'audio', alt, bass?}]
+   at: 'loop' (default when the song has a main loop): the main 4- or 8-bar loop's chords from bar 1; 'clip': the chords as
+       they sit under the clip (track) from bar 1 of the song, the offset rounded to a quarter beat.
+   bars: how many bars (default: the loop's length for 'loop', the song's loop length for 'clip'); a shorter loop repeats.
+   to: 'mine' (default) moves them into your song's key through the relative mode (see fitChordsToKey); 'song' keeps the
+       song's own key, and so does 'mine' when your song has no key yet. key: the target key to use instead of yours.
+   bass: true adds the song's bass notes (ana.bassRoots) under the chords as slash chords ("C/E"), so the bassline follows
+       the song's bass movement; a chord is split at a bar line where the bass moves.
+   align: true (with track, at 'loop') starts the loop where the clip is in it, so the chords line up with the clip in Song mode.
+   Pure: changes nothing. [] when the analysis has no chords. */
+function chordsFromAna(ana,o={}){
+  if(!ana||!Array.isArray(ana.chords)||!ana.chords.length) return [];
+  const at=o.at==='clip'||!ana.loop?'clip':'loop', t=o.track||null, rnd=x=>Math.round(x*4)/4;
+  let win0, len, off;
+  if(at==='loop'){ const LL=ana.loop.bars*4; win0=ana.loop.start*4; len=LL; off=0;
+    if(o.align&&t&&ana.bpm){ const rot=mod(Math.round(-anaClipOffset(t,ana)/4)-ana.loop.start,ana.loop.bars); win0=(ana.loop.start+rot)*4; } }
+  else { off=rnd(anaClipOffset(t,ana)); win0=-off; len=(Math.round(+o.bars)||PROJ.bars)*4; }
+  const bars=Math.max(1,Math.round(+o.bars)||Math.round(len/4)), N=bars*4;
+  /* one pass over [win0, win0+len) in analysed beats, wrapping inside the loop window so a rotated loop stays whole */
+  const piece=(lo,hi,shift)=>ana.chords.filter(c=>c.b<hi-1e-6&&c.b+c.d>lo+1e-6).map(c=>{ const b=Math.max(lo,c.b), e=Math.min(hi,c.b+c.d);
+    const x={b:rnd(b+shift),d:rnd(e-b),root:c.root==null?null:c.root,q:c.root==null?'none':(c.q||'maj'),conf:c.conf!=null?c.conf:0.5,from:'audio'}; if(c.alt&&c.alt.root!=null) x.alt={root:c.alt.root,q:c.alt.q}; return x; });
+  let one;
+  if(at==='loop'){ const l0=ana.loop.start*4, l1=l0+len, r0=win0; one=piece(r0,l1,-r0).concat(r0>l0?piece(l0,r0,l1-r0-l0):[]); }
+  else one=piece(win0,win0+len,-win0);
+  one=one.filter(c=>c.d>0&&c.b<len).sort((a,b)=>a.b-b.b);
+  /* merge neighbours that are the same chord (a wrapped loop can split one) */
+  const merged=[]; one.forEach(c=>{ const p=merged[merged.length-1]; if(p&&p.root===c.root&&p.q===c.q&&Math.abs(p.b+p.d-c.b)<1e-6){ p.d+=c.d; p.conf=Math.min(p.conf,c.conf); } else merged.push(c); });
+  /* the bass notes, per bar, as slash chords */
+  let out=merged;
+  if(o.bass&&Array.isArray(ana.bassRoots)&&ana.bassRoots.length){ const bassAt=ab=>{ const r=ana.bassRoots.find(x=>x.b<=ab+1e-6&&ab<x.b+x.d-1e-6); return r?r.root:null; };
+    const toAna=sb=>at==='loop'?(()=>{ const l0=ana.loop.start*4, r=sb+(win0-l0); return l0+mod(r,len); })():sb+win0;
+    out=[]; merged.forEach(c=>{ let x=c.b; const e=c.b+c.d; while(x<e-1e-6){ const nx=Math.min(e,(Math.floor(x/4+1e-6)+1)*4), bn=c.root==null?null:bassAt(Math.floor(toAna(x)/4+1e-6)*4);
+        const pc=Object.assign({},c,{b:x,d:nx-x}); delete pc.bass; if(bn!=null&&bn!==c.root) pc.bass=bn;
+        const p=out[out.length-1]; if(p&&p.root===pc.root&&p.q===pc.q&&p.bass===pc.bass&&Math.abs(p.b+p.d-pc.b)<1e-6) p.d+=pc.d; else out.push(pc); x=nx; } }); }
+  /* to the bars asked for: cut, or repeat a shorter loop */
+  const res=[]; for(let k=0;k*len<N;k++) out.forEach(c=>{ const b=c.b+k*len; if(b>=N-1e-6) return; const x=Object.assign({},c,{b}); if(b+x.d>N) x.d=N-b; res.push(x); });
+  const ks=typeof keyStatus==='function'?keyStatus():{key:null}, mine=o.key||ks.key, from=ana.key?{tonic:ana.key.tonic,mode:ana.key.mode}:null;
+  return o.to!=='song'&&mine&&from?fitChordsToKey(res,from,mine):res;
+}
+/* addSongChords(track, {bars, to, at, bass, align, inst, seed, grow}) puts a song's chords on your song:
+   PROJ.chords from the clip's analysis (chordsFromAna), then a new "Chords" track: our own voicing and rhythm on the style's
+   chord sound (inst overrides it), never the song's audio. The bass, chords and melody Keys made follow the new chords with
+   their own seeds. bass: true also makes the bassline follow the song's bass notes (a new "Bassline" if there is none).
+   to 'song' (or a song with no key yet) sets your key to the song's ('from the song') unless you set one yourself.
+   grow (default true): a loop shorter than the chords grows to fit (4 -> 8 bars). One undo step.
+   track: the audio track (object or id); default the newest audio track with an analysis. Returns
+   {chords, track, bass, key, songKey, shift, to, bars, moved:[names], text} or null when there are no chords to use. */
+function addSongChords(t,o={}){
+  if(typeof t==='string') t=PROJ.tracks.find(x=>x.id===t); if(!t) t=[...PROJ.tracks].reverse().find(x=>x.kind==='audio'&&x.ana&&x.ana.chords&&x.ana.chords.length);
+  const ana=o.ana||(t&&t.ana); if(!ana||!ana.chords||!ana.chords.length) return null;
+  const st=keyStatus(), songKey=ana.key?{tonic:ana.key.tonic,mode:ana.key.mode}:null, to=o.to==='song'||!st.key?'song':'mine';
+  const chords=chordsFromAna(ana,Object.assign({},o,{to,track:t})); if(!chords.some(c=>c.root!=null)) return null;
+  const shift=to==='mine'?keyShift(songKey,st.key):0, setOwn=PROJ.key&&PROJ.key.tonic!=null&&PROJ.key.from==='you';
+  if(to==='song'&&songKey&&!setOwn&&!sameKey(st.key,songKey)) setKey(songKey,'song',{move:false});
+  const nb=chordSpanBars(chords); if(o.grow!==false&&nb>PROJ.bars&&nb<=16) setBars(nb);
+  PROJ.chords=chords; const moved=followChords();
+  const s=PROJ.style||'house', S=STYLES[s]||STYLES.house, L=PROJ.bars*4, seed=+o.seed||newSeed(), inst=o.inst||S.chords, ld=id=>{ try{ if(typeof loadI==='function') loadI(id); }catch(e){} };
+  const uniq=n=>{ if(!PROJ.tracks.some(x=>x.name===n)) return n; let k=2; while(PROJ.tracks.some(x=>x.name===n+' '+k)) k++; return n+' '+k; };
+  ld(inst); const ct=makeTrack({role:'chords',inst,gen:true,name:uniq('Chords'),events:genChords(s,L,seed,heldChordStyle(inst,s)),seed,style:s,fromSong:t?t.id:undefined}); PROJ.tracks.push(ct);
+  let bt=null; if(o.bass&&!PROJ.tracks.some(x=>x.gen&&x.kind==='notes'&&x.role==='bass')){ const bi=S.bass, bs=newSeed(); ld(bi); bt=makeTrack({role:'bass',inst:bi,gen:true,name:uniq('Bassline'),events:genBass(s,L,bs),seed:bs,style:s,fromSong:t?t.id:undefined}); PROJ.tracks.push(bt); }
+  chordsRedraw();
+  const nm=(t&&t.name)||'the song', key=to==='mine'?st.key:(setOwn?st.key:songKey||st.key), names=chordsText(chords.slice(0,8));
+  const moveTxt=shift?` moved ${shiftWords(shift)} into your key, ${keyName(st.key)}`:to==='song'&&songKey?` in the song's key, ${keyName(songKey)}`:'';
+  const text=`Chords from “${nm}” on a new ${ct.name} track: ${names}${chords.length>8?' …':''}${moveTxt}`+(bt?'; a new bassline follows the song\'s bass':o.bass?'; your bassline follows the song\'s bass':'')+(moved.length?`; ${moved.join(', ')} follow${moved.length===1?'s':''}`:'');
+  return {chords,track:ct,bass:bt,key,songKey,shift,to,bars:nb,moved,text};
+}
