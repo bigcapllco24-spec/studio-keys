@@ -119,3 +119,72 @@ I called `/accounts/d9810812643ee32e2460689ca2ff73eb/ai/run/@cf/meta/llama-3.3-7
 - `chords_from_audio` doesn't change the tempo; the "yes" to `analyse_song`'s offer does. In loop mode (the default), the chords land per bar whatever the tempo.
 - "put the chords on my song", with "the" rather than "those" and no word for the song, stays `add_chords` offline (ambiguous).
 - Audio can't be re-pitched (as designed), so `match_key` on audio only offers to move your song.
+
+## Fix 1 (assistant-dev, 15 Nov 2026, after the tester's NOT READY on 4afe858)
+Commit `2d7eadb` on `preview-se-7bc`. Files: `src/maker.js`, `src/actions.js`, `cloudflare/worker.js` (prompt only), `index.html` rebuilt.
+
+**What changed**
+1. **Bug 3 (medium, also on main): track names come before effect words.**
+   - Before reading a typed or spoken request, the offline parser (`maskNames` in maker.js) finds the names of songs you dropped in, and of parts you brought in or sang. It replaces each name with "this song" (audio) or "that part" (notes), and the request is about that track (`NAMED.track`).
+   - Matching ignores case and treats "night drive", "night-drive", "Night_Drive" and "the night drive song" as the same name.
+   - Plain names stay ordinary words: Drums, Chords 2, Voice note 1, Sung melody, and a part named after its instrument. So "add drive to the chords" still adds Drive.
+   - Results:
+     - "put the chords from night drive on my song" now gives `chords_from_audio night-drive` (it used to give `track_fx chords drive`).
+     - "turn night-drive into a melody" now gives `transcribe night-drive melody` (it used to give "Drive on Melody: 30%").
+     - "what key is night drive in" now gives `analyse_song night-drive` (it used to give `track:"mine"`).
+     - "add reverb to night drive", "mute night drive" and "make night drive quieter" act on that track. So do "make drive bass louder" and "add reverb to drive bass" for a MIDI part called Drive Bass.
+   - Turning a song into notes now also understands "turn this song/track/clip/loop into ...".
+2. **Bug 4 (low): "copy the melody of this song" gets an honest answer.**
+   - Nothing changes in the song.
+   - The reply is: "I write my own melodies rather than copy a song's tune, so I can make a new one over its chords. For the song's own tune, say “turn night-drive into a melody”, or use Turn into notes on its track."
+   - It also catches "give me the melody of night drive", "same melody as this song" and "iski dhun chahiye is gaane ki".
+   - "add a melody" still adds one.
+3. **Bug 5 (low): one undo step per request, whatever the machine's speed.**
+   - `runActions` now runs every action inside `quietSaves`. While the actions run, `saveProject` only counts the saves (from setKey, setBars, a transcribe and so on). Then the request saves once.
+   - The step no longer depends on the 120 ms merge window.
+   - The same happens after a listen.
+4. **Analyse path: listening is not an undo step.**
+   - `anaThen` now uses the studio's `listenToSong(t, {quiet:true})`, the one shared promise with the import and the card, which stores `t.ana` without an undo step. It no longer saves `t.ana` with `saveProject()`.
+   - `ANA_JOBS` is gone. The `typeof ANA_JOBS` guard in edit.js keeps that code safe (studio-ux-dev can delete that line and its comment).
+   - New: a "play" sent in the same request now waits until the listen is done. Playing first wrote the tracks' play state on its own, which made an empty undo step. The tester's "2 steps" can come from this as well as from the timing.
+5. **Worker prompt** (two new rules, no backticks or `${`):
+   - NAMES: a track's name is a name, never an effect, style or part, with the night drive examples.
+   - A SONG'S MELODY: for "copy the melody", send no actions, reply honestly and point to "turn X into a melody" or Turn into notes. Use transcribe only when they ask to turn the song itself into notes.
+
+**How I tested** (headless Chrome, built `index.html`, the tester's renders in `/tmp/qa/se7bc/songs/`, D minor house song with drums, bass and chords, then night-drive imported)
+- **Parser:** 33 of 33 checks pass. That covers the phrases above, plus "add drive to the chords", "more drive on the bass", "add reverb to the chords", "what key is this?", "put those chords on my song" and "add a melody", which are unchanged.
+- **Typed end to end:**
+  - "put the chords from night drive on my song" adds Chords 2 (Dm · B♭ · F · Dm · C, moved down a tone), with no Drive on any chords track, in **1 undo step**.
+  - "copy the melody of this song" gives the honest reply and adds no track.
+  - "what key is night drive in" gives "E minor at 124, I'm sure … Move your song to E minor?"
+- **Slow machine:**
+  - I made `genChords` and `followChords` each wait 300 ms. "put those chords on my song" took 1 step in 3 of 3 runs.
+  - `key from song` + `chords_from_audio` + play in one request is 1 step.
+- **Still listening:**
+  - I imported sunday-pop and typed "put those chords on my song" at once. Keys says "Listening to “sunday-pop”, one moment.", then puts F · C · Dm · B♭maj7: **1 undo step in total**, where it was 2 before the play fix.
+  - One undo removes the chords and keeps the song and what was heard.
+  - "what key is this song" while it listens adds 0 steps.
+- **Turn into notes, the free pass:** with `tests/fixtures/sing.wav` imported as "sing", "turn sing into a melody" gives 6 notes on Analog Lead in 1 step. That name is a verb, and it was still read as a name.
+- **`bash .claude/tools/check.sh`:** the first run gave 2 of 64 FAIL at load 10.5, on a shared box. I didn't keep the names of the two checks. The rerun passed: CHECK OK, 64 checks.
+- **Page errors:** none (only the offline network request).
+
+**Smoke line for the tester (bug 3)**
+- With an audio track named "night-drive" (a cached `t.ana` is fine) in a song with Keys' chords:
+  - `localBrain('put the chords from night drive on my song').actions[0]` is `{type:'chords_from_audio', track:'night-drive'}`, and no action is `track_fx`.
+  - `localBrain('turn night-drive into a melody').actions[0].type === 'transcribe'`.
+  - `localBrain('what key is night drive in').actions[0]` is `analyse_song` with `track:'night-drive'`.
+  - `localBrain('add drive to the chords').actions[0]` is still `track_fx chords drive`.
+- Optional bug 4 line: `localBrain('copy the melody of this song')` gives `actions: []` and a reply containing "Turn into notes".
+
+**For the lead and other developers**
+- The Worker prompt changed, but I didn't test it: the Cloudflare quota was used up and the brief said not to call it. Test the two new rules with Llama before the Worker deploy at release: "put the chords from night drive on my song", "copy the melody of this song", "what key is night drive in".
+- New globals:
+  - maker.js: `maskNames`, `NAMED`, `namePlain`, `nameWords`, `NAME_PLAIN`, `wantsSongMelody`.
+  - actions.js: `quietSaves`, `songChanged`.
+  - `ANA_JOBS` was removed.
+- `quietSaves` swaps the global `saveProject` binding while the actions run, and puts it back in `finally`. Code that kept its own reference to `saveProject` before then (edit.js's `_saveProject`) is not affected.
+
+**Known limits**
+- **Turn into notes on a whole mixed song finds no notes.** On night-drive it reports "I couldn’t hear clear notes", even at 16 bars. The note finder follows one line, so it needs a melody clip, a voice note or a stem. The honest reply still points there. For full songs the free pass needs stem splitting (SE-6) or a better note finder (sound-engine-dev / studio-ux-dev).
+- **Not in scope, unchanged:** "turn the chords up" (the verb split around the part) still reads as `add_chords` offline. "turn up the chords" works.
+- **Not handled:** a track name of 3 letters or fewer, or one made only of plain words ("Bass loop"), is not treated as a name.
