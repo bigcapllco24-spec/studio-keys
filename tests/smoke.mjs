@@ -125,6 +125,16 @@ try {
   await p.mouse.click(bxy.x, bxy.y); await W(300); await p.keyboard.press('Delete'); await W(150);
   const k6 = await E(() => { const r = { secs: songSections().length, gone: !songFind('break') }; undo(); r.back = songSections().length; r.brk = !!songFind('break'); closeEditor(); return r; });
   ok('song: click a section name, then Delete still removes the section, and Undo restores it', k6.secs === 5 && k6.gone && k6.back === 6 && k6.brk, JSON.stringify(k6));
+  // QA, 15 Nov (UX-7 re-check): after typing to Keys, the editor still takes the keyboard (double-click a part in Song mode, click a note in Loop mode); Space plays/stops there
+  const kSay = async txt => { const n0 = await E(() => document.querySelectorAll('#asChat .bub.as').length); await p.$eval('#asIn', el => el.scrollIntoView({ block: 'center' })); await p.click('#asIn', { clickCount: 3 }); await p.keyboard.type(txt); await p.keyboard.press('Enter');
+    await p.waitForFunction(n => document.querySelectorAll('#asChat .bub.as').length > n, { timeout: 10000 }, n0).catch(() => {}); await W(300); await E(() => loopStop()); return E(() => document.activeElement.id); };
+  const kf0 = await kSay('more reverb on the chords'); const kxy2 = await E(() => { const el = document.querySelector(`.part[data-sid="${songFind('drop').id}"][data-tid="${PROJ.tracks.find(t => t.role === 'chords').id}"]`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  await p.mouse.move(kxy2.x, kxy2.y); await p.mouse.down(); await p.mouse.up(); await W(80); await p.mouse.down({ clickCount: 2 }); await p.mouse.up({ clickCount: 2 }); await W(400);
+  const kf1 = await E(() => document.activeElement.id); await p.keyboard.press(' '); await W(250); const kr1 = await E(() => TR.running); await p.keyboard.press(' '); await W(250); const kr2 = await E(() => TR.running);
+  await E(() => { closeEditor(); songMode('loop'); openEditor(PROJ.tracks.find(t => t.role === 'chords').id); }); const kf2 = await kSay('a bit louder chords');
+  const knx = await E(() => { const t = edTrack(), G = edGeom(); $('#editor').scrollIntoView({ block: 'center' }); const cr = $('#edCanvas').getBoundingClientRect(); for (const e of t.events) { const R = evRect(t, G, e); if (R && R.y > 2 && R.y + R.h < G.gh - 2) return { x: cr.left + R.x + Math.min(4, R.w / 2), y: cr.top + R.y + R.h / 2, n: t.events.length }; } return null; });
+  await p.mouse.click(knx.x, knx.y); await W(200); const kf3 = await E(() => document.activeElement.id); await p.keyboard.press('Delete'); await W(150); const kn = await E(() => edTrack().events.length); await E(() => { undo(); closeEditor(); songMode('song'); });
+  ok('song/loop: after typing to Keys, double-click a part or click a note gives the editor the keys (Space plays/stops, Delete removes the note)', kf0 === 'asIn' && kf1 === 'edCanvas' && kr1 && !kr2 && kf2 === 'asIn' && kf3 === 'edCanvas' && kn === knx.n - 1, JSON.stringify({ song: kf1, space: [kr1, kr2], loop: kf3, notes: `${knx.n}→${kn}` }));
   const pl = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); const calls = []; const orig = scheduleEvent; window.scheduleEvent = function (tr, e) { calls.push(e.B); return orig.apply(this, arguments); };
     songPlay({ from: 33 }); await W(400); loopStop(); const first = calls[0], sec = first != null ? songAt(first).section.name : null;
     calls.length = 0; songLoop('break', { play: false }); const range = songLoopRange(); songPlay({ from: 64 }); await W(2900); const beat = songBeatAt(A.ctx.currentTime), wrapped = calls.some(B => B < 200); loopStop(); songLoop(null); window.scheduleEvent = orig;
@@ -157,8 +167,9 @@ try {
   // UX-7 (QA, 14 Nov): importing a MIDI file with the Drop selected names every new track in the note
   await E(() => { songTemplate('club'); closeEditor(); songSelect(songFind('drop').id); window.__toasts = []; const o = window.toast; window.toast = function (m) { window.__toasts.push(m); return o.apply(this, arguments); }; window.__toastO = o; });
   await (await p.$('#importFile')).uploadFile(fx('test.mid')); await W(1600);
+  const mtn = await E(() => window.__toasts.filter(m => /plays? in /.test(m)).length);
   const mt = await E(() => { const m = window.__toasts.find(m => / in Drop\b/.test(m)) || ''; window.toast = window.__toastO; return m; });
-  ok('song: a MIDI file imported into the Drop names both new tracks', /Lead/.test(mt) && /Kick/.test(mt) && /play in Drop/.test(mt), mt);
+  ok('song: a MIDI file imported into the Drop names both new tracks (one toast)', /Lead/.test(mt) && /Kick/.test(mt) && /play in Drop/.test(mt) && mtn === 1, `${mtn} toast: ${mt}`);
   const rc = await E(() => { songMode('song'); recordPress(); const m = SONG.view.mode; loopStop(); return m; });
   ok('song: Rec in Song mode switches to Loop', rc === 'loop', rc);
   // UX-5: a part sung in Song mode lands like a part Keys adds (selected section only) and says where it plays, once back in Song mode
@@ -167,8 +178,8 @@ try {
     runActions([{ type: 'add_melody' }]); window.__ref = PROJ.tracks[PROJ.tracks.length - 1].id; ASSIST.run('let me sing the chords'); });
   await p.waitForFunction(() => PROJ.tracks.some(t => t.take === 'chords') && LOOP.state !== 'take', { timeout: 40000 }).catch(() => {}); await W(1300); // the toast shows 0.9 s after the take
   const sg = await E(() => { const S = songSections(), t = PROJ.tracks.find(t => t.take === 'chords'), on = id => S.filter(s => s.parts[id] && s.parts[id].on).map(s => s.name).join(',');
-    const r = { mode: SONG.view.mode, sung: t ? on(t.id) : null, ref: on(window.__ref), toast: window.__toasts.find(m => /Sung chords/.test(m)) || null }; loopStop(); return r; });
-  ok('song: sing the chords in Song mode → plays in the selected section like an added part, and a toast says so', sg.mode === 'song' && sg.sung === 'Intro' && sg.sung === sg.ref && /^“Sung chords” plays in Intro\. Click its empty parts/.test(sg.toast || ''), JSON.stringify(sg));
+    const r = { mode: SONG.view.mode, sung: t ? on(t.id) : null, ref: on(window.__ref), toast: window.__toasts.find(m => /Sung chords/.test(m)) || null, n: window.__toasts.filter(m => /Sung chords.* plays? in /.test(m)).length }; loopStop(); return r; });
+  ok('song: sing the chords in Song mode → plays in the selected section like an added part, and one toast says so', sg.mode === 'song' && sg.sung === 'Intro' && sg.sung === sg.ref && /^“Sung chords” plays in Intro\. Click its empty parts/.test(sg.toast || '') && sg.n === 1, JSON.stringify(sg));
   const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
   await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(1500);
   await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 15000 }).catch(() => {}); // keepLastSong is async: wait for it on a busy machine
