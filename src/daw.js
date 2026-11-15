@@ -46,7 +46,7 @@ function renderKeyPop(st){
     :`Worked out from your ${st.src?KEY_SRC_NOUN[st.src]:'notes'}${st.level<3?', so it can still change as you add parts':''}. New parts follow it. Set it to keep it.`;
   const rows=c.length?`<div class="kp-h">${hard?'Your notes sound like':'Best guesses'}</div>`+c.map((k,i)=>{ const isSet=st.from==='you'&&sameKey(k,st.key);
     return `<div class="kp-row${sameKey(k,st.key)?' cur':''}"><div><span><b>${keyName(k)}</b><span class="kp-dj">DJ key ${djKey(k)}</span></span><span class="kp-why">${esc(k.why)}</span></div><button class="btn small${i===0&&!hard?' primary':''}" type="button" data-kset="${i}"${isSet?' disabled':''} title="Set the song to ${keyName(k)} (your notes stay where they are)">${isSet?'Set ✓':'Set'}</button></div>`; }).join(''):'';
-  const foot=`<div class="kp-foot">${hard?`<button class="btn small" type="button" data-kauto>Back to auto</button>`:`<button class="btn small" type="button" data-kauto>Keep on auto</button>`}<span class="hint">${hard?'Auto works the key out from your notes.':'Auto follows your notes.'}</span></div>`;
+  const foot=`<div class="kp-foot">${hard?`<button class="btn small" type="button" data-kauto>Back to auto</button>`:`<button class="btn small" type="button" data-kauto>${st.key?'Keep on auto':'Close'}</button>`}<span class="hint">${hard?'Auto works the key out from your notes.':'Auto follows your notes.'}</span></div>`;
   p.innerHTML=`<div class="kp-top">${head}</div><div class="kp-sub">${sub}</div>${rows}${foot}`;
 }
 function keyPopOpen(open){
@@ -187,7 +187,8 @@ $('#edQuant').onclick=()=>{ const t=edTrack(); if(!t) return; const q=ED.grid; e
 $('#edUp').onclick=()=>edShift(1); $('#edDown').onclick=()=>edShift(-1);
 function edShift(s){ const t=edTrack(); if(!t||isDrumTrack(t)) return; edTargets(t).forEach(e=>e.n+=s); if(!ED.sel.size) ED.top+=s; edChanged(); }
 $('#edClear').onclick=()=>{ const t=edTrack(); if(!t) return; const b=$('#edClear'); if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Confirm clear'; setTimeout(()=>{ delete b.dataset.armed; b.textContent='Clear notes'; },3000); return; } delete b.dataset.armed; b.textContent='Clear notes'; t.events=[]; ED.sel=new Set(); edChanged(); };
-function edChanged(){ if(typeof undoBoundary==='function') undoBoundary(); const t=edTrack(), real=PROJ.tracks.find(x=>x.id===ED.tid); if(real) real.gen=false; if(t){ t.events.forEach(e=>{ if(e.cyc!==undefined && !TR.running) delete e.cyc; }); } saveProject(); drawEditor(); drawRolls(); const r=document.querySelector(`.trk[data-tid="${ED.tid}"] .trole`); if(r&&t) r.textContent=`${ROLE_NAME[t.role]||'Part'} · ${t.events.length} notes`; }
+function edChanged(){ if(typeof undoBoundary==='function') undoBoundary(); const t=edTrack(), real=PROJ.tracks.find(x=>x.id===ED.tid); if(real) real.gen=false; if(t){ t.events.forEach(e=>{ if(e.cyc!==undefined && !TR.running) delete e.cyc; }); } saveProject(); drawEditor(); drawRolls(); const r=document.querySelector(`.trk[data-tid="${ED.tid}"] .trole`); if(r&&t) r.textContent=`${ROLE_NAME[t.role]||'Part'} · ${t.events.length} notes`;
+  clearTimeout(edChanged.kt); edChanged.kt=setTimeout(renderKeyChip,150); /* SE-7a fix 2: the key chip follows piano-roll edits */ }
 function drumRows(t){ const rows=DRUM_ROWS.slice(); t.events.forEach(e=>{ if(!rows.some(r=>r[0]===e.n)) rows.unshift([e.n,DRUM_LABEL[drumPiece(e.n)]+' '+noteName(e.n)]); }); return rows; }
 /* height the grid may use so the velocity lane always shows inside the editor box (UX-2) */
 function edFitH(W){ const wrap=$('#edWrap'), mh=parseFloat(getComputedStyle(wrap).maxHeight)||480; return mh-2-ED.velH-8-(W>wrap.clientWidth+1?14:0); }

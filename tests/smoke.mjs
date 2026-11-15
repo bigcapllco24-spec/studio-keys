@@ -257,6 +257,24 @@ try {
     for (let i = 0; i < 20 && !PROJ.tracks.length; i++) await new Promise(r => setTimeout(r, 250)); ASSIST.listening = false;
     const bub = [...document.querySelectorAll('#asChat .bub.as')].pop(); R.reply = bub ? bub.textContent : ''; R.hum = keyStatusText(); return R; });
   ok('key: reasons name what is there (no bass → no "bass" reason, F♯m–E–D–E second guess A major); a hum\'s key is a guess', /^F♯ minor · \w[\w ]* · or A major$/.test(kwhy.text) && !/bass/.test(kwhy.why) && /it sounds like D minor/.test(kwhy.reply) && !/ in D minor/.test(kwhy.reply) && kwhy.hum === 'D minor · from your humming', `${kwhy.text} (${kwhy.why}); hum: ${kwhy.hum}`);
+  // SE-7a fix 2 (QA retest): picking a key moves the parts when the key came from your notes (a hum, chords you played), one undo
+  // step; the popover's Set still only relabels; the key chip follows piano-roll edits
+  const kmv = await E(async () => { const out = (k) => PROJ.tracks.reduce((s, t) => s + (t.kind === 'notes' && t.role !== 'drums' ? t.events.filter(e => !scaleOf(k).includes(mod(Math.round(e.n), 12))).length : 0), 0);
+    const R = {}, cm = { tonic: 0, mode: 'minor' }, wait = ms => new Promise(r => setTimeout(r, ms));
+    await newSong('Smoke key move'); PROJ.style = 'house'; const hum = [62, 65, 69, 67, 65, 64, 62, 60, 62, 65, 64, 62].map((n, i) => ({ b: i, d: 0.9, n, v: 0.8 }));
+    takeKey(hum, true, 'hum'); addTrack({ role: 'melody', inst: 'lead', name: 'Hum', events: hum }); runActions([{ type: 'add_bass' }, { type: 'add_chords' }]); loopStop();
+    R.hum = keyStatusText(); R.before = out(cm); await wait(250); runActions([{ type: 'key', key: 'C minor' }]); R.after = out(cm); R.set = keyStatusText(); R.hn = PROJ.tracks.find(t => t.name === 'Hum').events[0].n;
+    await wait(250); undo(); R.undo = keyStatusText(); R.hn0 = PROJ.tracks.find(t => t.name === 'Hum').events[0].n;
+    await newSong('Smoke key move 2'); PROJ.style = 'house'; const ch = []; [[57, 60, 64], [53, 57, 62], [52, 55, 59], [57, 60, 64]].forEach((c, r) => c.forEach(n => ch.push({ b: r * 4, d: 3.8, n, v: 0.7 })));
+    addTrack({ role: 'chords', inst: 'piano', name: 'My chords', events: ch }); runActions([{ type: 'add_bass' }]); loopStop(); R.am = keyStatusText();
+    const sel = $('#keySel'); sel.value = '0:minor'; sel.dispatchEvent(new Event('change')); R.menu = out(cm); R.chordN = PROJ.tracks.find(t => t.name === 'My chords').events[0].n;
+    await newSong('Smoke key relabel'); addTrack({ role: 'chords', inst: 'piano', name: 'My chords', events: ch.map(e => Object.assign({}, e)) }); R.rel0 = PROJ.tracks[0].events[0].n; $('#keyInfo').click(); document.querySelector('#keyPop [data-kset="0"]').click(); R.relabel = PROJ.tracks[0].events[0].n; R.relKey = keyStatusText();
+    await newSong('Smoke key chip'); const t = addTrack({ role: 'free', inst: 'piano', name: 'Draw', events: [] }); R.chip0 = $('#keyInfo').textContent.trim(); openEditor(t.id);
+    [[62, 65, 69], [58, 62, 65], [65, 69, 72], [60, 64, 67]].forEach((c, i) => c.forEach(n => edTrack().events.push({ b: i * 4, d: 3.5, n, v: 0.7 }))); edChanged(); await wait(300); R.chip1 = $('#keyInfo').textContent.replace(/\s+/g, ' ').trim(); closeEditor(); return R; });
+  ok('key: picking a key moves parts whose key came from your notes (hum, played chords), one undo; Set only relabels; chip follows the piano roll',
+    / · from your humming$/.test(kmv.hum) && kmv.before > 0 && kmv.after === 0 && kmv.set === 'C minor · set' && kmv.hn === 60 && kmv.hn0 === 62 && /^D minor/.test(kmv.undo)
+    && /^A minor/.test(kmv.am) && kmv.menu === 0 && kmv.chordN === 60 && kmv.relabel === kmv.rel0 && / · set$/.test(kmv.relKey) && /no key yet/.test(kmv.chip0) && /^D minor/.test(kmv.chip1),
+    `hum ${kmv.hum}: ${kmv.before} → ${kmv.after} outside C minor (${kmv.set}), undo ${kmv.undo}; played Am → menu C minor: ${kmv.menu} outside; Set → ${kmv.relKey}, note ${kmv.rel0} → ${kmv.relabel}; chip ${kmv.chip0} → ${kmv.chip1}`);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
