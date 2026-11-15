@@ -1,5 +1,5 @@
 # Studio Keys board (mirror of Studio Keys HQ)
-Last updated: 15 Nov 2026, 16:55 IST
+Last updated: 15 Nov 2026, 23:40 IST
 
 ## Awaiting build OK (owner tries the test link, in HQ)
 - AI-1 · assistant-dev · L · Song sections by voice (arrange, sections, parts, drum transitions with a beat of silence before the drop, loop/play from a section, mini song map). Round 2. https://studio-keys.bigcapllco24.workers.dev/p/preview-ai-1/ · head 848933a · tester READY after 3 rounds (`AI-1-retest2.md`), 57 checks. Test link uses the live AI prompt; release deploys the Worker. Leftovers: longer on a 6-min club track, reel lengths offline, 'drop se pehle' offline, same-energy groove empty undo, house Build no gap.
@@ -11,11 +11,13 @@ Last updated: 15 Nov 2026, 16:55 IST
 - UX-6 · studio-ux-dev · S · Install on the phone's home screen (on top of UX-4; Worker routing update ships with it). Round 1. https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-6/ · tester READY.
 - AI-4 · assistant-dev · S · Assistant bug fixes (offline brain). Round 1. https://studio-keys.bigcapllco24.workers.dev/p/preview-ai-4/ · head 80f031a, main merged in 15 Nov (worker prompt conflict resolved by the lead), check OK 55 · release deploys the Worker.
 
-## In build (bug fixes from the 15 Nov daily session; tester re-check next, briefs in `.claude/log/2026-11-15-<ID>-retest-brief.md`)
-- SE-8 · sound-engine-dev · S · 'another one' never repeats a groove in the song. preview-se-8 @ 5648ed6. Tester round 1 NOT READY (16th hats ignored in 16th styles, MP3 peak 0 dBFS once); fix 1 done (also 1-line edits in actions.js and studio.js makeSongMp3 -1 dBFS).
-- AI-6 · assistant-dev · S · Offline: voice note → bassline, level/tone words about a part, 'a bit straighter', sing reply hint. preview-ai-6 @ 5b8c089 (built on preview-ai-4; ships with/after AI-4; release deploys the Worker). Tester round 1 NOT READY (up/down shape words read as volume, master level not undoable); fix 1 done, 63 checks.
-- UX-10 · studio-ux-dev · S · Sung bassline stutters: new gapless AudioWorklet take recorder. preview-ux-10 @ bde321f. Tester round 1 NOT READY (imports merged staccato notes); fix 1 done, take end no longer cut.
-- SE-7b+7c · sound-engine-dev (+ studio-ux-dev, assistant-dev) · preview-se-7bc @ 4d0ba2e: 7b engine `analyseAudio` done (12/12 keys, 99% chords, 1.2 s on our renders; held-out set 11/12, 87%). Next: 7c (PROJ.chords, chord strip, song card, actions); phone parts wait for UX-4 on main. One test link for 7b+7c.
+- SE-8 · sound-engine-dev · S · 'another one' never repeats a groove in the song. https://studio-keys.bigcapllco24.workers.dev/p/preview-se-8/ · tester READY (retest 2).
+- AI-6 · assistant-dev · S · Offline: voice note → bassline, level/tone words about a part, 'a bit straighter', sing reply hint. https://studio-keys.bigcapllco24.workers.dev/p/preview-ai-6/ · tester READY. Built on AI-4: ships with/after it; release deploys the Worker.
+- UX-10 · studio-ux-dev · S · Sung bassline stutters: gapless AudioWorklet take recorder. https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-10/ · tester READY (retest 2).
+- SE-7b+7c (inside SE-7) · https://studio-keys.bigcapllco24.workers.dev/p/preview-se-7bc/ · head de75944 · includes 7a · fix 1 (drum loops 'No key in this clip', loop chords voted over repeats, Put re-uses Keys' Chords, 'drive' song names, honest copy reply) · tester re-check READY (`SE-7bc-retest.md`, 67 checks). Released after 7a with its own OK. Leftovers: 2/8 hip-hop drum loops read ~122 BPM (unsure); drum-loop card hint/toast/Put tooltip wording.
+
+## In build
+- nothing (everything built is waiting for the owner's test-link OK).
 
 - Merge notes: AI-1 and SE-7a conflict (worker.js prompt line, actions.js, assistant.js, smoke): whichever ships second merges main and re-runs the check. UX-4 before UX-6.
 
