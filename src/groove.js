@@ -196,6 +196,7 @@ function grooveRecipe(style,artist,over){
 const mix32=x=>{ x=(x>>>0)^0x9e3779b9; x=Math.imul(x^(x>>>16),0x85ebca6b); x=Math.imul(x^(x>>>13),0xc2b2ae35); return ((x^(x>>>16))>>>0)||1; };
 const subRng=(seed,k)=>rng(mix32((mix32(seed)+Math.imul(k,0x27d4eb2d))>>>0));
 const pickR=(r,a)=>a[Math.floor(r()*a.length)];
+const shuf=(a,r)=>{ for(let i=a.length-1;i>0;i--){ const j=Math.floor(r()*(i+1)), t=a[i]; a[i]=a[j]; a[j]=t; } return a; };   /* sort(() => random) is not a fair or stable shuffle */
 function wpick(r,opts){ const ok=opts.filter(o=>o&&o[1]>0), tot=ok.reduce((s,o)=>s+o[1],0); let x=r()*tot; for(const o of ok){ x-=o[1]; if(x<0) return o[0]; } return ok.length?ok[ok.length-1][0]:undefined; }
 /* closed-hat shapes inside a bar (s = 16th step): all 16ths, off the beat (e-and-a), galloping (and-a), e-and, 8ths plus the "a" pickups */
 const HAT_MASKS={all:()=>true,offE:s=>s%4!==0,gallop:s=>s%4>=2,eAnd:s=>s%4===1||s%4===2,offPush:s=>s%2===0||s%4===3};
@@ -207,37 +208,38 @@ function mutMotif(m,r){ const p=m.split(''); for(let i=0,k=1+Math.floor(r()*2);i
 function makeGroove(rec,L,seed){
   seed=(+seed||1)>>>0||1;
   const r=rng(seed), ev=[], bars=Math.max(1,L/4), E=rec.energy, pick=a=>a[Math.floor(r()*a.length)];
-  const rv=subRng(seed,1), RR={kick:subRng(seed,2),snare:subRng(seed,3),hat:subRng(seed,4),perc:subRng(seed,5)}, rF=subRng(seed,6), rT=subRng(seed,7), rH=RR.hat, rP=subRng(seed,8);
+  const D=k=>subRng(seed,100+k), RR={kick:subRng(seed,2),snare:subRng(seed,3),hat:subRng(seed,4),perc:subRng(seed,5)}, rF=subRng(seed,6), TT={kick:subRng(seed,12),snare:subRng(seed,13),hat:subRng(seed,14),perc:subRng(seed,15)}, rH=RR.hat, rP=subRng(seed,8);
   const sw=s=>s%2===1?(rec.swing||0)*0.25:0;
   /* measured feel: velocity shapes per step, and (human styles) a drummer's push and wander per role */
   const F=pickFeel(rec), T=rec.human?FEELS.live:null, sh={}; ['hatc','hato','shaker','perc'].forEach(k=>sh[k]=feelShape(F.vel[k],r));
-  const bpm=(typeof CTRL!=='undefined'&&+CTRL.bpm)||120, msB=ms=>ms/1000*bpm/60, gs=()=>{ const u=Math.max(1e-6,rT()), w=rT(); return clamp(Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*w),-2,2); };
+  const bpm=(typeof CTRL!=='undefined'&&+CTRL.bpm)||120, msB=ms=>ms/1000*bpm/60, gs=k=>{ const rt=TT[k], u=Math.max(1e-6,rt()), w=rt(); return clamp(Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*w),-2,2); };
   const roleOf=n=>n===36?'kick':(n===38||n===39||n===37&&rec.back==='rim')?'snare':(n===42||n===44||n===46||n===51)?'hat':'perc';
-  const feelMs=(n,j)=>{ if(!T) return 0; const k=roleOf(n); return (T.push[k]||0)+(j||k==='kick'||k==='snare'?gs()*(T.spread[k]||0)*(T.keep[k]||0):0); };
+  const feelMs=(n,j)=>{ if(!T) return 0; const k=roleOf(n); return (T.push[k]||0)+(j||k==='kick'||k==='snare'?gs(k)*(T.spread[k]||0)*(T.keep[k]||0):0); };
   const at=(bar,s,n,v,d=0.2,j=true)=>{ const rr=RR[roleOf(n)]; ev.push({b:Math.max(0,Math.round((bar*4+s/4+sw(s)+msB(feelMs(n,j)))*1000)/1000),d,n,v:clamp(v+(rr()-0.5)*0.08,0.08,1)}); };
-  /* ---- this groove's choices (all from rv, so the same seed always gives the same groove) ---- */
+  /* ---- this groove's choices: each from its own stream D(k), so the same seed always gives the same groove and changing one setting (the hats) leaves the other choices alone ---- */
   const four=rec.kick==='four', techy=/techno|techhouse|progressive/.test(rec.style), deep=!techy&&/house|afro|amapiano|downtempo|organic|disco/.test(rec.style);
   const styleHats=(GROOVES[rec.style]||{}).hats, hatsAsked=!!rec.hatsAsked||(!!styleHats&&rec.hats!==styleHats);   /* hats the user asked for by name stay as asked */
   const V={};
-  V.ab=bars>=8?'phrase':bars<2?'none':wpick(rv,[['none',1],['alt',2],['last',bars>=4?2:0]]);
-  V.kick=four?wpick(rv,[['plain',2],['pickup',E>=2?2.5:0],['ghost',techy?3:1.5],['dropout',deep?2:0.7],['double',E>=3?1.5:0]]):'plain';
-  V.ghostKick=pickR(rv,[[3],[11],[13],[3,11],[7,15],[10]]); V.pickupAt=pickR(rv,[[15],[14],[14,15],[7],[11]]); V.doubleAt=pickR(rv,[10,6,14]);
-  V.kickB=!four&&(KICKS[rec.kick]||[]).length>1&&rv()<0.6;
-  V.backX=rec.back==='dembow'||rec.back==='none'?'plain':wpick(rv,[['plain',2],['late',1.5],['pre',1.5],['double',E>=3&&four?1:0]]);
-  { const cand=[1,3,6,7,9,10,11,14,15].sort(()=>rv()-0.5), g=+rec.ghost||0, nG=g?clamp(Math.round(g*6+(rv()-0.5)*2.4),0,5):0; V.ghost=cand.slice(0,nG); V.ghostB=g?cand[nG]:null; }
+  V.ab=bars>=8?'phrase':bars<2?'none':wpick(D(1),[['none',1],['alt',2],['last',bars>=4?2:0]]);
+  V.kick=four?wpick(D(2),[['plain',2],['pickup',E>=2?2.5:0],['ghost',techy?3:1.5],['dropout',deep?2:0.7],['double',E>=3?1.5:0]])
+    :/^(pop|boombap|halftime|dnb|broken)$/.test(rec.kick)?wpick(D(2),[['plain',3],['pickup',1.5],['ghost',1]]):'plain';   /* trap and drill kicks are already the pattern */
+  V.ghostKick=pickR(D(3),[[3],[11],[13],[3,11],[7,15],[10]]); V.pickupAt=pickR(D(4),[[15],[14],[14,15],[7],[11]]); V.doubleAt=pickR(D(5),[10,6,14]);
+  V.kickB=!four&&(KICKS[rec.kick]||[]).length>1&&D(19)()<0.6;
+  V.backX=rec.back==='dembow'||rec.back==='none'?'plain':wpick(D(6),[['plain',2],['late',1.5],['pre',1.5],['double',E>=3&&four?1:0]]);
+  { const r20=D(20), cand=shuf([1,3,6,7,9,10,11,14,15],r20), g=+rec.ghost||0, nG=g?clamp(Math.round(g*6+(D(21)()-0.5)*2.4),0,5):0; V.ghost=cand.slice(0,nG); V.ghostB=g?cand[nG]:null; }
   const masks=rec.hats==='16th'?[['all',3],['offE',2],['gallop',1.2],['offPush',E>=4?0.6:1.2],['gaps',2]]:rec.hats==='shuffle16'?[['all',2],['offE',2],['gallop',1.5],['eAnd',1],['offPush',1.5],['gaps',2]]:[['all',1]];
-  V.hatMask=hatsAsked?'all':wpick(rv,masks); V.hatGaps=[0,1,3,4,5,7,8,9,11,12,13,15].sort(()=>rv()-0.5).slice(0,2+Math.floor(rv()*3));
-  V.hatLiftB=V.hatMask!=='all'&&rv()<0.4;   /* the B bars open up to full 16ths */
-  V.ghost16=E>=3?wpick(rv,[['odd',2],['a',1.5],['e',1],['late',1],['some',2],['none',0.5]]):wpick(rv,[['none',2],['a',1],['late',1]]);
-  V.someOdd=[1,3,5,7,9,11,13,15].filter(()=>rv()<0.55);
-  V.pick8=hatsAsked?[]:pickR(rv,[[],[15],[7,15],[11],[3,11],[13]]);
-  V.hatAcc=wpick(rv,[['feel',3],['off',1.5],['drive',1]]);
-  V.open=rec.hats==='8th'?pickR(rv,[[14],[14],[6,14],[10],[15]]):pickR(rv,[[2,6,10,14],[2,6,10,14],[6,14],[14],[2,10],[10,14]]);
-  V.openWhen=rec.hats==='8th'?wpick(rv,[['alt',3],['all',1]]):wpick(rv,[['all',3],['alt',1.5],['B',V.ab==='none'?0:1]]);
-  V.shaker=wpick(rv,[['16',2],['off8',1.5],['odd',1.5],['gapped',1.5],['8',1]]);
-  V.ride=pickR(rv,[[2,6,10,14],[2,6,10,14],[0,2,4,6,8,10,12,14],[2,6,10,14,15],[2,6,10,11,14]]); V.rideWhen=E>=4?wpick(rv,[['all',3],['B',V.ab==='none'?0:1]]):'B';
+  V.hatMask=hatsAsked?'all':wpick(D(7),masks); const r22=D(22); V.hatGaps=shuf([0,1,3,4,5,7,8,9,11,12,13,15],r22).slice(0,2+Math.floor(D(23)()*3));
+  V.hatLiftB=V.hatMask!=='all'&&D(24)()<0.4;   /* the B bars open up to full 16ths */
+  V.ghost16=E>=3?wpick(D(8),[['odd',2],['a',1.5],['e',1],['late',1],['some',2],['none',0.5]]):wpick(D(9),[['none',2],['a',1],['late',1]]);
+  { const r25=D(25); V.someOdd=[1,3,5,7,9,11,13,15].filter(()=>r25()<0.55); }
+  V.pick8=hatsAsked?[]:pickR(D(10),[[],[15],[7,15],[11],[3,11],[13]]);
+  V.hatAcc=wpick(D(11),[['feel',3],['off',1.5],['drive',1]]);
+  V.open=rec.hats==='8th'?pickR(D(12),[[14],[14],[6,14],[10],[15]]):pickR(D(13),[[2,6,10,14],[2,6,10,14],[6,14],[14],[2,10],[10,14]]);
+  V.openWhen=rec.hats==='8th'?wpick(D(14),[['alt',3],['all',1]]):wpick(D(15),[['all',3],['alt',1.5],['B',V.ab==='none'?0:1]]);
+  V.shaker=wpick(D(16),[['16',2],['off8',1.5],['odd',1.5],['gapped',1.5],['8',1]]);
+  V.ride=pickR(D(17),[[2,6,10,14],[2,6,10,14],[0,2,4,6,8,10,12,14],[2,6,10,14,15],[2,6,10,11,14]]); V.rideWhen=E>=4?wpick(D(18),[['all',3],['B',V.ab==='none'?0:1]]):'B';
   /* percussion: which voices, their motifs (stock or made up now), the B-bar answer, and where each comes in */
-  const percNotes=(rec.percSet||PERC_SETS[rec.style]||[37,45,47]).slice().sort(()=>rP()-0.5).slice(0,clamp(+rec.perc||0,0,3));
+  const percNotes=shuf((rec.percSet||PERC_SETS[rec.style]||[37,45,47]).slice(),rP).slice(0,clamp(+rec.perc||0,0,3));
   const percPat={}, percB={}, percIn={};
   percNotes.forEach((n,i)=>{ const stock=PERC_MOTIFS[n]; percPat[n]=stock&&rP()<0.4?pickR(rP,stock):genMotif(rP,n);
     percB[n]=rP()<0.5?mutMotif(percPat[n],rP):(stock&&rP()<0.5?pickR(rP,stock):genMotif(rP,n));
@@ -246,7 +248,7 @@ function makeGroove(rec,L,seed){
   const fillKind=four?wpick(rF,[['snareroll',2],['openhat',1],['drop',1.5],['clapflam',1.5],['tom',deep?1:0.5],['percroll',percNotes.length?1.5:0],['kickroll',techy?1.5:0.3],['snare8',1]])
                      :wpick(rF,[['snareroll',2],['tom',1.5],['drop',1],['hatroll',1.5],['snare8',1]]);
   const fillLen=pickR(rF,[1,1,2]), loopFill=fillEvery>bars&&rF()<0.55;   /* a loop shorter than the fill gap gets a turnaround at its end, sometimes */
-  const kickPat=pick(KICKS[rec.kick]||KICKS.four), kickPatB=V.kickB?pickR(rv,(KICKS[rec.kick]||[]).filter(k=>k!==kickPat))||kickPat:kickPat, hc=sh.hatc;
+  const kickPat=pick(KICKS[rec.kick]||KICKS.four), kickPatB=V.kickB?pickR(D(99),(KICKS[rec.kick]||[]).filter(k=>k!==kickPat))||kickPat:kickPat, hc=sh.hatc;
   const trapRollAt=[pickR(rH,[10,12,14]),pickR(rH,[6,13,15])];
   const hatAcc=s=>V.hatAcc==='off'?(s%4===2?1.18:0.9):V.hatAcc==='drive'?(s%2===0?1.06:0.9):1;
   for(let bar=0;bar<bars;bar++){
@@ -295,7 +297,7 @@ function makeGroove(rec,L,seed){
       if(v) at(bar,s,44,v*sh.shaker[s],0.1); }
     if(rec.ride&&(E>=4&&V.rideWhen==='all'||isB)) V.ride.forEach(s=>at(bar,s,51,s%4===2?0.5:0.4,0.4));
     /* percussion */
-    percNotes.forEach(n=>{ const w=percIn[n], on=w==='all'||w==='alt'&&odd||w==='B'&&isB||w==='late'&&bar>=Math.floor(bars/2); if(!on) return;
+    percNotes.forEach(n=>{ const w=percIn[n], on=w==='all'||w==='alt'&&odd||w==='B'&&isB||w==='late'&&(bars>=8?bar%8>=4:bar>=Math.floor(bars/2)); if(!on) return;
       const p=isB?percB[n]:percPat[n]; for(let s=0;s<16;s++) if(p[s]==='x'&&!(isFill&&fillKind==='percroll'&&s>=f0)) at(bar,s,n,(0.55+RR.perc()*0.15)*sh.perc[s],0.15); });
     if(rec.crash&&phrase===0&&bar>0) at(bar,0,49,0.6,1.5,false);
     /* fills */
@@ -340,9 +342,10 @@ const GROOVE_NEAR=0.8, GROOVE_TRIES=30, GROOVE_HIST=24;
    the hats, the swing, the energy) makes exactly that groove. Every groove made is remembered either way. */
 function freshGroove(rec,L,seed,keep){
   const P=typeof PROJ!=='undefined'&&PROJ?PROJ:null, hist=P?(P.grooveHist=Array.isArray(P.grooveHist)?P.grooveHist:[]):[], past=keep?[]:hist.map(fpSet);
-  let best=null;
-  for(let k=0;k<(past.length?GROOVE_TRIES:1);k++){ const g=makeGroove(rec,L,k?(mix32(seed+k*7919)%2000000000)+1:seed), fp=grooveFP(g.events);
+  let best=null; const Lc=Math.min(L,32);   /* candidates are compared on their first 8 bars, which come out the same at any length */
+  for(let k=0;k<(past.length?GROOVE_TRIES:1);k++){ const g=makeGroove(rec,Lc,k?(mix32(seed+k*7919)%2000000000)+1:seed), fp=grooveFP(g.events);
     g.near=past.reduce((m,p)=>Math.max(m,grooveSim(fp,p)),0); g.fp=fp; if(!best||g.near<best.near) best=g; if(g.near<=GROOVE_NEAR) break; }
+  if(L>Lc) best=Object.assign(makeGroove(rec,L,best.seed),{near:best.near,fp:best.fp});
   if(P){ const s=fpStr(best.fp); if(hist[hist.length-1]!==s) hist.push(s); if(hist.length>GROOVE_HIST) hist.splice(0,hist.length-GROOVE_HIST); }
   delete best.fp; return best;
 }

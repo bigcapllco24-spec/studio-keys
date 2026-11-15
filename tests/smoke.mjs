@@ -206,6 +206,16 @@ try {
         const bpm0 = CTRL.bpm; await handleRequest(s); loopStop(); R[s] = { bpm: CTRL.bpm - bpm0, back: drums().recipe.back }; }
       return R; } finally { ASSIST.engine = eng; } });
   ok('"faster" about a part keeps the tempo, "add a snare roll" keeps the clap', n23['make the bass faster'].bpm === 0 && n23['faster chords'].bpm === 0 && n23['make it faster'].bpm === 5 && n23['add a snare roll'].back !== 'snare' && n23['add a snare'].back === 'snare', JSON.stringify(n23));
+  // SE-8: ten tries in one song are ten grooves: every pair under 0.9 alike on the 16th grid (Jaccard of drum@16th)
+  const an = await E(async () => { const R = [];
+    for (const ref of ['drums like Ben Böhmer', '124 bpm drums like Stephan Bodzin', 'house drums']) { await newSong('Smoke another'); runActions(localBrain(ref).actions);
+      const t = () => PROJ.tracks.find(t => t.role === 'drums'), sig = () => new Set(t().events.map(e => e.n + '@' + Math.round(e.b * 4))), all = [sig()];
+      for (let i = 1; i < 10; i++) { runActions(localBrain('another one').actions); all.push(sig()); }
+      const jac = (a, b) => { let i = 0; a.forEach(x => b.has(x) && i++); return i / (a.size + b.size - i); }; let mx = 0;
+      for (let i = 0; i < all.length; i++) for (let j = 0; j < i; j++) mx = Math.max(mx, jac(all[i], all[j]));
+      R.push({ ref: ref.replace(/ drums|drums like |124 bpm /g, ''), mx, kit: t().inst, n: PROJ.tracks.filter(x => x.role === 'drums').length }); }
+    return R; });
+  ok('"another one" ×10 never repeats a groove (Böhmer, Bodzin, house: every pair < 0.9 alike)', an.every(x => x.mx < 0.9 && x.n === 1), an.map(x => `${x.ref} ${x.mx.toFixed(2)}`).join(' · '));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
