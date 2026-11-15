@@ -8,7 +8,7 @@
 - Punchier stops at +6 dB.
 - "Hats ko soft karo" is never a high cut offline.
 
-I compared 141 phrases with preview-ai-4 and found no regressions. What's left is low-severity follow-up work, plus one sound point (the whole-song move is quieter on the faders than you hear) that the developer already raised for the engine.
+I compared 141 phrases with preview-ai-4 and found no regressions. What's left is low-severity follow-up work, plus one sound point (the whole-song move sounds smaller than the faders move) that the developer already raised for the engine.
 
 **`check.sh`:**
 - On 5b8c089: **CHECK OK, SMOKE OK: 63 checks, 3 min 33 s.** The save/reopen checks passed the first time.
@@ -119,7 +119,7 @@ Unless noted, everything ran on the 4-part Bodzin song built by typing into the 
   - 14 Undo-button clicks: every intermediate state matched exactly (volume, low/mid/high EQ, compressor, high/low cut, note counts), and the end equalled the start. The master was 1 throughout.
   - Redo ×14 reached the last state exactly.
 - **Bug 3 ("very" / Hinglish levels): fixed.**
-  - All 6 phrases from the first report change only the mix: drums -5, bass +2.8 (full), drums -5, drums -5, melody -3, bass +3, drums high EQ -3.
+  - All the phrases from the first report change only the mix: drums -5, bass +2.8 (full), drums -5, drums -5, melody -3, bass +3, drums high EQ -3.
   - So do 10 new Hinglish ones, for example:
     - "bass ki awaaz badhao" +5
     - "chords thoda soft karo" -3
