@@ -3192,7 +3192,13 @@ function keyContext(st){ st=st||keyStatus(); if(!st.key) return `no key yet (onl
   if(st.from==='song') return `${keyName(st.key)}${dj}, from a song the user brought in`;
   return `${keyName(st.key)}${dj}, worked out from the user's notes${st.src?' (their '+KEY_SRC_NOUN[st.src]+')':''}: ${st.word}${st.alt?', could also be '+keyName(st.alt):''}${st.why?'; '+st.why:''}`; }
 function melodyNotes(){ const out=[]; PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && (t.role==='melody')) t.events.forEach(e=>out.push(e)); }); return out; }
-function chordPlan(){
+/* the chords every generator follows, one entry per bar: {deg, root, pcs, sev}, plus at(beat) (the chord at a beat) and
+   segs(b, d) (a note from b for d beats cut where the chord changes: [{b, d, c}]). SE-7c: when the song has PROJ.chords
+   (heard in a song or fixed by hand) they decide, chords outside the key included; otherwise Keys' progression PROJ.prog,
+   bent towards a melody you played, exactly as before. */
+function chordPlan(chords){
+  const src=chords||(Array.isArray(PROJ.chords)&&PROJ.chords.length?PROJ.chords:null);
+  if(src) return chordPlanFrom(src,projectKey());
   const key=projectKey(), L=PROJ.bars*4, bars=L/4, mel=melodyNotes(), plan=[];
   const prog=(PROJ.prog&&PROJ.prog.length)?PROJ.prog:(key.mode==='minor'?[0,5,2,6]:[0,4,5,3]);
   for(let b=0;b<bars;b++){
@@ -3202,16 +3208,124 @@ function chordPlan(){
       const pcs=triad(key,d); let s=(d===0?0.3:d===3||d===4?0.15:0); inBar.forEach(e=>{ if(pcs.includes(mod(Math.round(e.n),12))) s+=(e.d||0.5); }); if(s>best){ best=s; deg=d; } } }
     plan.push({deg,root:triad(key,deg)[0],pcs:triad(key,deg),sev:seventh(key,deg)});
   }
-  return {key,plan};
+  const at=b=>plan[Math.floor(Math.max(0,b)/4)%plan.length];
+  return {key,plan,at,segs:(b,d)=>[{b,d,c:at(b)}]};
 }
+/* ---------- SE-7c: the song's chords ----------
+   PROJ.chords = [{b, d, root, q, conf, from, bass?, alt?}] in loop beats (b 0 = bar 1), sorted, not overlapping; saved with the
+   song. root is a pitch class 0-11 (null when q is 'none'); q is 'maj' | 'min' | '7' | 'm7' | 'maj7' | 'sus4' | 'sus2' | 'dim' |
+   '5' (power chord) | 'none' (no chord: generated parts rest there). from: 'audio' (heard in a song), 'user' (fixed by hand or by
+   voice), 'keys' (Keys' own progression, written out when you fix one bar of it). bass: a pitch class under the chord (a slash
+   chord, "C/E", from "bass movement too"); absent means the root. alt: the analysis' second guess {root, q}.
+   Missing or empty PROJ.chords: everything behaves exactly as before (Keys' progression PROJ.prog). A span shorter than the
+   loop repeats. */
+const CHORD_IV={maj:[0,4,7],min:[0,3,7],'7':[0,4,7,10],m7:[0,3,7,10],maj7:[0,4,7,11],sus4:[0,5,7],sus2:[0,2,7],dim:[0,3,6],'5':[0,7],none:[]};
+const CHORD_QS=Object.keys(CHORD_IV);
+/* chordPcs(root, q) or chordPcs({root, q}) -> the chord's pitch classes, root first ([] for no chord) */
+function chordPcs(root,q){ if(root&&typeof root==='object'){ q=root.q; root=root.root; } if(root==null||q==='none') return []; return (CHORD_IV[q]||CHORD_IV.maj).map(i=>mod(root+i,12)); }
+/* chordName(root, q) or chordName({root, q, bass}) -> "Em", "G7", "Dsus4", "B5", "C/E", "N.C." */
+function chordName(root,q){ const c=root&&typeof root==='object'?root:{root,q}; const n=anaChordName(c); return n!=='N.C.'&&c.bass!=null&&c.bass!==c.root?n+'/'+PC_NAMES[c.bass]:n; }
+/* parseChord("Bm" | "F#7" | "Esus4" | "B♭maj7" | "Am/E" | "C sharp minor" | "N.C." ...) -> {root, q, bass?} or null */
+const CHORD_WORDS=[[/^(|maj|major|M|Δ)$/,'maj'],[/^(m|min|minor|-|mi)$/,'min'],[/^(7|dom7|dom|9|11|13)$/,'7'],[/^(m7|min7|minor7|-7|mi7|m9|min9|m11)$/,'m7'],
+  [/^(maj7|M7|Δ7|major7|maj9|M9|Δ9)$/,'maj7'],[/^(sus4|sus|7sus4|7sus)$/,'sus4'],[/^(sus2)$/,'sus2'],[/^(dim|°|o|dim7|°7|o7|m7b5|m7♭5|ø|ø7|half-?dim(inished)?|diminished)$/,'dim'],
+  [/^(5|power|powerchord)$/,'5'],[/^(add9|add2|6|69|6\/9|madd9)$/,null]];
+function parseChord(s){
+  if(s&&typeof s==='object'){ if(s.q==='none'||s.root==null) return {root:null,q:'none'}; const o={root:mod(Math.round(+s.root),12),q:CHORD_IV[s.q]?s.q:'maj'}; if(s.bass!=null) o.bass=mod(Math.round(+s.bass),12); return isNaN(o.root)?null:o; }
+  let t=String(s==null?'':s).trim().replace(/\s+chord$/i,''); if(!t) return null;
+  if(/^(n\.?\s?c\.?|none|no chord|nothing|rest|silence|off)$/i.test(t)) return {root:null,q:'none'};
+  let bass=null; const sl=/^(.+?)\s*\/\s*([A-Ga-g])\s*(#|♯|b|♭)?$/.exec(t); if(sl){ bass=mod('C D EF G A B'.indexOf(sl[2].toUpperCase())+(sl[3]?(/[#♯]/.test(sl[3])?1:-1):0),12); t=sl[1]; }
+  const m=/^([A-Ga-g])\s*(#|♯|b(?![a-z])|♭|b(?=m|maj|min|M|7|5|9|6|sus|dim|add|°|ø|$)|\s+sharp|\s+flat)?\s*(.*)$/.exec(t); if(!m) return null;
+  let root='C D EF G A B'.indexOf(m[1].toUpperCase()); if(m[2]) root+=/[#♯]|sharp/i.test(m[2])?1:-1; root=mod(root,12);
+  let rest=m[3].trim().replace(/\s+/g,''); const lower=rest.toLowerCase();
+  let q;
+  for(const [re,qq] of CHORD_WORDS){ if(re.test(rest)||(re.test(lower)&&!/^M(\d|$)/.test(rest))){ q=qq; break; } }
+  if(q===undefined) return null;
+  if(q===null) q=/^m(?!aj)/.test(rest)?'min':'maj';
+  const o={root,q}; if(bass!=null&&bass!==root) o.bass=bass; return o;
+}
+/* semitones that move fromKey onto toKey through the relative mode (E minor -> F major: E minor is G major's relative,
+   G -> F is -2, so the E minor chords become D minor ones), the nearest way (-5..+6) */
+function keyShift(fromKey,toKey){ if(!fromKey||!toKey) return 0; const f=fromKey.mode===toKey.mode?fromKey:relKey(fromKey); let d=mod(toKey.tonic-f.tonic,12); if(d>6) d-=12; return d; }
+function transposeChords(chords,d){ return (chords||[]).map(c=>{ const o=Object.assign({},c); if(d&&o.root!=null) o.root=mod(o.root+d,12); if(d&&o.bass!=null) o.bass=mod(o.bass+d,12);
+  if(d&&o.alt&&o.alt.root!=null) o.alt=Object.assign({},o.alt,{root:mod(o.alt.root+d,12)}); return o; }); }
+/* fitChordsToKey(chords, fromKey, toKey) -> a moved copy (roots, bass notes and second guesses) */
+function fitChordsToKey(chords,fromKey,toKey){ return transposeChords(chords,keyShift(fromKey,toKey)); }
+const shiftWords=d=>{ if(!d) return ''; const n=Math.abs(d), w=n===1?'a semitone':n===2?'a tone':n+' semitones'; return (d>0?'up ':'down ')+w; };
+/* one plan entry for a chord, with its notes worked out against the key (a 7th from the key where it fits) */
+function chordEntry(c,key){
+  if(!c||c.root==null||c.q==='none') return {none:true,root:null,pcs:[],sev:[],deg:null,q:'none'};
+  const q=CHORD_IV[c.q]?c.q:'maj', sc=scaleOf(key), r=c.root, has=i=>sc.includes(mod(r+i,12)), deg=sc.indexOf(r);
+  const tri=q==='7'||q==='maj7'?'maj':q==='m7'?'min':q, pcs=chordPcs(r,tri);
+  const sev=q==='7'||q==='m7'||q==='maj7'?chordPcs(r,q):q==='maj'?pcs.concat(mod(r+(has(11)||!has(10)?11:10),12)):q==='min'||q==='sus4'||q==='sus2'?pcs.concat(mod(r+10,12)):q==='dim'?pcs.concat(mod(r+(has(10)?10:9),12)):pcs.slice();
+  return {deg:deg<0?null:deg,root:r,pcs,sev,q,ninth:deg<0?mod(r+2,12):sc[(deg+1)%7],bass:c.bass!=null?c.bass:r};
+}
+/* the bars the chords cover (at least 1) */
+const chordSpanBars=ch=>Math.max(1,Math.ceil((ch||[]).reduce((a,c)=>Math.max(a,(+c.b||0)+(+c.d||0)),0)/4-1e-6));
+function chordPlanFrom(src,key){
+  const ch=src.filter(c=>c&&c.d>0).slice().sort((a,b)=>a.b-b.b), nb=chordSpanBars(ch), S=nb*4, ents=ch.map(c=>chordEntry(c,key)), NONE=chordEntry(null,key);
+  const idx=b=>{ const x=mod(b,S); for(let i=0;i<ch.length;i++){ if(ch[i].b<=x+1e-6&&x<ch[i].b+ch[i].d-1e-6) return i; } return -1; };
+  const at=b=>{ const i=idx(b); return i<0?NONE:ents[i]; };
+  const plan=[]; for(let bar=0;bar<nb;bar++) plan.push(at(bar*4+0.001));
+  /* cut [b, b+d) where the chord changes (the span repeats) */
+  const cuts=[...new Set(ch.flatMap(c=>[c.b,c.b+c.d]).map(x=>mod(x,S)).concat([0]))].sort((a,b)=>a-b);
+  const segs=(b,d)=>{ const out=[], e=b+d; let x=b; let guard=0;
+    while(x<e-1e-6&&guard++<64){ const base=Math.floor(x/S)*S, rel=x-base; let nx=base+S; for(const c of cuts){ if(c>rel+1e-6){ nx=base+c; break; } } nx=Math.min(nx,e); out.push({b:x,d:nx-x,c:at(x)}); x=nx; }
+    return out.length?out:[{b,d,c:at(b)}]; };
+  return {key,plan,at,segs,fromChords:true};
+}
+/* the song's chords as blocks over the whole loop, for the chord strip and for fixing: PROJ.chords repeated to the loop
+   length, or Keys' progression written out one chord per bar (from 'keys'). Copies; changing them changes nothing. */
+function triadQ(pcs){ if(!pcs||pcs.length<3) return 'maj'; const t=mod(pcs[1]-pcs[0],12), f=mod(pcs[2]-pcs[0],12); return f===6?'dim':t===3?'min':'maj'; }
+function chordBlocks(){
+  const L=PROJ.bars*4, src=Array.isArray(PROJ.chords)&&PROJ.chords.length?PROJ.chords:null;
+  if(!src){ const {plan}=chordPlan(); return plan.slice(0,L/4).map((p,bar)=>({b:bar*4,d:4,root:p.root,q:triadQ(p.pcs),conf:1,from:'keys'})); }
+  const ch=src.slice().sort((a,b)=>a.b-b.b), S=chordSpanBars(ch)*4, out=[];
+  for(let off=0;off<Math.max(L,S);off+=S){ if(off>0&&off>=L) break; ch.forEach(c=>{ const b=c.b+off; if(off>0&&b>=L) return; const o=Object.assign({},c,{b}); if(off>0&&b+o.d>L) o.d=L-b; out.push(o); }); }
+  return out;
+}
+/* "Em · C · G · D" (one name per block), for replies and the assistant's context */
+const chordsText=(ch,sep=' · ')=>(ch||chordBlocks()).map(c=>chordName(c)).join(sep);
+/* generated parts that follow the chords: bass, chords and melody tracks Keys made (never your own played or sung parts) */
+const chordFollowers=()=>PROJ.tracks.filter(t=>t.gen&&t.kind==='notes'&&['bass','chords','melody'].includes(t.role));
+/* a held instrument (pad, strings, choir, organ...) plays whole-bar pads, as add_chords does */
+function heldChordStyle(inst,style){ const I=(typeof INST!=='undefined'&&INST.get(inst))||{}, st=STYLES[style]||STYLES.house; return /choir|strings|pad|organ|cello|brass|darkpad/i.test((inst||'')+' '+(I.name||''))&&!/pads|seventh|sustain/.test(st.chordStyle)?'pads':undefined; }
+/* remake those parts on the current chords, each with its own seed (same rhythm and feel, new notes where the chords
+   changed). Changes the tracks only: the caller saves (one undo step). Returns the names of the parts that moved. */
+function followChords(){ const L=PROJ.bars*4, moved=[];
+  chordFollowers().forEach(t=>{ const s=t.style||PROJ.style||'house', seed=t.seed||(typeof newSeed==='function'?newSeed():7);
+    const ev=t.role==='bass'?genBass(s,L,seed):t.role==='chords'?genChords(s,L,seed,heldChordStyle(t.inst,s)):genMelody(L,seed,s);
+    if(JSON.stringify(ev)!==JSON.stringify(t.events)) moved.push(t.name); t.events=ev; t.seed=seed; });
+  return moved; }
+const chordsRedraw=()=>{ saveProject(); if(typeof renderTracks==='function') renderTracks(); if(typeof uiLoop==='function') uiLoop(); };
+/* setChord(bar, chord, {beat, bars}) fixes one chord. bar is 1-based (bar 1 = the first bar of the loop); chord is "Bm",
+   {root, q} or "N.C."; beat (1-4, optional) fixes only from that beat to the end of that chord in the bar; bars (default 1)
+   fixes several bars. Keys' progression is written out first when the song has no PROJ.chords yet. The bass, chords and
+   melody Keys made follow with their own seeds; your own parts never move. One saveProject (one undo step).
+   Returns {bar, chord, name, moved:[track names], text} or null (no such bar, or a chord it can't read). */
+function setChord(bar,chord,o={}){
+  const c=parseChord(chord), L=PROJ.bars*4, b0=(Math.round(+bar)-1)*4; if(!c||!(b0>=0&&b0<L)) return null;
+  let list=chordBlocks(), w0=b0, w1=Math.min(L,b0+4*Math.max(1,Math.round(+o.bars||1)));
+  if(o.beat!=null&&+o.beat>1){ const pos=b0+clamp(+o.beat-1,0,3.75), blk=list.find(x=>x.b<=pos+1e-6&&pos<x.b+x.d-1e-6); w0=pos; w1=Math.min(b0+4,blk?blk.b+blk.d:b0+4); }
+  const out=[]; list.forEach(x=>{ const e=x.b+x.d; if(e<=w0+1e-6||x.b>=w1-1e-6){ out.push(x); return; } if(x.b<w0-1e-6) out.push(Object.assign({},x,{d:w0-x.b})); if(e>w1+1e-6) out.push(Object.assign({},x,{b:w1,d:e-w1})); });
+  const nc={b:w0,d:w1-w0,root:c.root,q:c.q,conf:1,from:'user'}; if(c.bass!=null) nc.bass=c.bass; out.push(nc); out.sort((a,b)=>a.b-b.b);
+  PROJ.chords=out; const moved=followChords(); chordsRedraw();
+  const name=chordName(nc), bt=o.beat!=null&&+o.beat>1?`, from beat ${+o.beat}`:'', n=Math.round((w1-w0)/4);
+  return {bar:Math.round(+bar),chord:nc,name,moved,text:`Bar ${Math.round(+bar)}${n>1?'-'+(Math.round(+bar)+n-1):''}${bt} is now ${name}${moved.length?'; '+moved.join(', ')+' follow'+(moved.length===1?'s':''):''}`}; }
+/* setChords(list) replaces the song's chords ([{b, d, root, q}] or names one per bar: ["Am","F","C","G"]) and the generated
+   parts follow (one undo step). clearChords() goes back to Keys' own progression. Both return the names of the parts that moved. */
+function setChords(list,from='user'){ const ch=[];
+  (list||[]).forEach((x,i)=>{ const c=parseChord(x); if(!c) return; if(x&&typeof x==='object'&&x.b!=null&&x.d>0) ch.push(Object.assign({},x,c,{conf:x.conf!=null?x.conf:1,from:x.from||from})); else ch.push(Object.assign({b:i*4,d:4},c,{conf:1,from})); });
+  ch.sort((a,b)=>a.b-b.b); if(!ch.length) return null; PROJ.chords=ch; const moved=followChords(); chordsRedraw(); return moved; }
+function clearChords(){ if(!PROJ.chords) return []; delete PROJ.chords; const moved=followChords(); chordsRedraw(); return moved; }
 function nearestAbove(pc,lo){ let n=lo-mod(lo,12)+pc; if(n<lo) n+=12; return n; }
 const PROGS={minor:[[0,5,2,6],[0,5,3,4],[0,6,5,6],[0,2,5,6],[0,3,6,5],[0,0,5,6],[0,5,0,6],[0,3,4,0]],major:[[0,4,5,3],[0,5,3,4],[0,3,4,4],[3,4,0,5],[0,4,3,4],[5,3,0,4]]};
 function genBass(style,L,seed){
-  const st=STYLES[style]||STYLES.house, {plan}=chordPlan(), ev=[], kick=pat((st.drums[36]||'x...x...x...x...'),0), r=rng(seed||5), pick=a=>a[Math.floor(r()*a.length)];
+  const st=STYLES[style]||STYLES.house, P=chordPlan(), {plan}=P, ev=[], kick=pat((st.drums[36]||'x...x...x...x...'),0), r=rng(seed||5), pick=a=>a[Math.floor(r()*a.length)];
   const seqs=[[0,0,12,0],[0,12,0,7],[0,0,7,12],[0,12,10,7],[0,3,0,12]], seq=pick(seqs), off=pick([[2,6,10,14],[2,3,6,10,11,14],[2,6,7,10,14,15]]);
   for(let bar=0;bar<L/4;bar++){
-    const c=plan[bar%plan.length], root=nearestAbove(c.root,31), fifth=root+7, oct=root+12, base=bar*4;
-    const add=(s,n,d,v=0.9)=>ev.push({b:base+s/4,d,n,v});
+    const c=plan[bar%plan.length], root=nearestAbove(c.none?0:c.bass!=null?c.bass:c.root,31), fifth=root+7, oct=root+12, base=bar*4;
+    /* SE-7c: a note where the chord changes (or under no chord) moves with the chord, keeping its step from the root */
+    const add=(s,n,d,v=0.9)=>P.segs(base+s/4,d).forEach(g=>{ if(g.c.none) return; ev.push({b:g.b,d:g.d,n:g.c===c?n:nearestAbove(g.c.bass!=null?g.c.bass:g.c.root,31)+(n-root),v}); });
     switch(st.bassStyle){
       case 'offbeat': [2,6,10,14].forEach((s,i)=>add(s,i%2?oct:root,0.4)); break;
       case 'rolling': [2,3,6,7,10,11,14,15].forEach(s=>add(s,root,0.2,s%2?0.7:0.95)); break;
@@ -3235,18 +3349,19 @@ function genBass(style,L,seed){
 }
 function voice(pcs,lo=55){ return pcs.map(pc=>nearestAbove(pc,lo)).sort((a,b)=>a-b); }
 function genChords(style,L,seed,csOver){
-  const st=STYLES[style]||STYLES.house, cs=csOver||st.chordStyle, {plan}=chordPlan(), ev=[], r=rng(seed||9), rh=[[0,0.75,1.5],[0,0.75,1.5,2.5,3.25],[0.5,1.25,2,2.75,3.5],[0,1.5,2.25,3]][Math.floor(r()*4)];
+  const st=STYLES[style]||STYLES.house, cs=csOver||st.chordStyle, P=chordPlan(), {plan}=P, ev=[], r=rng(seed||9), rh=[[0,0.75,1.5],[0,0.75,1.5,2.5,3.25],[0.5,1.25,2,2.75,3.5],[0,1.5,2.25,3]][Math.floor(r()*4)];
   for(let bar=0;bar<L/4;bar++){
-    const c=plan[bar%plan.length], base=bar*4, notes=voice(st.chordStyle==='seventh'?c.sev:c.pcs,57);
-    const hit=(b,d,v=0.75,ns=notes,strum=0)=>ns.forEach((n,i)=>ev.push({b:base+b+i*strum,d,n,v}));
+    const c=plan[bar%plan.length], base=bar*4, vfor=x=>voice(st.chordStyle==='seventh'?x.sev:x.pcs,57), notes=vfor(c);
+    /* SE-7c: a hit is cut where the chord changes and each piece plays that chord (none: a rest); ns can be a function of the chord */
+    const hit=(b,d,v=0.75,ns=notes,strum=0)=>P.segs(base+b,d).forEach(g=>{ if(g.c.none) return; const nn=typeof ns==='function'?ns(g.c):g.c===c?ns:vfor(g.c); nn.forEach((n,i)=>ev.push({b:g.b+i*strum,d:g.d,n,v})); });
     switch(cs){
       case 'stabs': [0.5,1.5,2.5,3.5].forEach(b=>hit(b,0.3,0.8)); break;
       case 'pulse8': for(let s=0;s<8;s++) hit(s/2,0.45,s%2?0.6:0.78); break;
       case 'seventh': hit(0,3.8,0.65,notes,0.03); break;
-      case 'pads': { const k=projectKey(), ninth=(SCALES[k.mode][(c.deg+1)%7]+k.tonic)%12; [...voice(c.sev,55),nearestAbove(ninth,67)].forEach(n=>ev.push({b:base,d:3.95,n,v:0.55})); break; }
+      case 'pads': { const k=projectKey(); P.segs(base,3.95).forEach(g=>{ const x=g.c; if(x.none) return; const ninth=x.ninth!=null?x.ninth:(SCALES[k.mode][(x.deg+1)%7]+k.tonic)%12; [...voice(x.sev,55),nearestAbove(ninth,67)].forEach(n=>ev.push({b:g.b,d:g.d,n,v:0.55})); }); break; }
       case 'plucks332': rh.forEach((b,i)=>hit(b,0.35,i?0.65:0.8)); break;
-      case 'arp': { const ar=[...notes,notes[0]+12,notes[1]+12]; for(let s=0;s<16;s++) ev.push({b:base+s/4,d:0.22,n:ar[s%ar.length],v:s%4?0.6:0.82}); break; }
-      case 'power': { const r=nearestAbove(c.root,40); for(let s=0;s<8;s++) hit(s/2,0.42,s%2?0.7:0.9,[r,r+7,r+12]); break; }
+      case 'arp': { const arOf=ns=>[...ns,ns[0]+12,(ns[1]!=null?ns[1]:ns[0]+7)+12], ar=arOf(notes); for(let s=0;s<16;s++){ const x=P.at(base+s/4); if(x.none) continue; const a2=x===c?ar:arOf(vfor(x)); ev.push({b:base+s/4,d:0.22,n:a2[s%a2.length],v:s%4?0.6:0.82}); } break; }
+      case 'power': { const pw=x=>{ const r=nearestAbove(x.root,40); return [r,r+7,r+12]; }; for(let s=0;s<8;s++) hit(s/2,0.42,s%2?0.7:0.9,pw); break; }
       default: hit(0,3.9,0.65);
     }
   }
@@ -3254,15 +3369,19 @@ function genChords(style,L,seed,csOver){
 }
 function genMelody(L,seed=11,style){
   const ms=(STYLES[style]||{}).melStyle;
-  if(ms==='arp'||ms==='seq'){ const {key,plan}=chordPlan(), r=rng(seed), ev=[], shapes=[[0,1,2,1,3,2,1,2],[0,2,1,3,2,1,0,2],[2,1,0,1,2,3,2,1],[0,1,2,3,2,1,2,3]], shape=shapes[Math.floor(r()*shapes.length)];
+  if(ms==='arp'||ms==='seq'){ const P=chordPlan(), {key,plan}=P, r=rng(seed), ev=[], shapes=[[0,1,2,1,3,2,1,2],[0,2,1,3,2,1,0,2],[2,1,0,1,2,3,2,1],[0,1,2,3,2,1,2,3]], shape=shapes[Math.floor(r()*shapes.length)];
     const step=ms==='seq'?0.25:0.5, gate=ms==='seq'?0.2:0.4;
-    for(let bar=0;bar<L/4;bar++){ const c=plan[bar%plan.length], tones=voice(c.pcs,64).concat(voice(c.pcs,64).map(n=>n+12));
-      for(let i=0;i<4/step;i++){ if(ms==='arp'&&r()<0.12) continue; const n=tones[shape[i%shape.length]+(ms==='seq'&&i%8>=6?1:0)]; ev.push({b:bar*4+i*step,d:gate,n,v:i%4?0.62:0.82}); } }
+    const tonesOf=x=>voice(x.pcs,64).concat(voice(x.pcs,64).map(n=>n+12));
+    for(let bar=0;bar<L/4;bar++){ const c=plan[bar%plan.length], tones=c.none?[]:tonesOf(c);
+      for(let i=0;i<4/step;i++){ if(ms==='arp'&&r()<0.12) continue; const x=P.at(bar*4+i*step); if(x.none) continue; const tt=x===c?tones:tonesOf(x); const n=tt[Math.min(tt.length-1,shape[i%shape.length]+(ms==='seq'&&i%8>=6?1:0))]; ev.push({b:bar*4+i*step,d:gate,n,v:i%4?0.62:0.82}); } }
     return ev; }
-  const {key,plan}=chordPlan(), r=rng(seed), sc=scaleOf(key), ev=[], rhythms=[[0,1,1.5,2.5,3],[0,0.75,1.5,2,3],[0,1,2,2.5,3.5],[0.5,1,2,3]];
-  let last=nearestAbove(plan[0].root,67);
-  for(let bar=0;bar<L/4;bar++){ const c=plan[bar%plan.length], rh=rhythms[(bar+Math.floor(r()*4))%4];
-    rh.forEach((b,i)=>{ const pool=[]; for(let n=62;n<=81;n++){ const pc=mod(n,12); if(sc.includes(pc)) pool.push({n,w:(c.pcs.includes(pc)?3:1)/(1+Math.abs(n-last)/2)}); }
+  const P=chordPlan(), {key,plan}=P, r=rng(seed), sc=scaleOf(key), ev=[], rhythms=[[0,1,1.5,2.5,3],[0,0.75,1.5,2,3],[0,1,2,2.5,3.5],[0.5,1,2,3]];
+  /* SE-7c: over a chord outside the key, its own notes join the scale and the scale notes a semitone from them drop out
+     (E major in A minor: G sharp in, G out); under no chord the melody rests */
+  const notesOver=x=>{ const out=x.pcs.filter(pc=>!sc.includes(pc)); return out.length?sc.filter(pc=>!out.some(o=>Math.abs(mod(o-pc+6,12)-6)===1)).concat(out):sc; };
+  let last=nearestAbove((plan.find(x=>!x.none)||{root:key.tonic}).root,67);
+  for(let bar=0;bar<L/4;bar++){ const c0=plan[bar%plan.length], rh=rhythms[(bar+Math.floor(r()*4))%4];
+    rh.forEach((b,i)=>{ const c=P.at(bar*4+b); if(c.none){ r(); return; } const ok=c===c0&&!P.fromChords?sc:notesOver(c), pool=[]; for(let n=62;n<=81;n++){ const pc=mod(n,12); if(ok.includes(pc)) pool.push({n,w:(c.pcs.includes(pc)?3:1)/(1+Math.abs(n-last)/2)}); }
       let tot=pool.reduce((a,p)=>a+p.w,0), x=r()*tot, pick=pool[0].n; for(const p of pool){ x-=p.w; if(x<=0){ pick=p.n; break; } }
       const nb=i+1<rh.length?rh[i+1]:4; ev.push({b:bar*4+b,d:Math.max(0.25,nb-b-0.1),n:pick,v:0.8}); last=pick; }); }
   return ev;
