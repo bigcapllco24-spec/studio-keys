@@ -80,7 +80,7 @@ function findWake(text){
 }
 function startListening(){
   if(!SRc){ ASSIST.say('Talking needs Chrome or Edge. You can still type here.',{speak:false}); return; }
-  ensureAudio(); dropRec(); ASSIST.listening=true; $('#asListen').checked=true;
+  ensureAudio(); dropRec(); const tap=ASSIST.tapRec; ASSIST.tapRec=null; killRec(tap); ASSIST.listening=true; $('#asListen').checked=true;
   const rec=new SRc(); ASSIST.rec=rec; rec.continuous=true; rec.interimResults=true; rec.lang=navigator.language||'en-IN';
   rec.onresult=e=>{ if(ASSIST.rec!==rec) return; let interim='', heard='';
     for(let i=e.resultIndex;i<e.results.length;i++){ const r=e.results[i], txt=r[0].transcript; heard+=txt+' '; if(r.isFinal){ if(LOOP.state!=='take'||findWake(txt)!==null) onFinal(txt); } else interim+=txt; }
@@ -106,7 +106,10 @@ function releaseListenMic(){
   if(MIC.on||(MIC.pending&&byListen)) micStop();
 }
 function stopListening(){ ASSIST.listening=false; $('#asListen').checked=false; dropRec(); const t=ASSIST.tapRec; ASSIST.tapRec=null; killRec(t);
-  ASSIST.awakeUntil=0; ASSIST.humNotes=[]; releaseListenMic(); if(!ASSIST.speaking&&!ASSIST.busy) setOrb('idle',idleText()); store.set('asListen',false); }
+  ASSIST.awakeUntil=0; ASSIST.humNotes=[]; releaseListenMic();
+  const take=LOOP.state==='take'||LOOP.state==='counting'; /* a sung take keeps its own orb, status and notes strip */
+  if(!take){ clearTimeout(ASSIST.sungT); ASSIST.sung=[]; const nb=$('#asNotes'); if(nb) nb.hidden=true; if(!ASSIST.speaking&&!ASSIST.busy) setOrb('idle',idleText()); }
+  store.set('asListen',false); }
 function onFinal(txt){
   if(ASSIST.speaking||!isSpeechy(txt)&&findWake(txt)===null&&performance.now()>ASSIST.awakeUntil) return; const now=performance.now();
   const cmd=findWake(txt);
