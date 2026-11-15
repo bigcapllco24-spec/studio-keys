@@ -54,14 +54,18 @@ function audioToNotes(buf,o){
      short silences in it (a gated synth, staccato notes) always end a note (UX-10 fix 1) */
   const hole=new Uint8Array(frames.length);
   for(const [i,j] of (o&&o.holes)||[]) for(let k=Math.max(0,Math.floor((i-N)/hop)+1);k<frames.length&&k*hop<j;k++) hole[k]=1;
-  const notes=[]; let cur=null, med=[], cand=null, candN=0, silent=0, sinceHole=99; const env=[];
+  const notes=[]; let cur=null, med=[], cand=null, candN=0, silent=0, sinceHole=99; const env=[], vf=new Uint8Array(frames.length);
   for(let fi=0;fi<frames.length;fi++){ const fr=frames[fi];
-    const voiced=fr.f>0&&fr.clar>0.85&&fr.rms>gate; env.push(fr.rms); if(env.length>8) env.shift(); sinceHole=hole[fi]?0:sinceHole+1;
+    const voiced=fr.f>0&&fr.clar>0.85&&fr.rms>gate; vf[fi]=voiced?1:0; env.push(fr.rms); if(env.length>8) env.shift(); sinceHole=hole[fi]?0:sinceHole+1;
     if(voiced){ silent=0; med.push(ftom(fr.f)); if(med.length>5) med.shift(); const m=[...med].sort((a,b)=>a-b)[med.length>>1], n=Math.round(m);
       const reatt=cur&&sinceHole>8&&fr.t-cur.t0>0.15&&env.length>=6&&fr.rms>Math.min(...env.slice(0,-1))*2.2&&fr.rms>gate*2.5;
       if(cur&&Math.abs(m-cur.n)<0.7&&!reatt){ cur.t1=fr.t; cur.pk=Math.max(cur.pk,fr.rms); cand=null; candN=0; }
       else if(reatt&&Math.abs(m-cur.n)<0.7){ notes.push(cur); cur={n:cur.n,t0:fr.t,t1:fr.t,pk:fr.rms}; }
-      else { if(n===cand) candN++; else { cand=n; candN=1; } if(candN>=3){ if(cur) notes.push(cur); cur={n,t0:fr.t-2*hop/sr,t1:fr.t,pk:fr.rms}; cand=null; candN=0; } }
+      else { if(n===cand) candN++; else { cand=n; candN=1; } if(candN>=3){ let t0=fr.t-2*hop/sr;
+          /* a change of pitch with no real gap (sung legato, a breath under 4 frames): the smoothed pitch turns a few frames after
+             the voice did, so the note starts at the first frame already on the new pitch, not 40-60 ms late (UX-10 fix 2) */
+          if(cur){ let k=fi; while(k>0&&fi-k<10&&vf[k-1]&&Math.round(ftom(frames[k-1].f))===n) k--; if(frames[k].t<t0){ t0=frames[k].t; cur.t1=Math.min(cur.t1,t0); } }
+          if(cur) notes.push(cur); cur={n,t0,t1:fr.t,pk:fr.rms}; cand=null; candN=0; } }
     } else if(hole[fi]&&cur){ /* a frame spoilt by a hole: the note goes on */ }
     else { silent++; cand=null; candN=0; if(silent>3) med=[]; if(silent>=4&&cur){ notes.push(cur); cur=null; } }
   }
