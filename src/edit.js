@@ -134,8 +134,15 @@ function anaRestore(){ PROJ.tracks.forEach(t=>{ if(t.kind==='audio'&&!t.ana&&ANA
 function anaStore(t,ana){ t.ana=ana; ANA_MEM.set(t.id,ana);
   try{ const o=JSON.parse(UNDO.last), x=o&&o.p&&(o.p.tracks||[]).find(y=>y.id===t.id); if(x){ x.ana=ana; UNDO.last=JSON.stringify(o); } }catch(e){}
   _saveProject(); }
-async function listenToSong(t,o={}){
-  if(!t||t.kind!=='audio'||ANA_RUN.has(t.id)||typeof analyseAudio!=='function') return null;
+/* listenToSong(track, {again, quiet}) -> Promise of the cached analysis (or null). A second call while it listens gets the same
+   promise; a listen the assistant already started (ANA_JOBS in actions.js) is reused too. */
+const ANA_P=new Map();
+function listenToSong(t,o={}){
+  if(!t||t.kind!=='audio'||typeof analyseAudio!=='function') return Promise.resolve(null);
+  if(ANA_P.has(t.id)) return ANA_P.get(t.id);
+  if(!o.again&&typeof ANA_JOBS!=='undefined'&&ANA_JOBS.has(t.id)) return ANA_JOBS.get(t.id);
+  const pr=listenRun(t,o); ANA_P.set(t.id,pr); pr.then(()=>ANA_P.delete(t.id),()=>ANA_P.delete(t.id)); return pr; }
+async function listenRun(t,o){
   const buf=AUD.get(t.id); if(!buf){ if(!o.quiet) toast('That audio isn’t loaded yet. Try again in a moment.'); return null; }
   const hit=anaCached(t,buf); if(hit&&!o.again){ anaStore(t,hit); renderTracks(); return hit; }
   ANA_RUN.add(t.id); renderTracks(); const nm=t.name.length>28?t.name.slice(0,27)+'…':t.name; let last=-1;

@@ -136,7 +136,7 @@ function renderChordPop(){
     <label class="cp-type"><span>Or type one</span><input class="input inline" type="text" data-ctype placeholder="F♯m7, B♭/D, N.C." aria-label="Type a chord" autocomplete="off" spellcheck="false"></label>
     <div class="hint">${hasOwnChords()?'The bass, chords and melody Keys made follow. Your own parts stay. Ctrl+Z undoes it.':'The bass, chords and melody Keys made follow; your own parts stay. From now on these chords stay as they are (they stop bending towards melodies you play). Ctrl+Z undoes it.'}</div>`;
 }
-function chordApply(chord){ const i=CL.open, b0=CL.blocks[i]&&CL.blocks[i].b; const txt=fixChordBlock(i,chord); chordPopOpen(-1);
+function chordApply(chord){ if(typeof undoBoundary==='function') undoBoundary(); const i=CL.open, b0=CL.blocks[i]&&CL.blocks[i].b; const txt=fixChordBlock(i,chord); chordPopOpen(-1);
   if(!txt){ toast('I couldn’t read that chord. Try “Bm”, “F♯7”, “B♭/D” or “N.C.”'); return; } toast(txt);
   const k=CL.blocks.findIndex(x=>Math.abs(x.b-b0)<1e-6), el=document.querySelector(`[data-cb="${k<0?0:k}"]`); if(el){ chordFocus(el); } }
 function chordFocus(el){ const s=$('#chordStrip'); s.querySelectorAll('.cb').forEach(x=>x.tabIndex=-1); el.tabIndex=0; try{ el.focus({preventScroll:true}); }catch(e){} }
@@ -145,7 +145,7 @@ function chordFocus(el){ const s=$('#chordStrip'); s.querySelectorAll('.cb').for
   s.addEventListener('keydown',e=>{ const b=e.target.closest('[data-cb]'); if(!b) return; const n=CL.blocks.length, i=+b.dataset.cb;
     const j=e.key==='ArrowRight'?Math.min(n-1,i+1):e.key==='ArrowLeft'?Math.max(0,i-1):e.key==='Home'?0:e.key==='End'?n-1:null;
     if(j==null) return; e.preventDefault(); e.stopPropagation(); const el=s.querySelector(`[data-cb="${j}"]`); if(el){ chordFocus(el); if(CL.open>=0) chordPopOpen(j); } });
-  $('#chordReset').addEventListener('click',()=>{ const moved=clearChords(); toast(`Back to Keys’ chords${moved&&moved.length?'; '+moved.join(', ')+' follow':''}. Ctrl+Z brings yours back.`); });
+  $('#chordReset').addEventListener('click',()=>{ if(typeof undoBoundary==='function') undoBoundary(); const moved=clearChords(); toast(`Back to Keys’ chords${moved&&moved.length?'; '+moved.join(', ')+' follow':''}. Ctrl+Z brings yours back.`); });
   p.addEventListener('click',e=>{ const d=CL.draft; if(!d) return; const r=e.target.closest('[data-croot]'), q=e.target.closest('[data-cq]');
     if(r||q){ if(r){ d.root=+r.dataset.croot; if(d.q==='none'){ const k=projectKey(), deg=scaleOf(k).indexOf(d.root); const tq=deg>=0?triadQ(triad(k,deg)):'maj'; d.q=tq==='dim'?'min':tq; } }
       else { d.q=q.dataset.cq; if(d.q!=='none'&&d.root==null) d.root=projectKey().tonic; }
@@ -184,7 +184,7 @@ function songCardHTML(t){
     <div class="sc-act">${has?`<button class="btn small primary" type="button" data-scput="${t.id}" title="A new Chords track: Keys’ own sound and rhythm on these chords, never the song’s audio">Put these chords on my song</button><button class="btn small sc-tog" type="button" data-scbass="${t.id}" aria-pressed="${bass}" title="Also make the bassline follow the song’s bass notes">${bass?'✓ ':''}Bass movement too</button>`:''}${keyBtn}${bpmBtn}</div>
     <div class="hint">Nothing in your song changes until you tap. Keys plays the chords with its own sound, never the song’s audio.</div></div>`;
 }
-$('#tracks').addEventListener('click',e=>{ const g=n=>{ const el=e.target.closest(`[data-${n}]`); return el?{el,t:PROJ.tracks.find(x=>x.id===el.dataset[n.replace(/-./g,m=>m[1].toUpperCase())])}:null; };
+$('#tracks').addEventListener('click',e=>{ if(e.target.closest('[data-scput],[data-sckey],[data-scbpm]')&&typeof undoBoundary==='function') undoBoundary(); /* each tap is its own undo step */ const g=n=>{ const el=e.target.closest(`[data-${n}]`); return el?{el,t:PROJ.tracks.find(x=>x.id===el.dataset[n.replace(/-./g,m=>m[1].toUpperCase())])}:null; };
   let h=g('ana'); if(h){ const t=h.t; if(!t||ANA_RUN.has(t.id)) return; if(!t.ana) listenToSong(t); else { CARDHIDE.has(t.id)?CARDHIDE.delete(t.id):CARDHIDE.add(t.id); renderTracks(); } return; }
   if((h=g('schide'))){ CARDHIDE.add(h.el.dataset.schide); renderTracks(); const b=document.querySelector(`[data-ana="${h.el.dataset.schide}"]`); if(b) b.focus(); return; }
   if((h=g('scbass'))){ const id=h.el.dataset.scbass; CARDBASS.has(id)?CARDBASS.delete(id):CARDBASS.add(id); renderTracks(); const b=document.querySelector(`[data-scbass="${id}"]`); if(b) b.focus(); return; }
