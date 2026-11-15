@@ -1,0 +1,11 @@
+# QA-1 daily session · 15 Nov 2026 (12:13 IST check-in) · qa-tester
+
+Read `.claude/standards/dev-standards.md` first (Quality bar, How we work). Your role file is `.claude/agents/qa-tester.md`.
+
+Daily session on the **live build (`main`)**. Work only in your own worktree `/home/claude/wt-qa-daily` (detached at origin/main; don't check out other branches there, never push `main`). Yesterday's report: `.claude/work/reports/QA-1-daily-2026-11-14.md` (don't refile what's in it; HQ already has these bugs: Play after first tracks, voice-note hint, muddy words, velocity lane, sung bassline doubling (UX-3), pads buried (SE-1), phone 11 px scroll, Song-mode sung part, Delete in editor (UX-7), 'another one' only pattern A (AI-1), part reply not saying where (UX-7), controller Play (UX-9)). Since yesterday main got UX-2 (studio fixes), UX-5 (sung part in Song mode), SE-3 (drummer feel, swing ladder: "more swing" = full triplet 66%).
+
+1. `bash .claude/tools/check.sh` (paste the summary).
+2. About 20 minutes of real use like a producer, in headless Chrome (fake MIDI; fake mic from `tests/fixtures/sing.wav`): make a beat by reference ("drums like Ben Böhmer", "another one" ×3 — each different), swing up/down in your own words, sing a bassline over the beat, edit notes in the piano roll (select, move, velocity, copy, undo), import a voice note and turn it into chords, Make it a song and edit sections, save and reopen, export MP3. Check 390 px and 360 px width once. Listen with numbers (peaks, LUFS where you can).
+3. File only **real** bugs (steps, expected, actual, severity) and **at most 3** improvement ideas, skipping anything already listed above or already on preview branches (AI-1 song sections by voice, AI-4 offline mixing words, SE-7a key chip, UX-4 phone layout, UX-6 install, UX-7, UX-8 loop button, UX-9 controller play).
+
+Save your report as you go to `/home/claude/wt-qa-daily/.claude/work/reports/QA-1-daily-2026-11-15.md` (don't commit; the lead files it). Also write `/home/claude/wt-qa-daily/.claude/work/reports/QA-1-daily-2026-11-15.json` with `{"bugs":[{"area":"assistant|studio|engine|controller|other","text","steps","severity"}],"ideas":[{"area","text"}]}`. Verdict first in the report, then bugs, rough edges, numbers. Final message: the report text.
