@@ -1,7 +1,8 @@
 # Studio Keys board (mirror of Studio Keys HQ)
-Last updated: 15 Nov 2026, 23:40 IST
+Last updated: 16 Nov 2026, 00:55 IST
 
 ## Awaiting build OK (owner tries the test link, in HQ)
+- AI-7 · assistant-dev · S · Bug (owner request 15 Nov): Keys kept listening after 'Always listening' was turned off (mic left open, two listeners after a quick off/on). Round 1. https://studio-keys.bigcapllco24.workers.dev/p/preview-ai-7/ · head 153caf6 · tester READY (34/34 focused, 48 smoke; `AI-7-test.md`), 3 rough edges fixed. No Worker change. Note for UX-4: phone off controls must call stopListening(); user-opened mic uses micStart(true).
 - AI-1 · assistant-dev · L · Song sections by voice (arrange, sections, parts, drum transitions with a beat of silence before the drop, loop/play from a section, mini song map). Round 2. https://studio-keys.bigcapllco24.workers.dev/p/preview-ai-1/ · head 848933a · tester READY after 3 rounds (`AI-1-retest2.md`), 57 checks. Test link uses the live AI prompt; release deploys the Worker. Leftovers: longer on a 6-min club track, reel lengths offline, 'drop se pehle' offline, same-energy groove empty undo, house Build no gap.
 - SE-7 (7a) · sound-engine-dev · L · Honest key chip (sureness, second guess, reasons, DJ key; key change moves parts; chip follows edits). Round 2. https://studio-keys.bigcapllco24.workers.dev/p/preview-se-7/ · head 5f6f5c7 · tester READY after 3 rounds (`SE-7-retest2.md`), 56 checks. Release deploys the Worker (1 prompt line). Then 7b + 7c.
 - UX-9 · studio-ux-dev · S · Bug: controller Start/Continue/MMC Play play the studio (was a LOOP.layers crash). Round 1. https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-9/ · head f9bc925 · tester READY, no bugs (`UX-9-test.md`).
@@ -22,6 +23,7 @@ Last updated: 15 Nov 2026, 23:40 IST
 - Merge notes: AI-1 and SE-7a conflict (worker.js prompt line, actions.js, assistant.js, smoke): whichever ships second merges main and re-runs the check. UX-4 before UX-6.
 
 ## Awaiting design OK (owner, in HQ)
+- UX-11 · studio-ux-dev (+ assistant-dev) · M · Mute/solo single drum sounds (owner request 15 Nov): M/S per row in the drum editor, KIT panel on drum tracks, 'Keys, mute the open hats' (new drum_sounds action). Round 1. Proposal `.claude/work/proposals/UX-11.md`. Market great 5/5. 3 decisions.
 - SE-4 · sound-engine-dev · S-M · Producer chords (open voicings, more progressions) and organic house percussion feel, from the owner's PML packs (RES-4). Round 1. Proposal `.claude/work/proposals/SE-4.md`. Builds right after SE-3.
 
 ## Top priority (owner feedback, 13 Nov)
@@ -48,6 +50,7 @@ Last updated: 15 Nov 2026, 23:40 IST
 - QA-1 · qa-tester · daily session on the live build, bugs and up to 3 ideas a day. 13 Nov: 8 bugs (6 fixed in UX-2/AI-4, 1 → UX-3, 1 → SE-1), 2 ideas in requests (Capture MIDI, variation history), 1 folded into AI-3 (`QA-1-daily-2026-11-13.md`). 14 Nov: Song view solid; 1 high bug → UX-7, 2 low → AI-1/UX-7; 3 ideas (song builds energy, Extended mix, Drop as a variation) (`QA-1-daily-2026-11-14.md`). 15 Nov: main healthy (UX-2, UX-5, SE-3 work); 6 bugs → SE-8, AI-6 (4), UX-10; 3 ideas in requests (scale mode in the editor, export just the section, 'another one but keep the …') (`QA-1-daily-2026-11-15.md`).
 
 ## Follow-ups noted (not on the board yet)
+- 16 Nov: tapping the orb while listening isn't an off switch (only the tick is); quantized performance mutes ('drop the hats at the next bar') idea from the UX-11 market check; if choke groups are added, a muted closed hat must not cut the open hat.
 - 15 Nov: 'turn it down' moves every fader -3 dB but the master glue/limiter pulls output back (~0.6 LUFS quieter): needs a stored post-limiter output gain (SE). 'transpose/move the melody up an octave', 'speed up the melody' still add parts offline (AI). Typed 'Keys, again' does nothing (AI). Whole-song MP3 very slow and the status only updates every 16 bars. Keys reply repeated in the chip box under it. Loop MP3 (makeMp3) still targets 0.97 peak. Save/reopen smoke checks flaky under heavy machine load; check.sh 3-5 min under load. Space bar play/stop shortcut. Song area focused with the editor open: Ctrl+A highlights notes, Delete removes the section. ~11 px sideways scroll at 390/360 px. newSong() keeps the last song's tempo. Short/Just the loop replaces an edited layout without asking. Live AI can't see track EQ/low cut (add to projectState or a relative EQ field). Channel EQ is before the compressor, no 200-500 Hz band (SE-1). A re-sung take moves to the bottom of the track list. newSong() always opens in Loop mode. Loop recording makes one undo step per note. Offline parser reads '...at 124' as 122 bpm (maker.js). Song-mode editor shows 'Pattern for Intro: A' next to 'Pattern A plays only in Drop'. Sideways Keys chat 41 px tall on phones. Keys orb has a gradient (owner's call).
 
 ## Done
