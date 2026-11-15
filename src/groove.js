@@ -208,14 +208,15 @@ function mutMotif(m,r){ const p=m.split(''); for(let i=0,k=1+Math.floor(r()*2);i
 function makeGroove(rec,L,seed){
   seed=(+seed||1)>>>0||1;
   const r=rng(seed), ev=[], bars=Math.max(1,L/4), E=rec.energy, pick=a=>a[Math.floor(r()*a.length)];
-  const D=k=>subRng(seed,100+k), RR={kick:subRng(seed,2),snare:subRng(seed,3),hat:subRng(seed,4),perc:subRng(seed,5)}, rF=subRng(seed,6), TT={kick:subRng(seed,12),snare:subRng(seed,13),hat:subRng(seed,14),perc:subRng(seed,15)}, rH=RR.hat, rP=subRng(seed,8);
+  const D=k=>subRng(seed,100+k), RR={kick:subRng(seed,2),snare:subRng(seed,3),hat:subRng(seed,4),perc:subRng(seed,5),ride:subRng(seed,7)}, rF=subRng(seed,6), TT={kick:subRng(seed,12),snare:subRng(seed,13),hat:subRng(seed,14),perc:subRng(seed,15),ride:subRng(seed,17)}, rH=RR.hat, rP=subRng(seed,8);
   const sw=s=>s%2===1?(rec.swing||0)*0.25:0;
   /* measured feel: velocity shapes per step, and (human styles) a drummer's push and wander per role */
   const F=pickFeel(rec), T=rec.human?FEELS.live:null, sh={}; ['hatc','hato','shaker','perc'].forEach(k=>sh[k]=feelShape(F.vel[k],r));
   const bpm=(typeof CTRL!=='undefined'&&+CTRL.bpm)||120, msB=ms=>ms/1000*bpm/60, gs=k=>{ const rt=TT[k], u=Math.max(1e-6,rt()), w=rt(); return clamp(Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*w),-2,2); };
   const roleOf=n=>n===36?'kick':(n===38||n===39||n===37&&rec.back==='rim')?'snare':(n===42||n===44||n===46||n===51)?'hat':'perc';
-  const feelMs=(n,j)=>{ if(!T) return 0; const k=roleOf(n); return (T.push[k]||0)+(j||k==='kick'||k==='snare'?gs(k)*(T.spread[k]||0)*(T.keep[k]||0):0); };
-  const at=(bar,s,n,v,d=0.2,j=true)=>{ const rr=RR[roleOf(n)]; ev.push({b:Math.max(0,Math.round((bar*4+s/4+sw(s)+msB(feelMs(n,j)))*1000)/1000),d,n,v:clamp(v+(rr()-0.5)*0.08,0.08,1)}); };
+  /* the ride plays with the hats' feel but draws its own randomness, so changing the hats leaves the ride exactly as it was */
+  const feelMs=(n,j)=>{ if(!T) return 0; const k=roleOf(n); return (T.push[k]||0)+(j||k==='kick'||k==='snare'?gs(n===51?'ride':k)*(T.spread[k]||0)*(T.keep[k]||0):0); };
+  const at=(bar,s,n,v,d=0.2,j=true)=>{ const rr=n===51?RR.ride:RR[roleOf(n)]; ev.push({b:Math.max(0,Math.round((bar*4+s/4+sw(s)+msB(feelMs(n,j)))*1000)/1000),d,n,v:clamp(v+(rr()-0.5)*0.08,0.08,1)}); };
   /* ---- this groove's choices: each from its own stream D(k), so the same seed always gives the same groove and changing one setting (the hats) leaves the other choices alone ---- */
   const four=rec.kick==='four', techy=/techno|techhouse|progressive/.test(rec.style), deep=!techy&&/house|afro|amapiano|downtempo|organic|disco/.test(rec.style);
   const styleHats=(GROOVES[rec.style]||{}).hats, hatsAsked=!!rec.hatsAsked||(!!styleHats&&rec.hats!==styleHats);   /* hats the user asked for by name stay as asked */
