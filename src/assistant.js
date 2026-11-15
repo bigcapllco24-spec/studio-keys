@@ -44,7 +44,10 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
   if(!has('melody')) return `A melody or hook next? Add one, or hum it while it plays.`;
   if(typeof songArranged==='function'&&songArranged()){ const S=songSections(), n=k=>S.filter(s=>s.kind===k).length, out=S.find(s=>s.kind==='outro'), d=PROJ.tracks.find(t=>t.role==='drums');
     /* a different pair each time, and only moves that still make sense for this layout */
-    const ideas=[n('break')&&'“make the break longer”',n('drop')<2&&'“add a second drop”',n('drop')>=2&&'“make the second drop different”',out&&d&&out.parts[d.id]&&out.parts[d.id].on&&'“drop the drums in the outro”',n('drop')&&'“a snare roll before the drop”','“take the kick out of the intro”'].filter(Boolean), k=ASSIST.history.length%ideas.length;
+    /* never the move the user just asked for (QA fix 2: "make the break longer" got the tip "make the break longer") */
+    const u=normName(LAST_TEXT.text||''), just=[/\bbreak\b.*\b(longer|lamba|lambi|extend)|\b(longer|extend)\b.*\bbreak\b/,/\b(second|2nd|another|one more|dusra|ek aur)\b.*\bdrop\b|\bdrop 2\b/,/\b(second|2nd|drop 2)\b.*\b(different|vary|change|alag)\b|\bdrop 2\b/,/\boutro\b.*\bdrums?\b|\bdrums?\b.*\boutro\b/,/\b(roll|riser|silence|gap|fill)\b/,/\bkick\b.*\bintro\b|\bintro\b.*\bkick\b/];
+    const ideas=[n('break')&&'“make the break longer”',n('drop')<2&&'“add a second drop”',n('drop')>=2&&'“make the second drop different”',out&&d&&out.parts[d.id]&&out.parts[d.id].on&&'“drop the drums in the outro”',n('drop')&&'“a snare roll before the drop”','“take the kick out of the intro”'].map((x,i)=>x&&!(u&&just[i].test(u))&&x).filter(Boolean);
+    if(!ideas.length) ideas.push('“play the whole song”'); const k=ASSIST.history.length%ideas.length;
     const two=[ideas[k],ideas[(k+1)%ideas.length]].filter((x,i,a)=>x&&a.indexOf(x)===i);
     return `Shape the song: ${two.join(', ')}, or download the MP3.`; }
   return `Shape it with effects (“more reverb on the chords”), mix it, make it a full track, or download the MP3.`; }
@@ -76,8 +79,10 @@ async function handleRequest(text){
     }catch(e){ console.warn('assistant AI failed, using offline brain',e); const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
   } else { const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
   /* the AI sometimes offers a riser or a filter sweep as the next step; the studio has neither yet (D3), so offer what it has */
-  if(reply&&!/\b(riser|sweep|uplifter)\b/i.test(text)) reply=reply.replace(/[^.!?]*\b(risers?|uplifters?|(?:filter |noise )?sweeps?)\b[^.!?]*\?/gi,()=>songArranged()?' Want a snare roll into the drop?':'').replace(/\s+/g,' ').trim();
+  if(reply&&!/\b(riser|sweep|uplifter)\b/i.test(text)) reply=reply.replace(/[^.!?]*\b(risers?|uplifters?|(?:filter |noise )?sweeps?)\b[^.!?]*\?/gi,()=>!songArranged()?'':/\broll/i.test(text)?' Want the second drop to be different?':' Want a snare roll into the drop?').replace(/\s+/g,' ').trim();
   /* what the executor knows and the AI didn't: a clamped length, a riser played as a roll, a missing part (AI-1) */
+  /* nothing changed (it was already like that): say so, keep the AI's question if it asked one (QA fix 2) */
+  if(BATCH.same){ const q=(reply.match(/[^.!?]*\?\s*$/)||[''])[0].trim(); reply=`It’s already like that, so nothing changed${BATCH.same.length?': '+BATCH.same.join(', '):''}.`+' '+(q||nextStep()); }
   const notes=(BATCH.notes||[]).filter(n=>!(n.unless&&n.unless.test(reply))).map(n=>n.text);
   if(reply&&notes.length) reply=reply.replace(/\s*$/,'')+' '+notes.join(' ');
   else if(!reply&&!done.length&&notes.length) reply=notes.join(' ');
