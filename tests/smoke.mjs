@@ -227,6 +227,19 @@ try {
       R[ref] = { seed, h0, h1, keep, swingKeeps, ha }; loopStop(); }
     return R; });
   ok('"change the hats to 16ths" makes 16th hats and keeps kick, clap and percussion; "more swing" keeps the pattern', Object.values(h16).every(x => x.seed && x.h1 === 16 && x.keep && x.swingKeeps && x.ha.every(h => h === 16)), Object.entries(h16).map(([k, x]) => `${k}: hats on ${x.h0} → ${x.h1} of 16 steps${x.keep ? '' : ', rest changed'}${x.swingKeeps ? '' : ', swing moved notes'}, then "another one" ×3: ${x.ha.join('/')}`).join(' · '));
+  // SE-8 fix 2 (QA): with the AI on, the 16ths you asked for stay when "another one" comes back as add_drums; a new artist unlocks them
+  const hai = await E(async () => { const of = window.fetch, eng = ASSIST.engine, T = () => PROJ.tracks.find(t => t.role === 'drums'); let reply = null;
+    const hatSteps = () => { const bars = Math.max(1, L_() / 4), S = Array.from({ length: bars }, () => new Set()); /* fewest hat steps in any bar */
+      T().events.filter(e => e.n === 42 || e.n === 46).forEach(e => { const st = Math.round(e.b * 4) % (bars * 16); S[Math.floor(st / 16)].add(st % 16); }); return Math.min(...S.map(x => x.size)); };
+    window.fetch = async (u, o) => String(u).includes('/api/assistant') ? new Response(JSON.stringify(reply), { status: 200 }) : of(u, o);
+    const go = async (text, actions) => { reply = { reply: 'ok', actions }; await handleRequest(text); loopStop(); };
+    try { ASSIST.engine = 'llama'; await newSong('Smoke AI hats'); let seed = 0;
+      for (let s = 1; s < 400 && !seed; s++) { runActions([{ type: 'vibe', ref: 'Stephan Bodzin' }, { type: 'add_drums', ref: 'Stephan Bodzin', seed: 7500 + s }]); if (hatSteps() < 16) seed = 7500 + s; }
+      const h0 = hatSteps(); await go('change the hats to 16ths', [{ type: 'hats', pattern: '16th' }]); const h1 = hatSteps(), ha = []; let fresh = 0, prev = JSON.stringify(T().events);
+      for (let i = 0; i < 4; i++) { await go('another one', [{ type: 'add_drums', ref: 'Stephan Bodzin', hats: '16th' }]); ha.push(hatSteps()); const now = JSON.stringify(T().events); if (now !== prev) fresh++; prev = now; }
+      await go('drums like Ben Böhmer', [{ type: 'add_drums', ref: 'Ben Böhmer' }]); const unlocked = !T().recipe.hatsAsked;
+      return { seed, h0, h1, ha, fresh, unlocked, n: PROJ.tracks.filter(t => t.role === 'drums').length }; } finally { window.fetch = of; ASSIST.engine = eng; loopStop(); } });
+  ok('with the AI on, 16ths you asked for stay when "another one" comes back as add_drums; a new artist unlocks them', hai.seed && hai.h1 === 16 && hai.ha.every(h => h === 16) && hai.fresh === 4 && hai.unlocked && hai.n === 1, `Bodzin hats ${hai.h0} → ${hai.h1}, "another one" (add_drums) ×4: ${hai.ha.join('/')}, new groove ${hai.fresh}/4, Böhmer unlocks: ${hai.unlocked ? 'yes' : 'no'}`);
   // SE-8 fix 1 (QA): one hit per drum per moment, and the kick idea the reply names is heard, in every style (4 and 8 bars, 10 seeds each)
   const dd = await E(() => { const bad = [];
     for (const s of Object.keys(GROOVES)) for (const L of [16, 32]) for (let k = 1; k <= 10; k++) { const g = makeGroove(grooveRecipe(s, null), L, 3100 + k), ev = g.events.slice().sort((a, b) => a.b - b.b || a.n - b.n), kv = ev.filter(e => e.n === 36).map(e => e.v);
