@@ -89,7 +89,7 @@ function addPart(o,a){ const replace=a.replace===true||a.mode==='replace';
   const t=addTrack(o); t.isNew=true; return t; }
 function regenTrack(t,opts={}){
   if(!t||!t.gen) return null; const s=t.style||PROJ.style||'house', seed=opts.seed||newSeed();
-  if(t.role==='drums'){ const rec=Object.assign({},t.recipe||grooveRecipe(s,findArtist(t.ref)),opts.recipe||{}); rec.energy=clamp(Math.round(+rec.energy||3),1,5); const g=makeGroove(rec,L_(),seed); Object.assign(t,{events:g.events,recipe:rec,seed,desc:g.desc}); return g.desc; }
+  if(t.role==='drums'){ const rec=Object.assign({},t.recipe||grooveRecipe(s,findArtist(t.ref)),opts.recipe||{}); rec.energy=clamp(Math.round(+rec.energy||3),1,5); const g=freshGroove(rec,L_(),seed,!!opts.seed); Object.assign(t,{events:g.events,recipe:rec,seed:g.seed,desc:g.desc}); return g.desc; }
   if(t.role==='bass'){ t.events=genBass(s,L_(),seed); t.seed=seed; return 'a new bassline'; }
   if(t.role==='chords'){ t.events=genChords(s,L_(),seed); t.seed=seed; return 'a new chord rhythm'; }
   if(t.role==='melody'){ t.events=genMelody(L_(),seed,s); t.seed=seed; return 'a new melody'; }
@@ -103,8 +103,8 @@ const ACT={
   add_drums(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a,true);
     const rec=grooveRecipe(s,artist,grooveOver(a,grooveRecipe(s,artist).swing)), seed=+a.seed||newSeed();
     const kit=resolveInst(a.kit||a.instrument,'drums')||(artist&&artist.sounds.kit)||STYLES[s].kit, I=loadI(kit);
-    const g=makeGroove(rec,L_(),seed); if(BATCH.swing!=null) BATCH.swingShown=true;
-    addTrack({role:'drums',inst:kit,zone:'pads',gen:true,name:'Drums',events:g.events,recipe:rec,seed,style:s,ref:artist?artist.name:undefined,desc:g.desc},{replaceRole:'drums'});
+    const g=freshGroove(rec,L_(),seed,!!+a.seed); if(BATCH.swing!=null) BATCH.swingShown=true;
+    addTrack({role:'drums',inst:kit,zone:'pads',gen:true,name:'Drums',events:g.events,recipe:rec,seed:g.seed,style:s,ref:artist?artist.name:undefined,desc:g.desc},{replaceRole:'drums'});
     return `${artist?artist.name+'-style':STYLES[s].name} drums on ${I.name}: ${g.desc}`; },
   hats(a){ const kind=HAT_KIND[String(a.pattern||a.value||'8th').toLowerCase()]||String(a.pattern||a.value||'8th').toLowerCase();
     let t=findTrack('drums'); if(!t||!t.recipe){ return ACT.add_drums(Object.assign({},a,{hats:kind})); }

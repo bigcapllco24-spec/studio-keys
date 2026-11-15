@@ -186,76 +186,163 @@ function grooveRecipe(style,artist,over){
   base.energy=clamp(Math.round(+base.energy||3),1,5);
   return base;
 }
+/* ---------- SE-8: every "another one" is a groove not heard yet in this song ----------
+   Each part of the groove (kick, backbeat, hats, percussion, fills, the choices) draws from its own stream, hashed from
+   the seed: changing the hats keeps the kick and percussion, and a retry never starts from a near-identical stream (the
+   plain LCG's first value barely moves for seeds 1 apart). The choices are the moves a producer makes inside one style:
+   hat pattern and gaps, open-hat placement, shaker and ride patterns, kick pickups / ghost kicks / dropouts where the
+   style allows (the four-to-the-floor stays), clap pickups, ghost snares, percussion motifs and where they come in,
+   A/B bars and the fill. All generic patterns; nothing copied from records or packs. */
+const mix32=x=>{ x=(x>>>0)^0x9e3779b9; x=Math.imul(x^(x>>>16),0x85ebca6b); x=Math.imul(x^(x>>>13),0xc2b2ae35); return ((x^(x>>>16))>>>0)||1; };
+const subRng=(seed,k)=>rng(mix32((mix32(seed)+Math.imul(k,0x27d4eb2d))>>>0));
+const pickR=(r,a)=>a[Math.floor(r()*a.length)];
+function wpick(r,opts){ const ok=opts.filter(o=>o&&o[1]>0), tot=ok.reduce((s,o)=>s+o[1],0); let x=r()*tot; for(const o of ok){ x-=o[1]; if(x<0) return o[0]; } return ok.length?ok[ok.length-1][0]:undefined; }
+/* closed-hat shapes inside a bar (s = 16th step): all 16ths, off the beat (e-and-a), galloping (and-a), e-and, 8ths plus the "a" pickups */
+const HAT_MASKS={all:()=>true,offE:s=>s%4!==0,gallop:s=>s%4>=2,eAnd:s=>s%4===1||s%4===2,offPush:s=>s%2===0||s%4===3};
+/* a percussion motif made up for this groove: 2-5 hits, mostly between the beats (congas and cowbell may take a downbeat) */
+function genMotif(r,n){ const hand=n===45||n===56, w=s=>s%4===0?(hand?0.5:0.12):s%4===2?0.8:1, k=2+Math.floor(r()*(hand?4:3)), p=Array(16).fill('.');
+  for(let t=0;t<80&&p.filter(c=>c==='x').length<k;t++){ const s=Math.floor(r()*16); if(r()<w(s)) p[s]='x'; } if(!p.includes('x')) p[3]='x'; return p.join(''); }
+/* the B-bar answer to a motif: one or two hits moved, added or taken away */
+function mutMotif(m,r){ const p=m.split(''); for(let i=0,k=1+Math.floor(r()*2);i<k;i++){ const s=Math.floor(r()*16); p[s]=p[s]==='x'?'.':'x'; } if(!p.includes('x')) p[11]='x'; return p.join(''); }
 function makeGroove(rec,L,seed){
-  const r=rng(seed||1), ev=[], bars=Math.max(1,L/4), E=rec.energy, pick=a=>a[Math.floor(r()*a.length)];
-  const sw=s=>s%2===1?(rec.swing||0)*0.25:0, vel=(v)=>clamp(v+(r()-0.5)*0.08,0.08,1);
+  seed=(+seed||1)>>>0||1;
+  const r=rng(seed), ev=[], bars=Math.max(1,L/4), E=rec.energy, pick=a=>a[Math.floor(r()*a.length)];
+  const rv=subRng(seed,1), RR={kick:subRng(seed,2),snare:subRng(seed,3),hat:subRng(seed,4),perc:subRng(seed,5)}, rF=subRng(seed,6), rT=subRng(seed,7), rH=RR.hat, rP=subRng(seed,8);
+  const sw=s=>s%2===1?(rec.swing||0)*0.25:0;
   /* measured feel: velocity shapes per step, and (human styles) a drummer's push and wander per role */
   const F=pickFeel(rec), T=rec.human?FEELS.live:null, sh={}; ['hatc','hato','shaker','perc'].forEach(k=>sh[k]=feelShape(F.vel[k],r));
-  const bpm=(typeof CTRL!=='undefined'&&+CTRL.bpm)||120, msB=ms=>ms/1000*bpm/60, gs=()=>{ const u=Math.max(1e-6,r()), w=r(); return clamp(Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*w),-2,2); };
+  const bpm=(typeof CTRL!=='undefined'&&+CTRL.bpm)||120, msB=ms=>ms/1000*bpm/60, gs=()=>{ const u=Math.max(1e-6,rT()), w=rT(); return clamp(Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*w),-2,2); };
   const roleOf=n=>n===36?'kick':(n===38||n===39||n===37&&rec.back==='rim')?'snare':(n===42||n===44||n===46||n===51)?'hat':'perc';
   const feelMs=(n,j)=>{ if(!T) return 0; const k=roleOf(n); return (T.push[k]||0)+(j||k==='kick'||k==='snare'?gs()*(T.spread[k]||0)*(T.keep[k]||0):0); };
-  const at=(bar,s,n,v,d=0.2,j=true)=>ev.push({b:Math.max(0,Math.round((bar*4+s/4+sw(s)+msB(feelMs(n,j)))*1000)/1000),d,n,v:vel(v)});
-  const kickPat=pick(KICKS[rec.kick]||KICKS.four), hc=sh.hatc;
-  const percNotes=(rec.percSet||PERC_SETS[rec.style]||[37,45,47]).slice().sort(()=>r()-0.5).slice(0,clamp(+rec.perc||0,0,3));
-  const percPat={}; percNotes.forEach(n=>percPat[n]=pick(PERC_MOTIFS[n]));
-  const percB={}; percNotes.forEach(n=>percB[n]=pick(PERC_MOTIFS[n]));      /* B-section variant */
-  const ghostSteps=[3,7,9,11,14,15].filter(()=>r()<(rec.ghost||0));
-  const fillEvery=+rec.fill||0, fillKind=pick(rec.kick==='four'?['snareroll','openhat','drop','clapflam','tom']:['snareroll','tom','drop','hatroll']);
-  const trapRollAt=[pick([10,12,14]),pick([6,13,15])];
+  const at=(bar,s,n,v,d=0.2,j=true)=>{ const rr=RR[roleOf(n)]; ev.push({b:Math.max(0,Math.round((bar*4+s/4+sw(s)+msB(feelMs(n,j)))*1000)/1000),d,n,v:clamp(v+(rr()-0.5)*0.08,0.08,1)}); };
+  /* ---- this groove's choices (all from rv, so the same seed always gives the same groove) ---- */
+  const four=rec.kick==='four', techy=/techno|techhouse|progressive/.test(rec.style), deep=!techy&&/house|afro|amapiano|downtempo|organic|disco/.test(rec.style);
+  const styleHats=(GROOVES[rec.style]||{}).hats, hatsAsked=!!rec.hatsAsked||(!!styleHats&&rec.hats!==styleHats);   /* hats the user asked for by name stay as asked */
+  const V={};
+  V.ab=bars>=8?'phrase':bars<2?'none':wpick(rv,[['none',1],['alt',2],['last',bars>=4?2:0]]);
+  V.kick=four?wpick(rv,[['plain',2],['pickup',E>=2?2.5:0],['ghost',techy?3:1.5],['dropout',deep?2:0.7],['double',E>=3?1.5:0]]):'plain';
+  V.ghostKick=pickR(rv,[[3],[11],[13],[3,11],[7,15],[10]]); V.pickupAt=pickR(rv,[[15],[14],[14,15],[7],[11]]); V.doubleAt=pickR(rv,[10,6,14]);
+  V.kickB=!four&&(KICKS[rec.kick]||[]).length>1&&rv()<0.6;
+  V.backX=rec.back==='dembow'||rec.back==='none'?'plain':wpick(rv,[['plain',2],['late',1.5],['pre',1.5],['double',E>=3&&four?1:0]]);
+  { const cand=[1,3,6,7,9,10,11,14,15].sort(()=>rv()-0.5), g=+rec.ghost||0, nG=g?clamp(Math.round(g*6+(rv()-0.5)*2.4),0,5):0; V.ghost=cand.slice(0,nG); V.ghostB=g?cand[nG]:null; }
+  const masks=rec.hats==='16th'?[['all',3],['offE',2],['gallop',1.2],['offPush',E>=4?0.6:1.2],['gaps',2]]:rec.hats==='shuffle16'?[['all',2],['offE',2],['gallop',1.5],['eAnd',1],['offPush',1.5],['gaps',2]]:[['all',1]];
+  V.hatMask=hatsAsked?'all':wpick(rv,masks); V.hatGaps=[0,1,3,4,5,7,8,9,11,12,13,15].sort(()=>rv()-0.5).slice(0,2+Math.floor(rv()*3));
+  V.hatLiftB=V.hatMask!=='all'&&rv()<0.4;   /* the B bars open up to full 16ths */
+  V.ghost16=E>=3?wpick(rv,[['odd',2],['a',1.5],['e',1],['late',1],['some',2],['none',0.5]]):wpick(rv,[['none',2],['a',1],['late',1]]);
+  V.someOdd=[1,3,5,7,9,11,13,15].filter(()=>rv()<0.55);
+  V.pick8=hatsAsked?[]:pickR(rv,[[],[15],[7,15],[11],[3,11],[13]]);
+  V.hatAcc=wpick(rv,[['feel',3],['off',1.5],['drive',1]]);
+  V.open=rec.hats==='8th'?pickR(rv,[[14],[14],[6,14],[10],[15]]):pickR(rv,[[2,6,10,14],[2,6,10,14],[6,14],[14],[2,10],[10,14]]);
+  V.openWhen=rec.hats==='8th'?wpick(rv,[['alt',3],['all',1]]):wpick(rv,[['all',3],['alt',1.5],['B',V.ab==='none'?0:1]]);
+  V.shaker=wpick(rv,[['16',2],['off8',1.5],['odd',1.5],['gapped',1.5],['8',1]]);
+  V.ride=pickR(rv,[[2,6,10,14],[2,6,10,14],[0,2,4,6,8,10,12,14],[2,6,10,14,15],[2,6,10,11,14]]); V.rideWhen=E>=4?wpick(rv,[['all',3],['B',V.ab==='none'?0:1]]):'B';
+  /* percussion: which voices, their motifs (stock or made up now), the B-bar answer, and where each comes in */
+  const percNotes=(rec.percSet||PERC_SETS[rec.style]||[37,45,47]).slice().sort(()=>rP()-0.5).slice(0,clamp(+rec.perc||0,0,3));
+  const percPat={}, percB={}, percIn={};
+  percNotes.forEach((n,i)=>{ const stock=PERC_MOTIFS[n]; percPat[n]=stock&&rP()<0.4?pickR(rP,stock):genMotif(rP,n);
+    percB[n]=rP()<0.5?mutMotif(percPat[n],rP):(stock&&rP()<0.5?pickR(rP,stock):genMotif(rP,n));
+    percIn[n]=i===0?wpick(rP,[['all',4],['alt',1],['late',bars>=2?1:0]]):wpick(rP,[['B',V.ab==='none'?0:2],['all',E>=3?1.5:0.5],['alt',1.5]]); });
+  const fillEvery=+rec.fill||0;
+  const fillKind=four?wpick(rF,[['snareroll',2],['openhat',1],['drop',1.5],['clapflam',1.5],['tom',deep?1:0.5],['percroll',percNotes.length?1.5:0],['kickroll',techy?1.5:0.3],['snare8',1]])
+                     :wpick(rF,[['snareroll',2],['tom',1.5],['drop',1],['hatroll',1.5],['snare8',1]]);
+  const fillLen=pickR(rF,[1,1,2]), loopFill=fillEvery>bars&&rF()<0.55;   /* a loop shorter than the fill gap gets a turnaround at its end, sometimes */
+  const kickPat=pick(KICKS[rec.kick]||KICKS.four), kickPatB=V.kickB?pickR(rv,(KICKS[rec.kick]||[]).filter(k=>k!==kickPat))||kickPat:kickPat, hc=sh.hatc;
+  const trapRollAt=[pickR(rH,[10,12,14]),pickR(rH,[6,13,15])];
+  const hatAcc=s=>V.hatAcc==='off'?(s%4===2?1.18:0.9):V.hatAcc==='drive'?(s%2===0?1.06:0.9):1;
   for(let bar=0;bar<bars;bar++){
-    const phrase=bar%8, isB=bars>=8&&phrase>=4, isFill=fillEvery&&((bar+1)%fillEvery===0);
-    const lastBeatFill=isFill&&fillKind!=='openhat';
-    /* kick */
-    const kp=pat(kickPat,bar);
-    for(let s=0;s<16;s++){ if(kp[s]==='.'||!kp[s]) continue; if(isFill&&fillKind==='drop'&&s>=8) continue; at(bar,s,36,s%4===0?0.95:0.8,0.25,false); }
-    if(rec.kick==='four'&&E>=3&&isB&&r()<0.35) at(bar,15,36,0.45,0.15,false);
+    const phrase=bar%8, isB=V.ab==='phrase'?phrase>=4:V.ab==='alt'?bar%2===1:V.ab==='last'?bar%4===3:false;
+    const isFill=!!fillEvery&&((bar+1)%fillEvery===0||(loopFill&&bar===bars-1)), fl=loopFill&&bars<fillEvery?1:fillLen, f0=16-4*fl;
+    const lastBeatFill=isFill&&fillKind!=='openhat'&&fillKind!=='kickroll';
+    const odd=bar%2===1, turn=bar%4===3||bar===bars-1;
+    /* kick: the style's pattern, plus this groove's kick idea */
+    const kp=pat(isB?kickPatB:kickPat,bar);
+    for(let s=0;s<16;s++){ if(kp[s]==='.'||!kp[s]) continue; if(isFill&&fillKind==='drop'&&s>=f0) continue; if(V.kick==='dropout'&&turn&&s===12&&!isFill) continue; at(bar,s,36,s%4===0?0.95:0.8,0.25,false); }
+    if(V.kick==='pickup'&&(isB||odd)&&!(isFill&&fillKind==='drop')) V.pickupAt.forEach(s=>at(bar,s,36,0.42+RR.kick()*0.12,0.15,false));
+    if(V.kick==='ghost'&&(V.ab==='none'||!isB||odd)) V.ghostKick.forEach(s=>at(bar,s,36,0.3+RR.kick()*0.06,0.12,false));
+    if(V.kick==='double'&&odd&&!isFill) at(bar,V.doubleAt,36,0.6,0.2,false);
     /* backbeat */
     const backSteps=rec.back==='dembow'?[3,6,11,14]:(rec.kick==='halftime'||rec.kick==='trap'||rec.kick==='drill'?(rec.kick==='drill'?[8,14]:[8]):[4,12]);
     const backNote=rec.back==='snare'?38:rec.back==='rim'?37:39;
     if(rec.back!=='none') backSteps.forEach(s=>{ if(lastBeatFill&&s>=12&&fillKind!=='clapflam') return; at(bar,s,rec.back==='dembow'?38:backNote,0.9,0.25,false);
       if(rec.back==='rim'&&E>=3) at(bar,s,39,0.5,0.2,false); if(rec.back==='clap'&&E>=4&&(rec.kick==='four')) at(bar,s,38,0.4,0.2,false); });
+    if(rec.back!=='none'&&!lastBeatFill){ const b2=backSteps[backSteps.length-1];
+      if(V.backX==='late'&&odd) at(bar,Math.min(15,b2+1),backNote,0.36,0.15);
+      if(V.backX==='pre'&&turn) at(bar,15,backNote,0.42,0.15);
+      if(V.backX==='double'&&odd&&b2<14) at(bar,b2+2,backNote,0.55,0.2,false); }
     if(rec.kick==='drill'&&bar%2===1) at(bar,6,38,0.7);
-    ghostSteps.forEach(s=>{ if(!backSteps.includes(s)) at(bar,s,38,0.22+r()*0.1,0.1); });
+    V.ghost.concat(isB&&V.ghostB!=null?[V.ghostB]:[]).forEach(s=>{ if(!backSteps.includes(s)&&!(lastBeatFill&&s>=f0)) at(bar,s,38,0.22+RR.snare()*0.1,0.1); });
     /* hats */
-    const closed=[];
+    const closed=[], mk=isB&&V.hatLiftB?'all':V.hatMask, hm=mk==='gaps'?(s=>!V.hatGaps.includes(s)):HAT_MASKS[mk]||HAT_MASKS.all;
     switch(rec.hats){
-      case 'offbeat': [2,6,10,14].forEach(s=>closed.push([s,0.92*hc[s]])); break;
-      case 'offbeat16': for(let s=0;s<16;s++){ const a=s%4===2?0.95:(E>=3&&s%2===1?0.42+r()*0.12:0); if(a) closed.push([s,a*hc[s]]); } break;
-      case '8th': for(let s=0;s<16;s+=2) closed.push([s,0.62*hc[s]]); if(E>=4) closed.push([15,0.35*hc[15]]); break;
-      case '16th': for(let s=0;s<16;s++) closed.push([s,(E>=4?0.7:0.6)*hc[s]]); break;
-      case 'shuffle16': for(let s=0;s<16;s++){ if(E<=2&&s%4===1&&r()<0.5) continue; closed.push([s,(0.52+r()*0.12)*hc[s]]); } break;
+      case 'offbeat': [2,6,10,14].forEach(s=>closed.push([s,0.92*hc[s]])); if(E>=3) V.pick8.forEach(s=>closed.push([s,0.34*hc[s]])); break;
+      case 'offbeat16': for(let s=0;s<16;s++){ const g=V.ghost16, gh=s%2===1&&(g==='odd'||g==='a'&&s%4===3||g==='e'&&s%4===1||g==='late'&&s%8===7||g==='some'&&V.someOdd.includes(s));
+        const a=s%4===2?0.95:(gh?0.42+rH()*0.12:0); if(a) closed.push([s,a*hc[s]]); } break;
+      case '8th': for(let s=0;s<16;s+=2) closed.push([s,0.62*hc[s]]); new Set(V.pick8.concat(E>=4?[15]:[])).forEach(s=>closed.push([s,0.35*hc[s]])); break;
+      case '16th': for(let s=0;s<16;s++) if(hm(s)) closed.push([s,(E>=4?0.7:0.6)*hc[s]]); break;
+      case 'shuffle16': for(let s=0;s<16;s++){ if(E<=2&&s%4===1&&rH()<0.5) continue; if(!hm(s)) continue; closed.push([s,(0.52+rH()*0.12)*hc[s]]); } break;
       case 'trap': { for(let s=0;s<16;s+=2) closed.push([s,s%4===0?0.85:0.6]);
-        if(bar%2===1||E>=4){ const at1=trapRollAt[bar%2], div=pick([3,4,6]); for(let k=0;k<div;k++) ev.push({b:bar*4+at1/4+k*(0.5/div),d:0.08,n:42,v:0.45+k*0.08}); } break; }
+        if(bar%2===1||E>=4){ const at1=trapRollAt[bar%2], div=pickR(rH,[3,4,6]); for(let k=0;k<div;k++) ev.push({b:bar*4+at1/4+k*(0.5/div),d:0.08,n:42,v:0.45+k*0.08}); } break; }
       case 'drill': for(let s=0;s<16;s+=2) closed.push([s,0.7]); [3,11].forEach(s=>closed.push([s,0.5])); if(bar%2===1) for(let k=0;k<3;k++) ev.push({b:bar*4+3.5+k/6,d:0.08,n:42,v:0.5+k*0.1}); break;
       case 'quarter': [0,4,8,12].forEach(s=>closed.push([s,0.8])); break;
       case 'none': break;
       default: for(let s=0;s<16;s+=2) closed.push([s,0.7]);
     }
-    const openSteps=rec.open?(rec.hats==='8th'?[14]:[2,6,10,14]):[];
-    closed.forEach(([s,v])=>{ if(openSteps.includes(s)) return; at(bar,s,42,v,0.12); });
-    openSteps.forEach(s=>{ if(rec.hats==='8th'&&!(isFill||bar%2===1)) return; at(bar,s,46,(rec.hats==='8th'?0.6:0.7)*sh.hato[s],0.3); });
-    if(rec.shaker) for(let s=0;s<16;s++){ const v=s%2===1?0.55:0.3; if(E<=2&&s%2===0) continue; at(bar,s,44,v*sh.shaker[s],0.1); }
-    if(rec.ride&&(E>=4||isB)) [2,6,10,14].forEach(s=>at(bar,s,51,0.5,0.4));
+    const openOn=rec.open&&(V.openWhen==='all'||V.openWhen==='alt'&&odd||V.openWhen==='B'&&isB||rec.hats==='8th'&&isFill), openSteps=openOn?V.open:[];
+    closed.forEach(([s,v])=>{ if(openSteps.includes(s)) return; at(bar,s,42,v*hatAcc(s),0.12); });
+    openSteps.forEach(s=>at(bar,s,46,(rec.hats==='8th'?0.6:0.7)*sh.hato[s],0.3));
+    if(rec.shaker) for(let s=0;s<16;s++){ if(E<=2&&s%2===0) continue; const k=V.shaker;
+      const v=k==='off8'?(s%4===2?0.6:s%4===3?0.3:0):k==='odd'?(s%2===1?0.5:0):k==='gapped'?(s%4===0?0:s%2===1?0.55:0.3):k==='8'?(s%2===0?(s%4===2?0.55:0.35):0):(s%2===1?0.55:0.3);
+      if(v) at(bar,s,44,v*sh.shaker[s],0.1); }
+    if(rec.ride&&(E>=4&&V.rideWhen==='all'||isB)) V.ride.forEach(s=>at(bar,s,51,s%4===2?0.5:0.4,0.4));
     /* percussion */
-    percNotes.forEach((n,i)=>{ if(i>0&&!isB&&E<4) return; const p=isB?percB[n]:percPat[n]; for(let s=0;s<16;s++) if(p[s]==='x') at(bar,s,n,(0.55+r()*0.15)*sh.perc[s],0.15); });
+    percNotes.forEach(n=>{ const w=percIn[n], on=w==='all'||w==='alt'&&odd||w==='B'&&isB||w==='late'&&bar>=Math.floor(bars/2); if(!on) return;
+      const p=isB?percB[n]:percPat[n]; for(let s=0;s<16;s++) if(p[s]==='x'&&!(isFill&&fillKind==='percroll'&&s>=f0)) at(bar,s,n,(0.55+RR.perc()*0.15)*sh.perc[s],0.15); });
     if(rec.crash&&phrase===0&&bar>0) at(bar,0,49,0.6,1.5,false);
     /* fills */
     if(isFill){
-      if(fillKind==='snareroll') for(let s=12;s<16;s++){ at(bar,s,38,0.45+(s-12)*0.15,0.1,false); if(E>=3) ev.push({b:bar*4+s/4+0.125,d:0.08,n:38,v:0.35+(s-12)*0.1}); }
+      if(fillKind==='snareroll') for(let s=f0;s<16;s++){ const u=(s-f0)/(16-f0); at(bar,s,38,0.45+u*0.5,0.1,false); if(E>=3) ev.push({b:bar*4+s/4+0.125,d:0.08,n:38,v:0.35+u*0.4}); }
+      if(fillKind==='snare8') for(let s=f0;s<16;s+=2) at(bar,s,38,0.5+(s-f0)/(16-f0)*0.4,0.12,false);
       if(fillKind==='tom') [[12,50],[13,48],[14,47],[15,45]].forEach(([s,n])=>at(bar,s,n,0.8,0.2,false));
       if(fillKind==='openhat') at(bar,15,46,0.8,0.4,false);
       if(fillKind==='clapflam') [13,14,15].forEach((s,i)=>at(bar,s,39,0.5+i*0.15,0.15,false));
       if(fillKind==='hatroll') for(let k=0;k<8;k++) ev.push({b:bar*4+3+k/8,d:0.06,n:42,v:0.4+k*0.07});
+      if(fillKind==='percroll'){ const pn=percNotes.includes(45)?45:percNotes[0]||45; for(let s=f0;s<16;s++) at(bar,s,pn,0.45+(s-f0)/(16-f0)*0.4,0.12,false); }
+      if(fillKind==='kickroll') [13,14,15].forEach((s,i)=>at(bar,s,36,0.4+i*0.12,0.12,false));
     }
   }
   ev.sort((a,b)=>a.b-b.b);
   const words=[];
-  words.push({four:'four-to-the-floor kick',broken:'broken garage kick',boombap:'boom-bap kick',trap:'trap kick',drill:'drill kick',pop:'pop kick',halftime:'half-time kick',dnb:'two-step drum & bass kick',bhangra:'bhangra kick'}[rec.kick]||'kick');
-  if(rec.back!=='none') words.push({clap:'clap',snare:'snare',rim:'rim',dembow:'dembow snare'}[rec.back]+(rec.kick==='halftime'||rec.kick==='trap'?' on 3':' on 2 and 4'));
-  words.push({offbeat:'off-beat hats',offbeat16:'off-beat hats with 16th ghosts','8th':'8th hats','16th':'16th hats',shuffle16:'shuffled 16th hats',trap:'trap hats with rolls',drill:'drill hats',none:'no hats'}[rec.hats]||'hats');
-  if(rec.open) words.push('open hats'); if(rec.shaker) words.push('shaker'); if(rec.ride) words.push('ride');
+  words.push(({four:'four-to-the-floor kick',broken:'broken garage kick',boombap:'boom-bap kick',trap:'trap kick',drill:'drill kick',pop:'pop kick',halftime:'half-time kick',dnb:'two-step drum & bass kick',bhangra:'bhangra kick'}[rec.kick]||'kick')
+    +({pickup:' with kick pickups',ghost:' with ghost kicks',dropout:' with a dropout on beat 4',double:' with a double kick every other bar'}[V.kick]||'')+(V.kickB?' (a second kick pattern in the B bars)':''));
+  const bw={clap:'clap',snare:'snare',rim:'rim',dembow:'dembow snare'}[rec.back];
+  if(rec.back!=='none') words.push(bw+(rec.kick==='halftime'||rec.kick==='trap'?' on 3':' on 2 and 4')+({late:`, a late ${bw} every other bar`,pre:`, a ${bw} pickup every 4 bars`,double:`, a double ${bw} every other bar`}[V.backX]||''));
+  if(V.ghost.length>=2) words.push('ghost snares');
+  const has=n=>ev.some(e=>e.n===n), hn=rec.hats==='shuffle16'?'shuffled':'16th';
+  const hw=(rec.hats==='16th'||rec.hats==='shuffle16')&&V.hatMask!=='all'?{offE:`${hn} hats off the beat`,gallop:`galloping ${hn} hats`,eAnd:`${hn} hats on the e-and`,offPush:`${rec.hats==='shuffle16'?'shuffled ':''}8th hats with 16th pickups`,gaps:`${hn} hats with gaps`}[V.hatMask]:null;
+  words.push(hw||({offbeat:'off-beat hats',offbeat16:V.ghost16==='none'?'off-beat hats':'off-beat hats with 16th ghosts','8th':'8th hats','16th':'16th hats',shuffle16:'shuffled 16th hats',trap:'trap hats with rolls',drill:'drill hats',none:'no hats'}[rec.hats]||'hats'));
+  if(rec.open&&has(46)) words.push((V.open.length===1?'an open hat ':'open hats ')+(V.open.join()==='6,14'?'on the and of 2 and 4':V.open.join()==='14'?'at the end of the bar':V.open.join()==='2,6,10,14'?'on the off-beats':'between the beats')+(rec.hats==='8th'||V.openWhen==='all'?'':V.openWhen==='alt'?', every other bar':', in the B bars'));
+  if(rec.shaker) words.push('shaker'+({off8:' on the off-beats',odd:' on the in-between 16ths',gapped:' off the beat','8':' on 8ths'}[V.shaker]||''));
+  if(rec.ride&&has(51)) words.push(V.ride.length===8?'ride on 8ths':'ride');
   if(percNotes.length) words.push(percNotes.map(n=>({37:'rims',45:'congas',47:'toms',56:'cowbell',50:'high toms'}[n])).join(' and '));
-  if(rec.swing>=0.06) words.push(`${swingName(rec.swing)} (about ${swingPct(rec.swing)}%)`); if(fillEvery){ const fw=fillKind==='snareroll'?'snare roll':fillKind==='tom'?'tom fill':fillKind==='drop'?'kick drop':fillKind==='openhat'?'open-hat lift':fillKind==='clapflam'?'clap build':'hat roll'; words.push(`${/^[aeiou]/.test(fw)?'an':'a'} ${fw} every ${fillEvery} bars`); }
-  if(0) words.push(`a ${fillKind==='snareroll'?'snare roll':fillKind==='tom'?'tom fill':fillKind==='drop'?'kick drop':fillKind==='openhat'?'open-hat lift':fillKind==='clapflam'?'clap build':'hat roll'} every ${fillEvery} bars`);
-  return {events:ev,desc:words.join(', ')};
+  if(rec.swing>=0.06) words.push(`${swingName(rec.swing)} (about ${swingPct(rec.swing)}%)`);
+  if(fillEvery){ const fw={snareroll:'snare roll',tom:'tom fill',drop:'kick drop',openhat:'open-hat lift',clapflam:'clap build',hatroll:'hat roll',snare8:'snare build',percroll:percNotes.includes(45)||!percNotes.length?'conga roll':'percussion roll',kickroll:'kick roll'}[fillKind]||'fill';
+    if(fillEvery<=bars||loopFill) words.push(`${/^[aeiou]/.test(fw)?'an':'a'} ${fw} ${fillEvery>bars?'at the end of the loop':`every ${fillEvery} bars`}`); }
+  return {events:ev,desc:words.join(', '),seed};
+}
+/* the groove on the 16th grid: which drum plays on which 16th over the first 8 bars (that covers the A/B phrase) */
+function grooveFP(ev){ const s=new Set(); for(const e of ev){ const st=Math.round(e.b*4); if(st<128) s.add(e.n*128+st); } return s; }
+const fpStr=s=>[...s].sort((a,b)=>a-b).map(x=>x.toString(36)).join(' ');
+const fpSet=str=>new Set(String(str||'').split(' ').filter(Boolean).map(x=>parseInt(x,36)));
+function grooveSim(a,b){ let i=0; a.forEach(x=>{ if(b.has(x)) i++; }); const u=a.size+b.size-i; return u?i/u:1; }
+const GROOVE_NEAR=0.8, GROOVE_TRIES=30, GROOVE_HIST=24;
+/* a fresh groove (keep=false) is checked against every groove heard in this song (PROJ.grooveHist) and redrawn while it is
+   more than 80% the same as one of them; the least similar of up to 30 draws wins. keep=true (same seed: the user changed
+   the hats, the swing, the energy) makes exactly that groove. Every groove made is remembered either way. */
+function freshGroove(rec,L,seed,keep){
+  const P=typeof PROJ!=='undefined'&&PROJ?PROJ:null, hist=P?(P.grooveHist=Array.isArray(P.grooveHist)?P.grooveHist:[]):[], past=keep?[]:hist.map(fpSet);
+  let best=null;
+  for(let k=0;k<(past.length?GROOVE_TRIES:1);k++){ const g=makeGroove(rec,L,k?(mix32(seed+k*7919)%2000000000)+1:seed), fp=grooveFP(g.events);
+    g.near=past.reduce((m,p)=>Math.max(m,grooveSim(fp,p)),0); g.fp=fp; if(!best||g.near<best.near) best=g; if(g.near<=GROOVE_NEAR) break; }
+  if(P){ const s=fpStr(best.fp); if(hist[hist.length-1]!==s) hist.push(s); if(hist.length>GROOVE_HIST) hist.splice(0,hist.length-GROOVE_HIST); }
+  delete best.fp; return best;
 }
