@@ -337,13 +337,14 @@ const TAKE={chunks:[],notes:[],open:null,part:'melody',tail:0.14,ending:false,
     ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
   }
 };
-/* a track added while the loop plays (a finished take): the scheduler has already passed now..TR.schedT, so its notes there
-   would be skipped on this pass. Schedule them, and start a note that is still sounding late rather than drop it (a decaying
-   instrument only when it began under 0.08 s ago: a late piano hit sounds like a mistake). Loop mode only: going back to
-   Song mode restarts the transport (UX-10 fix 2) */
+/* a track added while the loop plays (a finished take): the scheduler has already passed everything before TR.schedT, so
+   its notes there would be skipped on this pass (the take finishes 0.1-0.5 s into the next pass, UX-10 fix 2). Schedule the
+   ones still to come, and start a note that is still sounding late rather than drop it (a decaying instrument only when it
+   began under 0.08 s ago: a late piano hit sounds like a mistake). The scheduler plays the rest from TR.schedT as usual.
+   Loop mode only: going back to Song mode restarts the transport */
 function catchUpTrack(tr){
   if(!A.ctx||!TR.running||!PLAYING.has(LOOP.state)||songOn()||!trackAudible(tr)||tr.kind==='audio') return 0;
-  const inst=INST.get(tr.inst), L=LOOP.L, s=spb(), now=A.ctx.currentTime, bNow=(now-TR.t0)/s, bS=(TR.schedT-TR.t0)/s; if(!inst||!(L>0)||bS<=bNow) return 0;
+  const inst=INST.get(tr.inst), L=LOOP.L, s=spb(), now=A.ctx.currentTime, bNow=(now-TR.t0)/s, bS=(TR.schedT-TR.t0)/s; if(!inst||!(L>0)) return 0;
   let n=0;
   for(const e of tr.events) for(let k=Math.max(0,Math.ceil((bNow-e.b-e.d)/L-1e-9)); k*L+e.b<bS; k++){ if(e.cyc!=null&&k<=e.cyc) continue;
     const B=k*L+e.b, T=TR.t0+B*s, end=T+e.d*s, t=Math.max(T,now+0.01); if(end-t<0.05) continue;

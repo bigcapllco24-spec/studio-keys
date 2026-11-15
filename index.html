@@ -3729,13 +3729,14 @@ const TAKE={chunks:[],notes:[],open:null,part:'melody',tail:0.14,ending:false,
     ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
   }
 };
-/* a track added while the loop plays (a finished take): the scheduler has already passed now..TR.schedT, so its notes there
-   would be skipped on this pass. Schedule them, and start a note that is still sounding late rather than drop it (a decaying
-   instrument only when it began under 0.08 s ago: a late piano hit sounds like a mistake). Loop mode only: going back to
-   Song mode restarts the transport (UX-10 fix 2) */
+/* a track added while the loop plays (a finished take): the scheduler has already passed everything before TR.schedT, so
+   its notes there would be skipped on this pass (the take finishes 0.1-0.5 s into the next pass, UX-10 fix 2). Schedule the
+   ones still to come, and start a note that is still sounding late rather than drop it (a decaying instrument only when it
+   began under 0.08 s ago: a late piano hit sounds like a mistake). The scheduler plays the rest from TR.schedT as usual.
+   Loop mode only: going back to Song mode restarts the transport */
 function catchUpTrack(tr){
   if(!A.ctx||!TR.running||!PLAYING.has(LOOP.state)||songOn()||!trackAudible(tr)||tr.kind==='audio') return 0;
-  const inst=INST.get(tr.inst), L=LOOP.L, s=spb(), now=A.ctx.currentTime, bNow=(now-TR.t0)/s, bS=(TR.schedT-TR.t0)/s; if(!inst||!(L>0)||bS<=bNow) return 0;
+  const inst=INST.get(tr.inst), L=LOOP.L, s=spb(), now=A.ctx.currentTime, bNow=(now-TR.t0)/s, bS=(TR.schedT-TR.t0)/s; if(!inst||!(L>0)) return 0;
   let n=0;
   for(const e of tr.events) for(let k=Math.max(0,Math.ceil((bNow-e.b-e.d)/L-1e-9)); k*L+e.b<bS; k++){ if(e.cyc!=null&&k<=e.cyc) continue;
     const B=k*L+e.b, T=TR.t0+B*s, end=T+e.d*s, t=Math.max(T,now+0.01); if(end-t<0.05) continue;
@@ -5093,12 +5094,15 @@ ACT.redo=()=>redo()?'Redid it':null;
 /* ----- audio → notes (offline pitch tracking of a recorded or imported clip) ----- */
 function audioToNotes(buf,o){
   const sr=buf.sampleRate, x=buf.getChannelData(0), N=2048, hop=512, det=makePitchDetector(N,sr,55,1200), frames=[];
-  for(let i=0;i+N<=x.length;i+=hop){ const r=det(x,i); frames.push({t:(i+N/2)/sr,f:r.f,clar:r.clar,rms:r.rms}); }
+  /* the level of every frame first (summed exactly as the pitch detector does), then the pitch only where it can count:
+     a frame under the level gate is never voiced, so it skips the two FFTs (a quicker analysis after a take, UX-10 fix 2) */
+  for(let i=0;i+N<=x.length;i+=hop){ let e=0; for(let k=0;k<N;k++){ const v=x[i+k]; e+=v*v; } frames.push({t:(i+N/2)/sr,i,f:0,clar:0,rms:Math.sqrt(e/N)}); }
   if(!frames.length) return [];
   /* level gate: 3x the noise floor (the 20th-percentile frame), at least -23 dB under the loud frames. The floor term is capped at
      -16.5 dB under them (UX-10 fix 2): when under ~20% of the frames are quiet (held notes with short breaths, a dense bounce),
      that frame is a sung one, 3x it sat above every frame and no note was found. The cap keeps a note sung 16 dB softer */
   const rs=frames.map(f=>f.rms).sort((a,b)=>a-b), loud=rs[Math.floor(rs.length*0.97)], gate=Math.max(0.006,Math.min(rs[Math.floor(rs.length*0.2)]*3,loud*0.15),loud*0.07);
+  for(const fr of frames) if(fr.rms>gate){ const r=det(x,fr.i); fr.f=r.f; fr.clar=r.clar; }
   /* holes: sample ranges [i,j) the take recorder marked as never arrived and patched (o.holes, UX-10). The level dip around a
      patched hole is not a new attack, so a held note isn't split in two. Only takes pass holes: an imported file has none, so
      short silences in it (a gated synth, staccato notes) always end a note (UX-10 fix 1) */
