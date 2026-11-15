@@ -63,6 +63,15 @@ try {
     for (const s of ['turn the melody down a bit', 'make the kick punchier', 'bring the bass up', 'chords louder', 'drums too loud', 'softer hats']) R[s] = runActions(localBrain(s).actions).join(', ');
     return { db: 40 * Math.log10(m.vol / v0), comp: [c0, d.fx.comp], hi: [hi0, d.hi], lo: [lo0, d.lo], same: sig() === s0, added: PROJ.tracks.length - n0, R }; });
   ok('"turn the melody down a bit" = -3 dB, "kick punchier" = more compressor, "softer hats" = less highs; no part added or remade', Math.abs(lv.db + 3) < 0.1 && lv.comp[1] > lv.comp[0] && lv.hi[1] < lv.hi[0] && lv.same && lv.added === 0, `melody ${lv.db.toFixed(1)} dB, comp ${lv.comp.join('→')}, drums high ${lv.hi.join('→')} dB, +${lv.added} tracks`);
+  // AI-6 fix 1: the whole song's level moves every part by the same dB (in the song, so Undo restores it exactly; the master fader is untouched)
+  const song = await E(() => { const vols = () => PROJ.tracks.map(t => t.vol.toFixed(4)).join(','), m0 = MIX.master ? MIX.master.vol : 1, v0 = vols(), n0 = PROJ.tracks.length;
+    const L = localBrain('turn it down a bit'), chip = runActions(L.actions).join(), v1 = vols(), r = PROJ.tracks.map(t => t.vol).filter(v => v > 0); undo();
+    return { down: L.actions.map(a => a.type + ':' + a.track + ':' + a.db).join(), chip, reply: L.reply, changed: v1 !== v0, back: vols() === v0, master: (MIX.master ? MIX.master.vol : 1) === m0, added: PROJ.tracks.length - n0 }; });
+  ok('"turn it down a bit" moves every part 3 dB and Undo puts it back exactly (master fader untouched)', song.down === 'mix:all:-3' && song.changed && song.back && song.master && song.added === 0 && /3 dB/.test(song.chip) && /3 dB/.test(song.reply), `${song.down} · ${song.chip} · undo exact ${song.back}`);
+  // AI-6 fix 1: "very" and Hinglish level sentences change the mix only
+  const hin = await E(() => { const n0 = PROJ.tracks.length; const R = ['the drums are very loud', 'the bass is very quiet', 'drums bahut loud hai', 'drums ki awaaz kam karo', 'melody thoda kam karo', 'hats ko soft karo', 'bass ko thoda upar karo'].map(s => { const L = localBrain(s); return L.actions.map(a => a.type).join('+') || (/full volume/.test(L.reply || '') ? 'full' : ''); });
+    return { R: R.join(' | '), ok: R.every(x => /^(mix(\+mix)*|full)$/.test(x)), added: PROJ.tracks.length - n0 }; });
+  ok('"very" and Hinglish level words ("bahut loud hai", "thoda kam karo", "soft karo") only move the mix', hin.ok && hin.added === 0, hin.R);
   const tone = await E(() => { const t = PROJ.tracks.find(t => t.role === 'bass'), n0 = JSON.stringify(t.events), lo0 = t.lo || 0;
     runActions(localBrain('boost the lows on the bass').actions); const boost = { lo0, lo: t.lo || 0, same: JSON.stringify(t.events) === n0 };
     runActions(localBrain('the bass is muddy').actions); const hp1 = t.fx.hp; const S = localBrain('still muddy'); runActions(S.actions);
@@ -93,6 +102,8 @@ try {
   ok('"turn the voice note into a bassline" transcribes', tv.x === 'transcribe', tv.x);
   const tv2 = await E(() => ['make the voice note a bassline', 'turn the voice note I just recorded into a bassline', 'make a bassline from the voice note', 'turn the voice note into a base line', 'record a voice note'].map(s => localBrain(s).actions.map(a => a.type + ':' + (a.to || a.part)).join('+')).join(' | '));
   ok('voice note phrasings convert the recording ("record a voice note" still records)', tv2 === 'transcribe:bass | transcribe:bass | transcribe:bass | transcribe:bass | sing:voice', tv2);
+  const tv3 = await E(() => ['voice note ko bassline bana do', 'is recording se chords banao', 'meri recording ko melody mein badlo'].map(s => localBrain(s).actions.map(a => a.type + ':' + (a.to || a.part)).join('+')).join(' | '));
+  ok('Hinglish voice note requests convert the recording ("voice note ko bassline bana do")', tv3 === 'transcribe:bass | transcribe:chords | transcribe:melody', tv3);
   ok('"turn <recording name> into chords" transcribes that track',tv.y === 'transcribe:chords:true' && tv.n2 === tv.n + 1 && /chords/.test(tv.r), tv.r);
   const im = await E(() => { const r = runActions([{ type: 'transcribe', to: 'bass' }]); return { tracks: PROJ.tracks.map(t => t.name + ':' + t.kind).join(', '), r: r.join() }; });
   ok('import MIDI + audio, turn audio into a bassline', /Lead:notes/.test(im.tracks) && /sing:audio/.test(im.tracks) && /bassline/.test(im.tracks), im.tracks);

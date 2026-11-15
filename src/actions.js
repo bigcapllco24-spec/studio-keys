@@ -195,7 +195,10 @@ const ACT={
     if(k==='preset'){ t.fx=roleFx(t.role,PROJ.style); refreshTrackGains(); return `Studio effects on ${t.name}`; }
     const d=TFX_DEF[k]; if(a.remove||a.amount===0||/off|remove|no /.test(String(a.value||''))){ delete t.fx[k]; refreshTrackGains(); return `${d.name} off on ${t.name}`; }
     const num=x=>x!=null&&x!==''&&isFinite(+x); let v=num(a.amount)?+a.amount:(num(a.change)?null:d.def*100);
-    if(d.unit==='Hz'){ v=num(a.hz)?+a.hz:(num(a.amount)&&+a.amount>=20?+a.amount:(k==='hp'?(t.role==='bass'?35:t.role==='drums'?30:180):6000)); t.fx[k]=clamp(Math.round(v),d.min,d.max); }
+    if(d.unit==='Hz'){ v=num(a.hz)?+a.hz:(num(a.amount)&&+a.amount>=20?+a.amount:(k==='hp'?(t.role==='bass'?35:t.role==='drums'?30:180):6000));
+      /* a high cut under 800 Hz is never what was meant (the AI sent "amount":60 for "softer hats"): read 0-100 as how much to cut, on the log scale */
+      if(k==='lp'&&!num(a.hz)&&num(a.amount)&&+a.amount<=100) v=d.max*Math.pow(d.min/d.max,clamp(+a.amount,0,100)/100);
+      t.fx[k]=clamp(Math.round(v),d.min,d.max); }
     else if(k==='pan'){ t.fx.pan=clamp((num(a.amount)?+a.amount:0)/100,-1,1); }
     else { const cur=t.fx[k]||0; t.fx[k]=clamp(v==null?cur+(+a.change)/100:v/100,0,1); }
     if(FXOPEN) FXOPEN.add(t.id); refreshTrackGains();
