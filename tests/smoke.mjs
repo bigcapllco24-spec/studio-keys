@@ -54,6 +54,9 @@ try {
   ok('"the mix is muddy" changes the mix FX', mud.mix.ch > mud.mix.ch0 && /track_fx/.test(mud.mix.types), `chords low cut ${mud.mix.ch0}→${mud.mix.ch} Hz`);
   const still = await E(() => ['add a bassline', 'let me sing the bassline', 'record a voice note', 'another one'].map(s => localBrain(s).actions.map(a => a.type + (a.part ? ':' + a.part : '')).join('+')).join(' | '));
   ok('"add a bassline", "sing the bassline", "voice note", "another one" unchanged', still === 'add_bass | sing:bass | sing:voice | vary', still);
+  // QA (AI-6 check): up/down describing a part's shape is not a level change ("let me sing a bassline that goes down" sings; "write a melody that goes down" makes one)
+  const dir = await E(() => ['let me sing a bassline that goes down', 'i want to sing a melody that goes up', 'write a melody that goes down', 'create a bassline that walks up'].map(s => localBrain(s).actions.map(a => a.type + (a.part ? ':' + a.part : '')).join('+')).join(' | '));
+  ok('direction words in sing / make requests keep their meaning (no fader move)', /^sing:bass \| sing:melody \| (add_melody|vary) \| (add_bass|vary)$/.test(dir), dir);
   // AI-6: level and punch words change the fader / EQ / compressor and never add or remake a part
   const lv = await E(() => { const T = r => PROJ.tracks.find(t => t.role === r), m = T('melody'), d = T('drums'), sig = () => PROJ.tracks.map(t => t.id + ':' + t.events.map(e => e.n + '@' + e.b).join()).join('|');
     const s0 = sig(), n0 = PROJ.tracks.length, v0 = m.vol, c0 = d.fx.comp || 0, hi0 = d.hi || 0, lo0 = d.lo || 0, R = {};
