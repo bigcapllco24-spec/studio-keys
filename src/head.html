@@ -760,8 +760,8 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 .trk.quiet:has(>.songcard,>.tfx)>:not(.songcard):not(.tfx),.trk.quiet>.songcard>*,.trk.quiet>.tfx>*{opacity:.5}
 @media (max-width:600px){
   /* while the chord fixer sheet is open at the bottom, messages show at the top so they never cover "Use …" or "Or type one" */
-  body:has(#chordPop:not([hidden])) .toast{top:calc(12px + env(safe-area-inset-top,0px));bottom:auto;transform:translateY(-8px)}
-  body:has(#chordPop:not([hidden])) .toast.show{transform:none}
+  body.cp-open .toast{top:calc(12px + env(safe-area-inset-top,0px));bottom:auto;transform:translateY(-8px)}
+  body.cp-open .toast.show{transform:none}
   .chordpop{position:fixed;left:16px!important;right:16px;top:auto!important;bottom:16px;width:auto;max-height:calc(100vh - 32px);overflow:auto}
   .cp-roots button,.chordpop .cp-q button,.cp-act .btn{min-height:44px}
 }

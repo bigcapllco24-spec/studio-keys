@@ -146,3 +146,23 @@ I imported a real 62 s WAV in headless Chrome against the built `index.html` (my
   - `listenToSong` already reuses a running `ANA_JOBS` job.
 - Imports shorter than 6 s are not analysed automatically (the engine returns no key or tempo for them anyway); **♪ Find key** still works on them.
 - **Phones:** the bottom sheet and the swipe strip from the proposal wait for UX-4, as briefed. What ships now is the plain fallback described above.
+
+## Fix 1 (15 Nov 2026, after the tester's first check of 4afe858)
+**What changed** (`src/head.html` CSS, `src/daw.js` 2 lines, `index.html` rebuilt)
+- **Playhead over the song card (1400 px).** A track's song card and its FX panel now sit above the playhead, so the line runs over the lanes and disappears behind the card (`.trk>.songcard,.trk>.tfx{position:relative;z-index:3}`, both have solid backgrounds).
+  - A muted (faded) track used to fade as a whole, which made its own layer, and the line still showed through the card. When a track has a card or FX panel open, it now fades its parts instead, and the card and panel fade their contents, so they look the same but still hide the line.
+- **Toast over the phone fixer (390 px).** While the chord fixer sheet is open on a phone (600 px or less), messages show at the top of the screen instead of the bottom, so they never cover "Use …" or "Or type one". `chordPopOpen` toggles `body.cp-open`, and every open or close path goes through it (click, Escape, click outside, apply, strip hidden). When the sheet closes, the next message is back at the bottom. Desktop is unchanged: there the fixer is a popover under the strip, away from the bottom-right toast.
+
+**How I tested**
+- Headless Chrome against the built `index.html`, with `night-drive.wav` imported through `#importFile`, then "Put these chords", Play, and the fixer opened right after a toast. Ran at 1400, 390 and 360 px in Emerald, Velvet and Sapphire (9 runs).
+  - Fixer: in all 9 runs the toast was showing and did not overlap the sheet, "Use …" or "Or type one". At 390 and 360 px the toast is at y 12-78 and the sheet starts at y 444; before the fix the toast was at y 760-826, over "Or type one". After Escape the sheet is closed and the toast is back at the bottom (y 760). The page never scrolls sideways (scrollWidth equals width). No page errors.
+  - Playhead: checked by screenshot (the line has `pointer-events:none`, so hit tests can't see it). It stops at the card's top edge and starts again below it, in all themes. With the track muted and its FX panel open, the card is fully opaque (computed opacity 1, contents 0.5) and the line is hidden behind both the card and the panel.
+- `bash .claude/tools/check.sh`: **CHECK OK, SMOKE OK: 64 checks** (load average 6-9).
+  - My first version used `body:has(#chordPop:not([hidden]))`. With it, the save/reopen and undo-after-open checks failed twice in a row while load was 10-14. The base commit 4afe858 passed those two checks on the same box (it failed "sing the bassline" instead, another load-sensitive check).
+  - A whole-page `:has()` gets rechecked on every DOM change, so I switched to the `cp-open` class. The full check then passed. I can't prove the `:has()` caused it, since load was also lower, but the class is the cheaper choice either way.
+- Screenshots: `/home/claude/shots/se-7c/fix1-playing-<theme>-<1400|390|360>.png`, `fix1-fixer-<theme>-<1400|390|360>.png` and `fix1-edge-muted-fx-<1400|390>.png`. Before shots: `before-playing-emerald-1400.png` and `before-fixer-emerald-390.png`.
+
+**Known limits**
+- At phone widths the lane sits under the track's name row, so the playhead still crosses the name rows (and the Copy and Delete row) of tracks below the chord strip. This was already the case and is outside this fix. The card itself is clear. Covering it would need the playhead drawn per lane.
+- The playhead still has `box-shadow:0 0 8px var(--signal)`, a soft glow, which the standards' "no glows" rule doesn't allow. I left it as it is (not in the brief). It's a one-word change if the lead wants it.
+- The "Chords 2" doubling in the tester's report is not part of this fix.

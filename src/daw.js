@@ -115,9 +115,9 @@ function fixChordBlock(i,chord){
 function chordPopOpen(i){
   const p=$('#chordPop'); if(!p) return; const prev=CL.open>=0&&document.querySelector(`[data-cb="${CL.open}"]`);
   if(prev) prev.setAttribute('aria-expanded','false');
-  if(i==null||i<0||!CL.blocks[i]){ CL.open=-1; p.hidden=true; return; }
+  if(i==null||i<0||!CL.blocks[i]){ CL.open=-1; p.hidden=true; document.body.classList.remove('cp-open'); return; }
   const c=CL.blocks[i]; CL.open=i; CL.draft={root:c.root==null?projectKey().tonic:c.root,q:c.root==null?'none':c.q,bass:c.bass};
-  renderChordPop(); p.hidden=false; const b=document.querySelector(`[data-cb="${i}"]`); if(b) b.setAttribute('aria-expanded','true');
+  renderChordPop(); p.hidden=false; document.body.classList.add('cp-open'); /* a phone moves the toast to the top while this sheet is open */ const b=document.querySelector(`[data-cb="${i}"]`); if(b) b.setAttribute('aria-expanded','true');
   /* under the block, kept inside the playlist (a phone shows it as a sheet at the bottom: see the CSS) */
   const pl=$('#playlist').getBoundingClientRect(), br=b?b.getBoundingClientRect():pl, pw=p.offsetWidth;
   p.style.left=Math.max(0,Math.min(br.left-pl.left,pl.width-pw))+'px'; p.style.top=(br.bottom-pl.top+6)+'px';
