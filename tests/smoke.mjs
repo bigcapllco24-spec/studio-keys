@@ -66,6 +66,14 @@ try {
   const inp = await p.$('#importFile'); await inp.uploadFile(fx('test.mid')); await W(800); await inp.uploadFile(fx('sing.wav')); await W(1500);
   const im = await E(() => { const r = runActions([{ type: 'transcribe', to: 'bass' }]); return { tracks: PROJ.tracks.map(t => t.name + ':' + t.kind).join(', '), r: r.join() }; });
   ok('import MIDI + audio, turn audio into a bassline', /Lead:notes/.test(im.tracks) && /sing:audio/.test(im.tracks) && /bassline/.test(im.tracks), im.tracks);
+  // QA, 15 Nov (UX-10 check): an imported bounce of "da da da" on one note with short digital silence between the notes
+  // (a gated synth bass, 20 and 40 ms gaps of exact zeros) keeps every note: those gaps are the music, not recording holes
+  const stc = await E(() => { const sr = 48000, R = {};
+    for (const gap of [0.02, 0.04]) { const nl = Math.round(0.2 * sr), gl = Math.round(gap * sr), x = new Float32Array(Math.round(0.3 * sr) * 2 + 8 * (nl + gl));
+      for (let k = 0, o = Math.round(0.3 * sr); k < 8; k++, o += nl + gl) for (let i = 0; i < nl; i++) { const t = i / sr, a = Math.min(1, i / 240, (nl - i) / 240); let s = 0; for (let h = 1; h < 6; h++) s += Math.sin(2 * Math.PI * 110 * h * t) / h; x[o + i] = 0.3 * a * s; }
+      R[gap * 1000 + ' ms'] = audioToNotes(makeBuf(x, sr)).length; }
+    return R; });
+  ok('import: 8 notes on one pitch with short exact-silence gaps stay 8 notes', Object.values(stc).every(n => n === 8), JSON.stringify(stc));
   // 6. sing a bassline over the beat (fake microphone sings C E G A C G)
   await E(() => newSong('Smoke sing')); await W(300);
   await E(() => { runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_chords' }]); ASSIST.run('let me sing the bassline'); });
@@ -152,10 +160,11 @@ try {
   ok('song: sing the chords in Song mode → plays in the selected section like an added part, and a toast says so', sg.mode === 'song' && sg.sung === 'Intro' && sg.sung === sg.ref && /^“Sung chords” plays in Intro\. Click its empty parts/.test(sg.toast || ''), JSON.stringify(sg));
   const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
   await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(1500);
-  await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 15000 }).catch(() => {}); // keepLastSong is async: wait for it on a busy machine
+  // keepLastSong is async: wait for it on a busy machine (QA, 15 Nov: 15 s was too short under load 6-11 on 2 cores; the reopened song was the older copy)
+  const kt0 = Date.now(), kept = await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 45000 }).then(() => true, () => false), keptMs = Date.now() - kt0;
   const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null; try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r) await loadNamed(id);
     return { n0, name0, listed: !!r, name: PROJ.name, n: PROJ.tracks.length, s: songSections().length, label: $('#saveState').textContent }; }, before.id);
-  ok('song: opening the app starts a new empty song; the last one reopens from the list intact', rl.n0 === 0 && rl.listed && rl.name === 'Before reload' && rl.n === before.n && rl.s === before.s, `new song had ${rl.n0} tracks; reopened "${rl.name}" ${rl.n} tracks, ${rl.s} sections`);
+  ok('song: opening the app starts a new empty song; the last one reopens from the list intact', rl.n0 === 0 && rl.listed && rl.name === 'Before reload' && rl.n === before.n && rl.s === before.s, `new song had ${rl.n0} tracks; reopened "${rl.name}" ${rl.n} tracks, ${rl.s} sections; kept in the list after ${kept ? (keptMs / 1000).toFixed(1) + ' s' : 'no "New song" label in 45 s'}`);
   // QA, 13 Nov: after opening a song from the list, Undo must step back inside that song, never to the empty song opened before it
   const uo = await E(async () => { const s = songSections()[0], t = PROJ.tracks[0]; songSetPart(s.id, t.id, { on: !(s.parts[t.id] && s.parts[t.id].on) }); await new Promise(r => setTimeout(r, 200)); undo(); await new Promise(r => setTimeout(r, 200)); return { name: PROJ.name, n: PROJ.tracks.length, s: songSections().length }; });
   ok('song: Undo right after opening a song stays in that song', uo.name === 'Before reload' && uo.n === before.n && uo.s === before.s, `after one change + Undo: "${uo.name}" ${uo.n} tracks, ${uo.s} sections`);
