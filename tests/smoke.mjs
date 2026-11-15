@@ -207,10 +207,10 @@ try {
   ok('"more swing" is full triplet swing (off-16ths 1/12 beat late)', fe.more.sw > 0.32 && Math.abs(fe.lag - 1 / 12) < 0.01 && /66%/.test(fe.more.r), `${fe.lag.toFixed(3)} beat · ${fe.more.r}`);
   ok('"less swing" steps down (66 → 58 → 54 → straight), exact "swing 58%", "no swing"', fe.less.map(x => x.sw).join() === '0.16,0.08,0' && /58%/.test(fe.less[0].r) && Math.abs(fe.exact.sw - 0.16) < 0.005 && fe.none.sw === 0, fe.less.map(x => x.r).join(' → '));
   // AI-6: "straighten it a bit" / "a bit straighter" / "a little less bounce" step one rung; "make it bouncier" steps up; "straighten it" is straight
-  const st = await E(() => { const drums = () => PROJ.tracks.find(t => t.role === 'drums'), said = txt => { LAST_TEXT.text = txt; runActions(localBrain(txt).actions); LAST_TEXT.text = ''; return drums().recipe.swing; };
+  const sw6 = await E(() => { const drums = () => PROJ.tracks.find(t => t.role === 'drums'), said = txt => { LAST_TEXT.text = txt; runActions(localBrain(txt).actions); LAST_TEXT.text = ''; return drums().recipe.swing; };
     runActions([{ type: 'add_drums', style: 'house', swing: '70%' }]); const down = ['too swingy, straighten it a bit', 'a bit straighter', 'a little less bounce', 'straighten the hats a little'].map(said);
     const up = said('make it bouncier'); runActions([{ type: 'groove', swing: '70%' }]); return { down, up, full: said('straighten it') }; });
-  ok('"straighten it a bit" steps 70 → 66 → 58 → 54 → straight; "bouncier" swings; "straighten it" is straight', st.down.join() === '0.333,0.16,0.08,0' && st.up > 0.3 && st.full === 0, `${st.down.join(' → ')} · bouncier ${st.up} · straighten ${st.full}`);
+  ok('"straighten it a bit" steps 70 → 66 → 58 → 54 → straight; "bouncier" swings; "straighten it" is straight', sw6.down.join() === '0.333,0.16,0.08,0' && sw6.up > 0.3 && sw6.full === 0, `${sw6.down.join(' → ')} · bouncier ${sw6.up} · straighten ${sw6.full}`);
   ok('human styles: kick pushes about 10 ms early', fe.kickMs < -6 && fe.kickMs > -14, `${fe.kickMs.toFixed(1)} ms`);
   // with the AI on (mocked like the old live prompt, which sends swing 0 for "less swing"), the user's words still step down
   const ai = await E(async () => { const of = window.fetch, eng = ASSIST.engine, drums = () => PROJ.tracks.find(t => t.role === 'drums');

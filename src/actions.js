@@ -174,6 +174,8 @@ const ACT={
     return `${t.name} on ${INST.get(t.inst).name}`; },
   again(a){ const p=LAST_TAKE.part; if(!p) return; BATCH.take=p; return `Again: sing the ${p} after the count-in`; },
   track_fx(a){ const t=findTrack(a.track); if(!t) return; const w=String(a.effect||'').toLowerCase();
+    /* the AI sometimes sends EQ as an effect ({effect:"eq",amount:{high:-3}}): that is a relative EQ step on the mixer */
+    if(/^(eq|equali[sz](er|ation)?)$/.test(w.trim())){ const eq=a.eq||(a.amount&&typeof a.amount==='object'?a.amount:null)||(a.band&&isFinite(+(a.change??a.amount))?{[String(a.band).toLowerCase()]:+(a.change??a.amount)}:null); return eq?ACT.mix({track:t.id,eq}):undefined; }
     const k=/rev|room|hall|space/.test(w)?'rev':/delay|echo/.test(w)?'dly':/side|pump|duck/.test(w)?'duck':/low ?cut|high ?pass|hp|rumble/.test(w)?'hp':/high ?cut|low ?pass|lp|dark|muffle/.test(w)?'lp':/drive|satur|distort|warm|grit/.test(w)?'drive':/comp|glue|punch/.test(w)?'comp':/wid|stereo|spread/.test(w)?'width':/pan/.test(w)?'pan':/preset|default|studio/.test(w)?'preset':null;
     if(!k) return; t.fx=t.fx||{};
     if(k==='preset'){ t.fx=roleFx(t.role,PROJ.style); refreshTrackGains(); return `Studio effects on ${t.name}`; }
