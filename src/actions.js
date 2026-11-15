@@ -109,16 +109,23 @@ function songTrack(ref){ const au=PROJ.tracks.filter(t=>t.kind==='audio'); if(!a
   return [...au].reverse().find(t=>t.ana&&t.ana.v===ANA_VER)||au[au.length-1]; }
 /* the analysis cached on an audio track (t.ana), if it is still for this clip */
 function trackAna(t){ if(!t||t.kind!=='audio'||!t.ana||t.ana.v!==ANA_VER) return null; const buf=AUD.get(t.id); return buf?anaCached(t,buf):t.ana; }
+/* one undo step for a whole request (SE-7bc fix 1, bug 5): the saves inside the actions (setKey, setBars, a transcribe...) only
+   count; the caller saves once at the end, so the step never depends on how fast the machine is (no 120 ms merge window) */
+function quietSaves(fn){ const real=saveProject; let n=0; saveProject=function(){ n++; }; try{ fn(); } finally{ saveProject=real; } return n; }
+const songChanged=()=>typeof snapState!=='function'||typeof UNDO==='undefined'||snapState()!==UNDO.last;
 /* listen to a clip that has no analysis yet: fn(track, ana) -> {say, chips} runs when it is done and Keys says the result.
-   One job per clip (the import hook may already be listening to it). Returns false when the audio isn't loaded. */
-const ANA_JOBS=new Map();
-function anaThen(t,fn){ const buf=AUD.get(t.id); if(!buf||typeof analyseAudio!=='function') return false; const id=t.id;
-  let job=ANA_JOBS.get(id);
-  if(!job){ job=analyseAudio(buf,{onProgress:p=>{ if(typeof setOrb==='function'&&!ASSIST.speaking) setOrb('thinking',`Listening to “${t.name}”… ${Math.round(p*100)}%`); }})
-      .then(res=>{ const c=anaCache(res,buf), tt=PROJ.tracks.find(x=>x.id===id); if(tt){ tt.ana=c; saveProject(); } return c; }); ANA_JOBS.set(id,job); job.then(()=>ANA_JOBS.delete(id),()=>ANA_JOBS.delete(id)); }
-  job.then(ana=>{ const tt=PROJ.tracks.find(x=>x.id===id); if(!tt) return; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
-      const r=fn(tt,ana)||{}; if(!BATCH.offered) OFFER.actions=null; renderTracks(); uiLoop(); if(r.say&&typeof ASSIST!=='undefined') ASSIST.say(r.say,{chips:r.chips||[]}); if(typeof setOrb==='function'&&!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText()); })
-    .catch(e=>{ console.warn('analysis failed',e); if(typeof ASSIST!=='undefined') ASSIST.say(`I couldn’t listen to “${t.name}”. Try importing it again.`); });
+   Listening goes through the studio's listenToSong (one shared promise per clip with the import and the song card; storing the
+   analysis is not an undo step). What fn changes is one undo step. Returns false when the audio isn't loaded. */
+function anaThen(t,fn){ if(!AUD.get(t.id)||typeof listenToSong!=='function') return false; const id=t.id, nm=t.name;
+  /* a "play" sent with this request waits for the result (playing first would change the song on its own: an empty undo step) */
+  const after=BATCH.after=BATCH.after||[];
+  if(typeof setOrb==='function'&&!ASSIST.speaking) setOrb('thinking',`Listening to “${nm}”…`);
+  listenToSong(t,{quiet:true}).then(ana=>{ const tt=PROJ.tracks.find(x=>x.id===id); if(!tt) return;
+      if(!ana){ if(typeof ASSIST!=='undefined') ASSIST.say(`I couldn’t listen to “${nm}”. Try importing it again.`); return; }
+      BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
+      let r={}; const n=quietSaves(()=>{ r=fn(tt,ana)||{}; after.splice(0).forEach(a=>{ try{ ACT[a.type](a); }catch(e){ console.warn('action failed',a,e); } }); }); if(n||songChanged()) saveProject();
+      if(!BATCH.offered) OFFER.actions=null; renderTracks(); uiLoop(); if(r.say&&typeof ASSIST!=='undefined') ASSIST.say(r.say,{chips:r.chips||[]}); if(typeof setOrb==='function'&&!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText()); })
+    .catch(e=>{ console.warn('analysis failed',e); if(typeof ASSIST!=='undefined') ASSIST.say(`I couldn’t listen to “${nm}”. Try importing it again.`); });
   return true; }
 /* run fn now if the clip is analysed, else listen first; the request's reply says Keys is listening */
 function withAna(t,fn){ const ana=trackAna(t); if(ana){ const r=fn(t,ana)||{}; if(r.say) sayAdd(r.say); return (r.chips||[])[0]||r.chip; }
@@ -299,7 +306,8 @@ const ACT={
 };
 function runActions(list){
   const done=[]; let changed=false; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
-  for(const raw of list||[]){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; try{ const r=ACT[a.type](a); if(r){ done.push(r); changed=true; } }catch(e){ console.warn('action failed',a,e); } }
+  const saves=quietSaves(()=>{ for(const raw of list||[]){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; if(BATCH.after&&a.type==='transport'){ BATCH.after.push(a); continue; } try{ const r=ACT[a.type](a); if(r){ done.push(r); changed=true; } }catch(e){ console.warn('action failed',a,e); } } });
+  if(saves&&!changed&&songChanged()) saveProject(); /* a change that came back without a chip still gets its one step */
   if(changed){ saveProject(); renderTracks(); uiLoop(); if(!BATCH.offered) OFFER.actions=null; }
   return done;
 }
