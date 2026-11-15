@@ -1,0 +1,30 @@
+{
+ "item": "SE-7",
+ "verdict": "great",
+ "score": 4,
+ "why": "Key and chord detection is now table stakes in Logic 12 (Chord ID), Moises, Chordify and every DJ app, and producers use it daily for sampling and remixing. Doing it by voice, in the browser, feeding a chord lane our generators follow is a real differentiator; the risk is accuracy on dense mixes, so confidence display and one-tap correction matter.",
+ "improve": [
+  "Always show confidence plus the second-guess key (relative major/minor) and make correction one tap",
+  "Run on SE-6 stems (bass plus other) when available for better chords",
+  "Answer 'what key is this?' by voice and set the project only on yes"
+ ],
+ "similar": [
+  {
+   "title": "Logic Pro 12 Chord ID",
+   "url": "http://www.soundonsound.com/reviews/apple-logic-pro-12"
+  },
+  {
+   "title": "Moises Chord Finder",
+   "url": "https://moises.ai/features/chord-finder"
+  },
+  {
+   "title": "Chordify",
+   "url": "https://support.chordify.net/hc/en-us/articles/360002221018-What-is-Chordify"
+  },
+  {
+   "title": "Mixed In Key (accuracy test)",
+   "url": "https://blog.dubspot.com/dubspot-lab-report-mixed-in-key-vs-beatport"
+  }
+ ],
+ "at": "2026-11-14"
+}

@@ -67,10 +67,16 @@ function adoptVibe(s,artist,a,noKey){
 }
 function ensureProg(force){ if(PROJ.prog&&!force) return; const k=projectKey(), list=PROGS[k.mode]||PROGS.minor; let p, n=0; do{ p=list[Math.floor(Math.random()*list.length)]; n++; }while(force&&PROJ.prog&&n<9&&p.join()===PROJ.prog.join()); PROJ.prog=p.slice(); }
 const HAT_KIND={'8':'8th','8ths':'8th',eighth:'8th',eighths:'8th','8th':'8th','16':'16th','16ths':'16th',sixteenth:'16th',sixteenths:'16th','16th':'16th',quarters:'quarter',quarter:'quarter','4':'quarter',offbeat:'offbeat',offbeats:'offbeat',shuffle:'shuffle16',shuffled:'shuffle16',shuffle16:'shuffle16',trap:'trap',rolls:'trap',drill:'drill',none:'none',off:'none'};
-function grooveOver(a){
-  const o={kick:a.kick,back:a.back||(a.claps===true||a.clap===true?'clap':a.snare===true?'snare':undefined),open:a.open,shaker:a.shaker,ghost:a.ghost,swing:a.swing,energy:a.energy,fill:a.fill,ride:a.ride};
+/* swing: a number (0..0.4, 0.333 = full triplet swing; above 1 it is a percent, 50 straight to 66 triplet), "58%",
+   or words ("more", "less", "a bit more", "a bit less", "none"), stepped from the beat's current swing (curSwing).
+   The user's own swing words win over the AI's number, once per request, so "less swing" always steps down. */
+function swingOver(a,curSwing){
+  if(BATCH.swing!=null) return a.swing==null?undefined:BATCH.swing;
+  const said=typeof swingSaid==='function'?swingSaid(LAST_TEXT.text):null;
+  const v=resolveSwing(said!=null?said:a.swing,curSwing); if(v!==undefined&&said!=null) BATCH.swing=v; return v; }
+function grooveOver(a,curSwing){
+  const o={kick:a.kick,back:a.back||(a.claps===true||a.clap===true?'clap':a.snare===true?'snare':undefined),open:a.open,shaker:a.shaker,ghost:a.ghost,swing:swingOver(a,curSwing),energy:a.energy,fill:a.fill,ride:a.ride};
   if(a.hats===false) o.hats='none'; else if(typeof a.hats==='string'){ const k=HAT_KIND[a.hats.toLowerCase()]||a.hats.toLowerCase(); if(k==='open') o.open=true; else if(k==='shaker') o.shaker=true; else o.hats=k; }
-  if(a.swing!=null&&+a.swing>1) o.swing=clamp(+a.swing/100,0,0.4);
   const pw=[a.perc,a.percussion,a.congas===true?'congas':null].filter(x=>typeof x==='string').join(' ').toLowerCase();
   if(pw){ const set=[]; [[45,/conga|bongo|hand/],[37,/rim/],[47,/tom/],[56,/cowbell/],[50,/high tom|timbale/]].forEach(([n,re])=>{ if(re.test(pw)) set.push(n); }); if(set.length){ o.percSet=set; o.perc=set.length; } else o.perc=2; }
   else if(a.perc!=null) o.perc=clamp(Math.round(+a.perc),0,3);
@@ -95,9 +101,9 @@ const ACT={
     if(!BATCH.tempo) setTempo(+a.bpm&&Math.abs(+a.bpm-BATCH.startBpm)>0.5?+a.bpm:(artist?artist.bpm:STYLES[s].bpm)); BATCH.vibe=true; const k=parseKey(a.key)||(artist?parseKey(artist.key):null); if(k&&!PROJ.key) setKey(k); ensureProg(true);
     return artist?`Vibe: ${artist.name}, ${artist.desc} (${CTRL.bpm} BPM, ${keyName(projectKey())})`:`Vibe: ${STYLES[s].name}, ${CTRL.bpm} BPM`; },
   add_drums(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a,true);
-    const rec=grooveRecipe(s,artist,grooveOver(a)), seed=+a.seed||newSeed();
+    const rec=grooveRecipe(s,artist,grooveOver(a,grooveRecipe(s,artist).swing)), seed=+a.seed||newSeed();
     const kit=resolveInst(a.kit||a.instrument,'drums')||(artist&&artist.sounds.kit)||STYLES[s].kit, I=loadI(kit);
-    const g=makeGroove(rec,L_(),seed);
+    const g=makeGroove(rec,L_(),seed); if(BATCH.swing!=null) BATCH.swingShown=true;
     addTrack({role:'drums',inst:kit,zone:'pads',gen:true,name:'Drums',events:g.events,recipe:rec,seed,style:s,ref:artist?artist.name:undefined,desc:g.desc},{replaceRole:'drums'});
     return `${artist?artist.name+'-style':STYLES[s].name} drums on ${I.name}: ${g.desc}`; },
   hats(a){ const kind=HAT_KIND[String(a.pattern||a.value||'8th').toLowerCase()]||String(a.pattern||a.value||'8th').toLowerCase();
@@ -106,12 +112,19 @@ const ACT={
     regenTrack(t,{seed:t.seed,recipe:over}); return kind==='none'?'Hi-hats removed':`Hi-hats: ${t.desc}`; },
   groove(a){ const t=findTrack(a.track||'drums'); if(!t||t.role!=='drums') return;
     if(!t.recipe) return ACT.add_drums(a);
-    const over=grooveOver(a); if(a.change!=null) over.energy=(t.recipe.energy||3)+Math.sign(+a.change);
+    const prev=+t.recipe.swing||0, over=grooveOver(a,prev); if(a.change!=null) over.energy=(t.recipe.energy||3)+Math.sign(+a.change);
     Object.keys(over).forEach(k=>over[k]===undefined&&delete over[k]);
-    regenTrack(t,{seed:a.fresh?undefined:t.seed,recipe:over}); return `Groove: ${t.desc}`; },
+    /* the swing was already set and shown by vary or add_drums in this request: no second chip */
+    if(BATCH.swingShown&&Object.keys(over).join()==='swing'&&Math.abs(over.swing-prev)<0.001) return;
+    regenTrack(t,{seed:a.fresh?undefined:t.seed,recipe:over}); BATCH.swingShown=over.swing!==undefined||BATCH.swingShown;
+    if(over.swing===undefined) return `Groove: ${t.desc}`;
+    const sw=swingWords(+t.recipe.swing||0,prev); return Object.keys(over).length>1?`${sw}; ${t.desc}`:sw; },
   vary(a){ const t=findTrack(a.track||'drums'); if(!t) return;
     if(!t.gen){ return `${t.name} is your own part, so I left it as it is`; }
     if(t.role==='chords'&&a.progression!==false){ ensureProg(true); PROJ.tracks.filter(x=>x.gen&&(x.role==='bass'||x.role==='chords'||x.role==='melody')).forEach(x=>regenTrack(x)); return `New chord progression (${PROJ.prog.map(d=>['i','ii','iii','iv','v','vi','vii'][d]).join('–')}); bass and melody follow it`; }
+    /* "another one with less swing": the new take gets the new swing, so its chip shows the real amount (one chip, not two) */
+    if(t.role==='drums'&&t.recipe&&typeof swingSaid==='function'&&swingSaid(LAST_TEXT.text)!=null){ const prev=+t.recipe.swing||0, v=swingOver({},prev);
+      if(v!==undefined){ const d=regenTrack(t,{recipe:{swing:v}}); BATCH.swingShown=true; return d?`${swingWords(v,prev)}; ${t.name}: ${d}`:null; } }
     const d=regenTrack(t); return d?`${t.name}: ${d}`:null; },
   add_bass(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'bass')||(artist&&artist.sounds.bass)||STYLES[s].bass, I=loadI(id), seed=+a.seed||newSeed();
     addPart({role:'bass',inst:id,gen:true,name:'Bassline',events:genBass(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},Object.assign({},a,{replace:a.replace!==false&&!a.new})); return `Bassline on ${I.name} in ${keyName(projectKey())}`; },

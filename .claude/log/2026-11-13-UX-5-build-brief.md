@@ -1,0 +1,10 @@
+# UX-5 bug-fix brief (studio-ux-dev, Build mode), 13 Nov 2026 15:00 IST
+
+Read `.claude/standards/dev-standards.md` first ("Quality bar": every change undoable through saveProject; UI labels short and musician-friendly; never hard-code colours).
+
+Bug (tester finding F1, live on main since UX-1 shipped today): a part you SING while the song is in Song mode only plays in the selected section, and nothing tells you.
+Steps: New song → "add drums", "add a bassline" → Make it a song ▾ → Short (Intro selected) → "let me sing the chords", sing 4 bars → play the song. Actual: "Sung chords" is on in Intro only; Drop and Outro are empty; no toast. Same for a sung bassline. Cause (tester): during the take the app is in Loop mode, so `songSync` (src/song.js) skips its Song-mode toast; `backSong` (src/studio.js) returns to Song mode afterwards. Screenshot: /home/claude/bugs/F1/12-sing-song-done.png.
+Expected (no new design): a sung part behaves exactly like a part the assistant adds in Song mode: it gets the same placement rule and the same toast ("“Sung chords” plays in Intro. Click its empty parts to add it elsewhere."), shown after the take when the app returns to Song mode. If a sung part REPLACES nothing and the song was made from the loop, keep today's placement rule for new parts (don't invent a new one). One undo step for the whole take as today.
+
+Work: `git clone https://github.com/bigcapllco24-spec/studio-keys /home/claude/sk-ux5 && cd /home/claude/sk-ux5 && git checkout -b preview-ux-5 origin/main`; git user Claude / noreply@anthropic.com. You may edit `src/song.js` (UX-1 file, yours) and `src/studio.js`. Add a smoke line in `tests/smoke.mjs` (sing in Song mode → toast names the section, part placement matches an assistant-added part). Rebuild with `python3 tools/build.py`; `bash .claude/tools/check.sh` must pass. Commit (message ending with "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" and "Claude-Session: https://claude.ai/code/session_01HCuZAS3jBVpAdHnYGDKkHc") and `git push origin preview-ux-5`. Never push main. Keep it small (S).
+Final message: what changed, how tested (numbers), head hash.

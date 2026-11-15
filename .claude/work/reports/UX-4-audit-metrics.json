@@ -1,0 +1,986 @@
+{
+ "iphone": {
+  "empty": {
+   "W": 401,
+   "scrollW": 401,
+   "pageH": 14579,
+   "small": 222,
+   "taps": 311,
+   "over": [
+    {
+     "el": "div#knobs.knobs",
+     "right": 493,
+     "w": 426
+    },
+    {
+     "el": "div.knob",
+     "right": 439,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 422,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 436,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 436,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 433,
+     "w": 36
+    },
+    {
+     "el": "span",
+     "right": 421,
+     "w": 12
+    },
+    {
+     "el": "div.knob",
+     "right": 493,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 477,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 490,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 490,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 493,
+     "w": 48
+    }
+   ],
+   "overCount": 67,
+   "y": {
+    "header": 0,
+    "controller": 240,
+    "studio": 1444,
+    "orb": 1718,
+    "input": 1971,
+    "transport": 2681,
+    "tracks": 3345,
+    "taste": 2376
+   }
+  },
+  "song": {
+   "W": 401,
+   "scrollW": 401,
+   "pageH": 15182,
+   "small": 262,
+   "taps": 351,
+   "over": [
+    {
+     "el": "div#knobs.knobs",
+     "right": 493,
+     "w": 426
+    },
+    {
+     "el": "div.knob",
+     "right": 439,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 422,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 436,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 436,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 433,
+     "w": 36
+    },
+    {
+     "el": "span",
+     "right": 421,
+     "w": 12
+    },
+    {
+     "el": "div.knob",
+     "right": 493,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 477,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 490,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 490,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 493,
+     "w": 48
+    }
+   ],
+   "overCount": 67,
+   "y": {
+    "header": 0,
+    "controller": 240,
+    "studio": 1444,
+    "orb": 1718,
+    "input": 1971,
+    "transport": 2681,
+    "tracks": 3289,
+    "taste": 2376
+   }
+  },
+  "songview": {
+   "W": 401,
+   "scrollW": 401,
+   "pageH": 14939,
+   "small": 262,
+   "taps": 355,
+   "over": [
+    {
+     "el": "div#knobs.knobs",
+     "right": 493,
+     "w": 426
+    },
+    {
+     "el": "div.knob",
+     "right": 439,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 422,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 436,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 436,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 433,
+     "w": 36
+    },
+    {
+     "el": "span",
+     "right": 421,
+     "w": 12
+    },
+    {
+     "el": "div.knob",
+     "right": 493,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 477,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 490,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 490,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 493,
+     "w": 48
+    }
+   ],
+   "overCount": 67,
+   "y": {
+    "header": 0,
+    "controller": 240,
+    "studio": 1444,
+    "orb": 1683,
+    "input": 1936,
+    "transport": 2646,
+    "tracks": 3398,
+    "taste": 2341
+   }
+  },
+  "editor": {
+   "W": 401,
+   "scrollW": 401,
+   "pageH": 15874,
+   "small": 270,
+   "taps": 359,
+   "over": [
+    {
+     "el": "div#knobs.knobs",
+     "right": 493,
+     "w": 426
+    },
+    {
+     "el": "div.knob",
+     "right": 439,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 422,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 436,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 436,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 433,
+     "w": 36
+    },
+    {
+     "el": "span",
+     "right": 421,
+     "w": 12
+    },
+    {
+     "el": "div.knob",
+     "right": 493,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 477,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 490,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 490,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 493,
+     "w": 48
+    }
+   ],
+   "overCount": 68,
+   "y": {
+    "header": 0,
+    "controller": 240,
+    "studio": 1444,
+    "orb": 1718,
+    "input": 1971,
+    "transport": 2681,
+    "tracks": 3289,
+    "taste": 2376
+   }
+  },
+  "mixer": {
+   "W": 401,
+   "scrollW": 401,
+   "pageH": 15183,
+   "small": 247,
+   "taps": 336,
+   "over": [
+    {
+     "el": "div#knobs.knobs",
+     "right": 493,
+     "w": 426
+    },
+    {
+     "el": "div.knob",
+     "right": 439,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 422,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 436,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 436,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 433,
+     "w": 36
+    },
+    {
+     "el": "span",
+     "right": 421,
+     "w": 12
+    },
+    {
+     "el": "div.knob",
+     "right": 493,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 477,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 490,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 490,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 493,
+     "w": 48
+    }
+   ],
+   "overCount": 67,
+   "y": {
+    "header": 0,
+    "controller": 240,
+    "studio": 1444,
+    "orb": 1718,
+    "input": 1971,
+    "transport": 2681,
+    "tracks": 3105,
+    "taste": 2376
+   }
+  },
+  "errors": []
+ },
+ "android": {
+  "empty": {
+   "W": 401,
+   "scrollW": 401,
+   "pageH": 15118,
+   "small": 222,
+   "taps": 311,
+   "over": [
+    {
+     "el": "div#knobs.knobs",
+     "right": 493,
+     "w": 426
+    },
+    {
+     "el": "div.knob",
+     "right": 439,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 422,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 436,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 436,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 433,
+     "w": 36
+    },
+    {
+     "el": "span",
+     "right": 421,
+     "w": 12
+    },
+    {
+     "el": "div.knob",
+     "right": 493,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 477,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 490,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 490,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 493,
+     "w": 48
+    }
+   ],
+   "overCount": 67,
+   "y": {
+    "header": 0,
+    "controller": 240,
+    "studio": 1444,
+    "orb": 1718,
+    "input": 1971,
+    "transport": 2753,
+    "tracks": 3462,
+    "taste": 2448
+   }
+  },
+  "song": {
+   "W": 401,
+   "scrollW": 401,
+   "pageH": 15706,
+   "small": 262,
+   "taps": 351,
+   "over": [
+    {
+     "el": "div#knobs.knobs",
+     "right": 493,
+     "w": 426
+    },
+    {
+     "el": "div.knob",
+     "right": 439,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 422,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 436,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 436,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 433,
+     "w": 36
+    },
+    {
+     "el": "span",
+     "right": 421,
+     "w": 12
+    },
+    {
+     "el": "div.knob",
+     "right": 493,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 477,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 490,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 490,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 493,
+     "w": 48
+    }
+   ],
+   "overCount": 67,
+   "y": {
+    "header": 0,
+    "controller": 240,
+    "studio": 1444,
+    "orb": 1718,
+    "input": 1971,
+    "transport": 2753,
+    "tracks": 3462,
+    "taste": 2448
+   }
+  },
+  "songview": {
+   "W": 401,
+   "scrollW": 401,
+   "pageH": 15463,
+   "small": 262,
+   "taps": 355,
+   "over": [
+    {
+     "el": "div#knobs.knobs",
+     "right": 493,
+     "w": 426
+    },
+    {
+     "el": "div.knob",
+     "right": 439,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 422,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 436,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 436,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 433,
+     "w": 36
+    },
+    {
+     "el": "span",
+     "right": 421,
+     "w": 12
+    },
+    {
+     "el": "div.knob",
+     "right": 493,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 477,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 490,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 490,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 493,
+     "w": 48
+    }
+   ],
+   "overCount": 67,
+   "y": {
+    "header": 0,
+    "controller": 240,
+    "studio": 1444,
+    "orb": 1683,
+    "input": 1936,
+    "transport": 2718,
+    "tracks": 3571,
+    "taste": 2413
+   }
+  },
+  "editor": {
+   "W": 401,
+   "scrollW": 401,
+   "pageH": 16417,
+   "small": 270,
+   "taps": 359,
+   "over": [
+    {
+     "el": "div#knobs.knobs",
+     "right": 493,
+     "w": 426
+    },
+    {
+     "el": "div.knob",
+     "right": 439,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 422,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 436,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 436,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 433,
+     "w": 36
+    },
+    {
+     "el": "span",
+     "right": 421,
+     "w": 12
+    },
+    {
+     "el": "div.knob",
+     "right": 493,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 477,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 490,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 490,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 493,
+     "w": 48
+    }
+   ],
+   "overCount": 68,
+   "y": {
+    "header": 0,
+    "controller": 240,
+    "studio": 1444,
+    "orb": 1718,
+    "input": 1971,
+    "transport": 2753,
+    "tracks": 3462,
+    "taste": 2448
+   }
+  },
+  "mixer": {
+   "W": 401,
+   "scrollW": 401,
+   "pageH": 15706,
+   "small": 247,
+   "taps": 336,
+   "over": [
+    {
+     "el": "div#knobs.knobs",
+     "right": 493,
+     "w": 426
+    },
+    {
+     "el": "div.knob",
+     "right": 439,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 422,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 436,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 436,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 433,
+     "w": 36
+    },
+    {
+     "el": "span",
+     "right": 421,
+     "w": 12
+    },
+    {
+     "el": "div.knob",
+     "right": 493,
+     "w": 48
+    },
+    {
+     "el": "span.kn",
+     "right": 477,
+     "w": 15
+    },
+    {
+     "el": "div.dial",
+     "right": 490,
+     "w": 42
+    },
+    {
+     "el": "div.cap",
+     "right": 490,
+     "w": 43
+    },
+    {
+     "el": "span.lbl",
+     "right": 493,
+     "w": 48
+    }
+   ],
+   "overCount": 67,
+   "y": {
+    "header": 0,
+    "controller": 240,
+    "studio": 1444,
+    "orb": 1718,
+    "input": 1971,
+    "transport": 2753,
+    "tracks": 3278,
+    "taste": 2448
+   }
+  },
+  "errors": []
+ },
+ "ipad": {
+  "empty": {
+   "W": 820,
+   "scrollW": 820,
+   "pageH": 8181,
+   "small": 226,
+   "taps": 311,
+   "over": [
+    {
+     "el": "div#keyboard.keyboard",
+     "right": 835,
+     "w": 756
+    },
+    {
+     "el": "div.key.w",
+     "right": 834,
+     "w": 21
+    },
+    {
+     "el": "span.nl",
+     "right": 829,
+     "w": 12
+    }
+   ],
+   "overCount": 3,
+   "y": {
+    "header": 0,
+    "controller": 123,
+    "studio": 1168,
+    "orb": 1321,
+    "input": 1382,
+    "transport": 1827,
+    "tracks": 2131,
+    "taste": 1624
+   }
+  },
+  "song": {
+   "W": 820,
+   "scrollW": 820,
+   "pageH": 8836,
+   "small": 266,
+   "taps": 351,
+   "over": [
+    {
+     "el": "div#keyboard.keyboard",
+     "right": 835,
+     "w": 756
+    },
+    {
+     "el": "div.key.w",
+     "right": 834,
+     "w": 21
+    },
+    {
+     "el": "span.nl",
+     "right": 829,
+     "w": 12
+    }
+   ],
+   "overCount": 3,
+   "y": {
+    "header": 0,
+    "controller": 123,
+    "studio": 1168,
+    "orb": 1321,
+    "input": 1382,
+    "transport": 1827,
+    "tracks": 2131,
+    "taste": 1624
+   }
+  },
+  "songview": {
+   "W": 820,
+   "scrollW": 820,
+   "pageH": 8986,
+   "small": 270,
+   "taps": 375,
+   "over": [
+    {
+     "el": "div#keyboard.keyboard",
+     "right": 835,
+     "w": 756
+    },
+    {
+     "el": "div.key.w",
+     "right": 834,
+     "w": 21
+    },
+    {
+     "el": "span.nl",
+     "right": 829,
+     "w": 12
+    }
+   ],
+   "overCount": 3,
+   "y": {
+    "header": 0,
+    "controller": 123,
+    "studio": 1168,
+    "orb": 1286,
+    "input": 1347,
+    "transport": 1792,
+    "tracks": 2281,
+    "taste": 1589
+   }
+  },
+  "editor": {
+   "W": 820,
+   "scrollW": 820,
+   "pageH": 9475,
+   "small": 274,
+   "taps": 359,
+   "over": [
+    {
+     "el": "div#keyboard.keyboard",
+     "right": 835,
+     "w": 756
+    },
+    {
+     "el": "div.key.w",
+     "right": 834,
+     "w": 21
+    },
+    {
+     "el": "span.nl",
+     "right": 829,
+     "w": 12
+    }
+   ],
+   "overCount": 3,
+   "y": {
+    "header": 0,
+    "controller": 123,
+    "studio": 1168,
+    "orb": 1321,
+    "input": 1382,
+    "transport": 1827,
+    "tracks": 2131,
+    "taste": 1624
+   }
+  },
+  "mixer": {
+   "W": 820,
+   "scrollW": 820,
+   "pageH": 8491,
+   "small": 251,
+   "taps": 336,
+   "over": [
+    {
+     "el": "div#keyboard.keyboard",
+     "right": 835,
+     "w": 756
+    },
+    {
+     "el": "div.key.w",
+     "right": 834,
+     "w": 21
+    },
+    {
+     "el": "span.nl",
+     "right": 829,
+     "w": 12
+    }
+   ],
+   "overCount": 3,
+   "y": {
+    "header": 0,
+    "controller": 123,
+    "studio": 1168,
+    "orb": 1321,
+    "input": 1382,
+    "transport": 1827,
+    "tracks": 2007,
+    "taste": 1624
+   }
+  },
+  "errors": []
+ }
+}

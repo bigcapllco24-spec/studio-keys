@@ -1,0 +1,30 @@
+{
+ "item": "RES-5",
+ "verdict": "good",
+ "score": 4,
+ "why": "Stem separation is now table stakes (Ableton 12.3 Suite, Logic 11.2, FL 2025, Moises, Fadr), so a bare splitter won't stand out. Doing it free, privately on-device and by voice ('play the background', 'keep the drums and bass, new melody') and feeding it straight into making parts is new.",
+ "improve": [
+  "Launch as karaoke plus 'keep these parts' by voice, not a bare split button",
+  "Add Re-drum (drum stem to MIDI on our kits) soon after: producers want the groove with their own sounds",
+  "Make the one-time ~110 MB download and the on-device privacy explicit in one line"
+ ],
+ "similar": [
+  {
+   "title": "Ableton Live 12 Stem Separation",
+   "url": "https://www.ableton.com/en/live-manual/12/stem-separation/"
+  },
+  {
+   "title": "Logic Pro 11.2 review (Stem Splitter)",
+   "url": "https://www.soundonsound.com/reviews/apple-logic-pro-11-2"
+  },
+  {
+   "title": "Moises",
+   "url": "https://apps.apple.com/us/app/1515796612"
+  },
+  {
+   "title": "Fadr drum stems",
+   "url": "https://www.fadr.com/drum-stems"
+  }
+ ],
+ "at": "2026-11-13T15:30:00+05:30"
+}

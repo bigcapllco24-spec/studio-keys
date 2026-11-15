@@ -1,5 +1,5 @@
 # Studio Keys development standards
-Owned by the lead. Every developer reads this before every job. Last updated: 13 Nov 2026.
+Owned by the lead. Every developer reads this before every job. Last updated: 15 Nov 2026.
 
 ## What Studio Keys is for (the owner's words, 12-13 Nov 2026)
 - "A talk assistant to make, mix and produce music, and a software like Ableton/FL in it."
@@ -22,6 +22,10 @@ Owned by the lead. Every developer reads this before every job. Last updated: 13
 - (owner, 13 Nov) Opening the app starts a NEW empty project by default; old songs open from a past-projects list.
 - (owner, 13 Nov) The assistant talks with the user to understand the music they want: it learns from their Spotify taste, asks questions, suggests additions when that helps (and only if suggestions are on), and lets them sing parts.
 - (owner, 13 Nov, SE-3 approval) Feel settings like swing must stay adjustable by the user ("less swing", a control) when a default feels too heavy.
+
+- (owner, 14 Nov, AI-1 approval) "Make it a full track" is about 3 minutes (16-bar sections) unless the user says club, extended or DJ (then about 6 minutes). "Arrange it" arranges only the parts that exist and suggests adding bass or chords; it never adds parts by itself. Transitions ship as drum transitions (snare roll, gap before the drop, fill, crash); a "riser" request uses a roll plus crash and Keys says so, until the engine has real risers.
+- (owner, 14 Nov, SE-7 approval) The key is shown honestly (sureness, a second guess, "no key yet"), with the DJ key code labelled "DJ key" (never "Camelot", a trademark). Live listening from the mic comes later (7d). If a user wants the same melody or chords as a song they bring in, Keys lets them do it: the user has a free pass. Keys itself still never copies a song's melody unasked; it offers a new melody over the chords by default.
+- (owner, 14 Nov, SE-3 release) "More swing" means full triplet swing (about 66%), and the measured drummer feel applies to every style.
 
 ## How we build
 - Source in `src/`, one file per area (see `.claude/CLAUDE.md` for owners). `python3 tools/build.py` writes `index.html`; never edit `index.html` by hand.
@@ -50,3 +54,5 @@ Owned by the lead. Every developer reads this before every job. Last updated: 13
 - 13 Nov 2026: users must be able to download what they make as an MP3 (shipped: Download MP3 button and the assistant's export action).
 - 13 Nov 2026 (SE-3/UX-1 approvals): the team keeps learning from the owner's uploaded packs (Drum Essentials, PML), his linked Spotify artists and songs and his stated preferences, and uses them to keep improving sounds, instruments, mixing and production. Derived numbers only, never copied samples or patterns.
 - 13 Nov 2026: wants a dev team like the games team that uses the app, fixes bugs, looks for upgrades, suggests them and asks for final approval.
+- 13 Nov 2026 (HQ requests): optimise for phones, with the Keys assistant first on the phone, and a plan to turn it into an app (UX-4). Wants stem splitting (drums incl. kick/hats, bass, melody, instruments, vocals) for karaoke ("play the background") and remixes (SE-6). Wants Spotify to connect with just a Client ID built in (AI-5).
+- 13 Nov 2026 (UX-4 design approval): on phones, a bottom tab bar Keys · Song · Mix · Play · More, opening on Keys, with Play always visible. On iPhone, when talking fails, open typing and point to the keyboard's dictation mic (no paid speech service). App path: installable web app only for now, no store apps. Owner: talking to Keys on iPhone worked before, so fix it on our side rather than blame Apple. Every UI change is now checked at 390 and 360 px too (tests/phone.mjs).
