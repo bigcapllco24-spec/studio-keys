@@ -753,7 +753,15 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 .lk.ana-l{color:var(--signal)}
 .lk.ana-l[aria-pressed="true"]{text-decoration:underline;text-underline-offset:3px}
 @media (max-width:860px){.chordlane{grid-template-columns:minmax(0,1fr);gap:6px}.cl-strip{min-width:max(100%,calc(var(--bars,4) * 46px))}}
+/* the playhead runs over the lanes only: a track's song card and FX panel sit above it. A faded (muted) track fades its parts
+   instead of itself, and the card and panel fade their contents, so their solid background still hides the line */
+.trk>.songcard,.trk>.tfx{position:relative;z-index:3}
+.trk.quiet:has(>.songcard,>.tfx){opacity:1}
+.trk.quiet:has(>.songcard,>.tfx)>:not(.songcard):not(.tfx),.trk.quiet>.songcard>*,.trk.quiet>.tfx>*{opacity:.5}
 @media (max-width:600px){
+  /* while the chord fixer sheet is open at the bottom, messages show at the top so they never cover "Use …" or "Or type one" */
+  body:has(#chordPop:not([hidden])) .toast{top:calc(12px + env(safe-area-inset-top,0px));bottom:auto;transform:translateY(-8px)}
+  body:has(#chordPop:not([hidden])) .toast.show{transform:none}
   .chordpop{position:fixed;left:16px!important;right:16px;top:auto!important;bottom:16px;width:auto;max-height:calc(100vh - 32px);overflow:auto}
   .cp-roots button,.chordpop .cp-q button,.cp-act .btn{min-height:44px}
 }
