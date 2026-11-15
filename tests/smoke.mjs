@@ -68,6 +68,11 @@ try {
     const L = localBrain('turn it down a bit'), chip = runActions(L.actions).join(), v1 = vols(), r = PROJ.tracks.map(t => t.vol).filter(v => v > 0); undo();
     return { down: L.actions.map(a => a.type + ':' + a.track + ':' + a.db).join(), chip, reply: L.reply, changed: v1 !== v0, back: vols() === v0, master: (MIX.master ? MIX.master.vol : 1) === m0, added: PROJ.tracks.length - n0 }; });
   ok('"turn it down a bit" moves every part 3 dB and Undo puts it back exactly (master fader untouched)', song.down === 'mix:all:-3' && song.changed && song.back && song.master && song.added === 0 && /3 dB/.test(song.chip) && /3 dB/.test(song.reply), `${song.down} · ${song.chip} · undo exact ${song.back}`);
+  // QA (AI-6 retest): "punchier" stops at +6 dB low EQ and 90% compressor (then an honest reply), and Undo puts the drums back exactly
+  const pc6 = await E(() => { const D = () => PROJ.tracks.find(t => t.role === 'drums'), s = () => [D().lo || 0, D().fx.comp || 0].join(), s0 = s(), u0 = UNDO.stack.length; let last = ''; /* Undo swaps the track objects, so look the drums up each time */
+    for (let i = 0; i < 6; i++) { const L = localBrain('make the kick punchier'); runActions(L.actions); last = L.actions.length ? '' : L.reply; }
+    const lo = D().lo || 0, comp = Math.round((D().fx.comp || 0) * 100); while (UNDO.stack.length > u0) undo(); return { lo, comp, last, back: s() === s0 }; });
+  ok('"make the kick punchier" x6 stops at +6 dB low EQ / 90% compressor with an honest reply; Undo restores', pc6.lo <= 6 && pc6.comp <= 90 && /already as punchy/.test(pc6.last) && pc6.back, `low +${pc6.lo} dB, comp ${pc6.comp}%`);
   // AI-6 fix 1: "very" and Hinglish level sentences change the mix only
   const hin = await E(() => { const n0 = PROJ.tracks.length; const R = ['the drums are very loud', 'the bass is very quiet', 'drums bahut loud hai', 'drums ki awaaz kam karo', 'melody thoda kam karo', 'hats ko soft karo', 'bass ko thoda upar karo'].map(s => { const L = localBrain(s); return L.actions.map(a => a.type).join('+') || (/full volume/.test(L.reply || '') ? 'full' : ''); });
     return { R: R.join(' | '), ok: R.every(x => /^(mix(\+mix)*|full)$/.test(x)), added: PROJ.tracks.length - n0 }; });
