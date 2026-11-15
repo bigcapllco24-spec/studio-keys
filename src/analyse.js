@@ -441,7 +441,8 @@ function chordsFromAna(ana,o={}){
 }
 /* addSongChords(track, {bars, to, at, bass, align, inst, seed, grow}) puts a song's chords on your song:
    PROJ.chords from the clip's analysis (chordsFromAna), then a new "Chords" track: our own voicing and rhythm on the style's
-   chord sound (inst overrides it), never the song's audio. The bass, chords and melody Keys made follow the new chords with
+   chord sound (inst overrides it), never the song's audio; when Keys already made a Chords part (on that sound), that part
+   is re-used instead, so the chords never double up (reused: true). The bass, chords and melody Keys made follow the new chords with
    their own seeds. bass: true also makes the bassline follow the song's bass notes (a new "Bassline" if there is none).
    to 'song' (or a song with no key yet) sets your key to the song's ('from the song') unless you set one yourself.
    grow (default true): a loop shorter than the chords grows to fit (4 -> 8 bars). One undo step.
@@ -458,11 +459,16 @@ function addSongChords(t,o={}){
   PROJ.chords=chords; const moved=followChords();
   const s=PROJ.style||'house', S=STYLES[s]||STYLES.house, L=PROJ.bars*4, seed=+o.seed||newSeed(), inst=o.inst||S.chords, ld=id=>{ try{ if(typeof loadI==='function') loadI(id); }catch(e){} };
   const uniq=n=>{ if(!PROJ.tracks.some(x=>x.name===n)) return n; let k=2; while(PROJ.tracks.some(x=>x.name===n+' '+k)) k++; return n+' '+k; };
-  ld(inst); const ct=makeTrack({role:'chords',inst,gen:true,name:uniq('Chords'),events:genChords(s,L,seed,heldChordStyle(inst,s)),seed,style:s,fromSong:t?t.id:undefined}); PROJ.tracks.push(ct);
+  /* Keys' own chords part is re-used (it already follows the new chords, with its own sound and rhythm), so the chords never
+     double up; a new one only when there is none, or when you ask for another sound. Parts you played or sang are never touched. */
+  const mineC=PROJ.tracks.filter(x=>x.gen&&x.kind==='notes'&&x.role==='chords'&&(!o.inst||x.inst===o.inst)), own=mineC.find(x=>t&&x.fromSong===t.id)||mineC[0]||null;
+  let ct; if(own){ ct=own; if(t) ct.fromSong=t.id; }
+  else { ld(inst); ct=makeTrack({role:'chords',inst,gen:true,name:uniq('Chords'),events:genChords(s,L,seed,heldChordStyle(inst,s)),seed,style:s,fromSong:t?t.id:undefined}); PROJ.tracks.push(ct); }
   let bt=null; if(o.bass&&!PROJ.tracks.some(x=>x.gen&&x.kind==='notes'&&x.role==='bass')){ const bi=S.bass, bs=newSeed(); ld(bi); bt=makeTrack({role:'bass',inst:bi,gen:true,name:uniq('Bassline'),events:genBass(s,L,bs),seed:bs,style:s,fromSong:t?t.id:undefined}); PROJ.tracks.push(bt); }
   chordsRedraw();
   const nm=(t&&t.name)||'the song', key=to==='mine'?st.key:(setOwn?st.key:songKey||st.key), names=chordsText(chords.slice(0,8));
   const moveTxt=shift?` moved ${shiftWords(shift)} into your key, ${keyName(st.key)}`:to==='song'&&songKey?` in the song's key, ${keyName(songKey)}`:'';
-  const text=`Chords from “${nm}” on a new ${ct.name} track: ${names}${chords.length>8?' …':''}${moveTxt}`+(bt?'; a new bassline follows the song\'s bass':o.bass?'; your bassline follows the song\'s bass':'')+(moved.length?`; ${moved.join(', ')} follow${moved.length===1?'s':''}`:'');
-  return {chords,track:ct,bass:bt,key,songKey,shift,to,bars:nb,moved,text};
+  const others=moved.filter(n=>n!==ct.name);
+  const text=`Chords from “${nm}” on ${own?'your':'a new'} ${ct.name} track: ${names}${chords.length>8?' …':''}${moveTxt}`+(bt?'; a new bassline follows the song\'s bass':o.bass?'; your bassline follows the song\'s bass':'')+(others.length?`; ${others.join(', ')} follow${others.length===1?'s':''}`:'');
+  return {chords,track:ct,reused:!!own,bass:bt,key,songKey,shift,to,bars:nb,moved,text};
 }
