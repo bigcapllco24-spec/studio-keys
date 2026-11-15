@@ -80,9 +80,10 @@ async function handleRequest(text){
   } else { const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
   /* the AI sometimes offers a riser or a filter sweep as the next step; the studio has neither yet (D3), so offer what it has */
   if(reply&&!/\b(riser|sweep|uplifter)\b/i.test(text)) reply=reply.replace(/[^.!?]*\b(risers?|uplifters?|(?:filter |noise )?sweeps?)\b[^.!?]*\?/gi,()=>!songArranged()?'':/\broll/i.test(text)?' Want the second drop to be different?':' Want a snare roll into the drop?').replace(/\s+/g,' ').trim();
+  /* nothing changed (it was already like that): say so, or say why (an executor note), and keep the AI's question if it asked one (QA fix 2) */
+  if(BATCH.same){ const q=(reply.match(/[^.!?]*\?\s*$/)||[''])[0].trim(), why=(BATCH.notes||[]).map(n=>n.text); BATCH.notes=[];
+    reply=(why.length?why.join(' '):`It’s already like that, so nothing changed${BATCH.same.length?': '+BATCH.same.join(', '):''}.`)+' '+(q||nextStep()); }
   /* what the executor knows and the AI didn't: a clamped length, a riser played as a roll, a missing part (AI-1) */
-  /* nothing changed (it was already like that): say so, keep the AI's question if it asked one (QA fix 2) */
-  if(BATCH.same){ const q=(reply.match(/[^.!?]*\?\s*$/)||[''])[0].trim(); reply=`It’s already like that, so nothing changed${BATCH.same.length?': '+BATCH.same.join(', '):''}.`+' '+(q||nextStep()); }
   const notes=(BATCH.notes||[]).filter(n=>!(n.unless&&n.unless.test(reply))).map(n=>n.text);
   if(reply&&notes.length) reply=reply.replace(/\s*$/,'')+' '+notes.join(' ');
   else if(!reply&&!done.length&&notes.length) reply=notes.join(' ');

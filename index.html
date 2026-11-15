@@ -5145,20 +5145,25 @@ function songShape(S,hint,club){ if(!hint) return; const roleIn=(list,t)=>{ cons
   S.forEach(s=>{ if(s.kind==='intro'&&hint.introX) s.bars=snapBars(s.bars*hint.introX,8); if(s.kind==='break'){ if(hint.breakBars) s.bars=snapBars(hint.breakBars*(club?2:1)); else if(hint.breakX) s.bars=snapBars(s.bars*hint.breakX,8); } });
   /* nothing would play (say a drums-only intro in a song with no drums): play what the template chose instead */
   S.forEach(s=>{ if(PROJ.tracks.length&&!PROJ.tracks.some(t=>s.parts[t.id]&&s.parts[t.id].on)) PROJ.tracks.forEach(t=>s.parts[t.id]=songDefaultPart(t,s.kind)); if(!PROJ.tracks.some(t=>s.parts[t.id].on)) PROJ.tracks.forEach(t=>s.parts[t.id]={on:true,variant:'A'}); }); }
-/* the whole song to about N minutes: every section stays an 8, 16 or 32-bar phrase (64 for very long ones), the way DJs count; never under about a minute
-   unless the user asked for seconds or a reel (QA fix 2: "shorter" gave 12-bar drops and a 0.5-minute song) */
+/* the whole song to about N minutes: every section stays an 8, 16 or 32-bar phrase (64 only for very long ones), the way DJs count; never under about a minute
+   unless the user asked for seconds or a reel (QA fix 2: "shorter" gave 12-bar drops and a 0.5-minute song). Each section can take the phrase just under or
+   just over its share; of those layouts the one closest to the time asked wins ("shorter" lands at or under it, "longer" at or over), keeping each section
+   near its share, the drops matched and longest, and builds at 16 bars or less */
 const PHRASES=[8,16,32,64];
 function songScaleTo(minutes){ const S=songSections(), have=songBars(); if(!have) return null; let mins=clamp(+minutes||0,0.25,12);
   if(mins<1&&!/\b(\d+ ?sec\w*|seconds?|reels?|teaser|short version)\b/.test(said())){ mins=1; if(songSecs(have)<=75) songNote('It’s about a minute already, the shortest a full song goes here.'); }
-  const want=Math.round(mins*60*CTRL.bpm/240), f=want/have, near=x=>PHRASES.reduce((a,p)=>Math.abs(p-x)<Math.abs(a-x)?p:a,8);
-  const grow={drop:5,break:4,intro:3,outro:2,build:0}, pri=(s,up)=>{ const g=grow[s.kind]!=null?grow[s.kind]:1; return up?g:5-g; };
-  songEdit(S=>{ const ideal=S.map(s=>s.bars*f); S.forEach((s,i)=>{ s.bars=near(ideal[i]); });
-    /* then step single sections up or down a phrase while that brings the total closer: the one furthest from its ideal first, drops and breaks grow first, builds last */
-    for(let n=0;n<40;n++){ const tot=S.reduce((a,s)=>a+s.bars,0), d=want-tot, up=d>0; let best=-1, bv=-1e9;
-      S.forEach((s,i)=>{ const k=PHRASES.indexOf(s.bars), nb=PHRASES[k+(up?1:-1)]; if(nb==null) return; if(Math.abs(d-(nb-s.bars))>=Math.abs(d)-1e-9) return;
-        const v=(ideal[i]-s.bars)*(up?1:-1)/s.bars+pri(s,up)*0.01; if(v>bv){ bv=v; best=i; } });
-      if(best<0) break; const k=PHRASES.indexOf(S[best].bars); S[best].bars=PHRASES[k+(up?1:-1)]; }
-    S.forEach(s=>{ if(s.end&&s.end.bars>s.bars) s.end.bars=Math.max(1,Math.min(s.end.bars,s.bars/2)); }); },{structure:true});
+  const want=Math.round(mins*60*CTRL.bpm/240), f=want/have, dir=want<have?-1:1, ideal=S.map(s=>Math.max(4,s.bars*f));
+  const opts=ideal.map(x=>{ const P=PHRASES.filter(p=>p<64||x>=48), lo=[...P].reverse().find(p=>p<=x)||P[0], hi=P.find(p=>p>=x)||P[P.length-1]; return lo===hi?[lo]:[lo,hi]; });
+  const score=B=>{ const tot=B.reduce((a,b)=>a+b,0), err=Math.abs(tot-want)/want, wrong=Math.max(0,dir*(want-tot))/want; let shape=0, pen=0;
+    const drops=B.filter((b,i)=>S[i].kind==='drop'), dmin=drops.length?Math.min(...drops):0;
+    B.forEach((b,i)=>{ shape+=Math.abs(Math.log2(b/ideal[i])); if(S[i].kind==='build'&&b>16) pen+=0.1; if(S[i].kind!=='drop'&&dmin&&b>dmin) pen+=0.05; });
+    if(drops.length>1&&drops.some(b=>b!==drops[0])) pen+=0.1; return 3*err+3*wrong+shape/B.length+pen; };
+  let best=opts.map(o=>o[0]), bs=Infinity;
+  if(opts.length<=12){ const n=opts.length, walk=(i,B)=>{ if(i===n){ const v=score(B); if(v<bs-1e-9){ bs=v; best=B.slice(); } return; } for(const b of opts[i]){ B.push(b); walk(i+1,B); B.pop(); } }; walk(0,[]); }
+  else best=ideal.map(x=>PHRASES.filter(p=>p<64||x>=48).reduce((a,p)=>Math.abs(p-x)<Math.abs(a-x)?p:a,8));
+  const tot=best.reduce((a,b)=>a+b,0);
+  if(dir<0&&tot>want*1.15&&best.every(b=>b===8)&&S.length>3) songNote('Every part is already 8 bars, so it can’t get shorter without losing one. Say “remove the break” to cut a part.');
+  songEdit(S=>{ S.forEach((s,i)=>{ s.bars=best[i]; if(s.end&&s.end.bars>s.bars) s.end.bars=Math.max(1,Math.min(s.end.bars,s.bars/2)); }); },{structure:true});
   const mm=Math.round(songSecs(songBars())/30)/2; return `About ${mm} minute${mm===1?'':'s'}: ${S.map(s=>s.name+' '+s.bars).join(' · ')} · ${songLenText()}`; }
 function songMainSel(){ const S=songSections(), m=S.find(s=>s.kind==='drop')||S.find(s=>s.kind==='chorus'||s.kind==='hook')||S[0]; if(m){ SONG.view.sel=m.id; songViewSave(); } }
 /* the instrument guard: with a known artist, an instrument the user didn't say is the AI's guess; the artist's sound wins */
@@ -5632,9 +5637,10 @@ async function handleRequest(text){
   } else { const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
   /* the AI sometimes offers a riser or a filter sweep as the next step; the studio has neither yet (D3), so offer what it has */
   if(reply&&!/\b(riser|sweep|uplifter)\b/i.test(text)) reply=reply.replace(/[^.!?]*\b(risers?|uplifters?|(?:filter |noise )?sweeps?)\b[^.!?]*\?/gi,()=>!songArranged()?'':/\broll/i.test(text)?' Want the second drop to be different?':' Want a snare roll into the drop?').replace(/\s+/g,' ').trim();
+  /* nothing changed (it was already like that): say so, or say why (an executor note), and keep the AI's question if it asked one (QA fix 2) */
+  if(BATCH.same){ const q=(reply.match(/[^.!?]*\?\s*$/)||[''])[0].trim(), why=(BATCH.notes||[]).map(n=>n.text); BATCH.notes=[];
+    reply=(why.length?why.join(' '):`It’s already like that, so nothing changed${BATCH.same.length?': '+BATCH.same.join(', '):''}.`)+' '+(q||nextStep()); }
   /* what the executor knows and the AI didn't: a clamped length, a riser played as a roll, a missing part (AI-1) */
-  /* nothing changed (it was already like that): say so, keep the AI's question if it asked one (QA fix 2) */
-  if(BATCH.same){ const q=(reply.match(/[^.!?]*\?\s*$/)||[''])[0].trim(); reply=`It’s already like that, so nothing changed${BATCH.same.length?': '+BATCH.same.join(', '):''}.`+' '+(q||nextStep()); }
   const notes=(BATCH.notes||[]).filter(n=>!(n.unless&&n.unless.test(reply))).map(n=>n.text);
   if(reply&&notes.length) reply=reply.replace(/\s*$/,'')+' '+notes.join(' ');
   else if(!reply&&!done.length&&notes.length) reply=notes.join(' ');
