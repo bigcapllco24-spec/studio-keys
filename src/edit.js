@@ -46,15 +46,21 @@ function audioToNotes(buf){
   for(let i=0;i+N<=x.length;i+=hop){ const r=det(x,i); frames.push({t:(i+N/2)/sr,f:r.f,clar:r.clar,rms:r.rms}); }
   if(!frames.length) return [];
   const rs=frames.map(f=>f.rms).sort((a,b)=>a-b), gate=Math.max(0.006,rs[Math.floor(rs.length*0.2)]*3,rs[Math.floor(rs.length*0.97)]*0.07);
-  const notes=[]; let cur=null, med=[], cand=null, candN=0, silent=0; const env=[];
-  for(const fr of frames){
-    const voiced=fr.f>0&&fr.clar>0.85&&fr.rms>gate; env.push(fr.rms); if(env.length>8) env.shift();
+  /* holes: short runs of exact zeros between sound (1.5-60 ms; a recording glitch, never a voice). The level dip around a
+     hole is not a new attack, so a held note isn't split in two (UX-10) */
+  const hole=new Uint8Array(frames.length), hmin=Math.round(0.0015*sr), hmax=Math.round(0.06*sr);
+  for(let i=1;i<x.length;i++){ if(x[i]!==0||x[i-1]===0) continue; let j=i; while(j<x.length&&x[j]===0) j++;
+    if(j<x.length&&j-i>=hmin&&j-i<=hmax) for(let k=Math.max(0,Math.floor((i-N)/hop)+1);k<frames.length&&k*hop<j;k++) hole[k]=1; i=j; }
+  const notes=[]; let cur=null, med=[], cand=null, candN=0, silent=0, sinceHole=99; const env=[];
+  for(let fi=0;fi<frames.length;fi++){ const fr=frames[fi];
+    const voiced=fr.f>0&&fr.clar>0.85&&fr.rms>gate; env.push(fr.rms); if(env.length>8) env.shift(); sinceHole=hole[fi]?0:sinceHole+1;
     if(voiced){ silent=0; med.push(ftom(fr.f)); if(med.length>5) med.shift(); const m=[...med].sort((a,b)=>a-b)[med.length>>1], n=Math.round(m);
-      const reatt=cur&&fr.t-cur.t0>0.15&&env.length>=6&&fr.rms>Math.min(...env.slice(0,-1))*2.2&&fr.rms>gate*2.5;
+      const reatt=cur&&sinceHole>8&&fr.t-cur.t0>0.15&&env.length>=6&&fr.rms>Math.min(...env.slice(0,-1))*2.2&&fr.rms>gate*2.5;
       if(cur&&Math.abs(m-cur.n)<0.7&&!reatt){ cur.t1=fr.t; cur.pk=Math.max(cur.pk,fr.rms); cand=null; candN=0; }
       else if(reatt&&Math.abs(m-cur.n)<0.7){ notes.push(cur); cur={n:cur.n,t0:fr.t,t1:fr.t,pk:fr.rms}; }
       else { if(n===cand) candN++; else { cand=n; candN=1; } if(candN>=3){ if(cur) notes.push(cur); cur={n,t0:fr.t-2*hop/sr,t1:fr.t,pk:fr.rms}; cand=null; candN=0; } }
-    } else { silent++; cand=null; candN=0; if(silent>3) med=[]; if(silent>=4&&cur){ notes.push(cur); cur=null; } }
+    } else if(hole[fi]&&cur){ /* a frame spoilt by a hole: the note goes on */ }
+    else { silent++; cand=null; candN=0; if(silent>3) med=[]; if(silent>=4&&cur){ notes.push(cur); cur=null; } }
   }
   if(cur) notes.push(cur);
   const pk=Math.max(1e-6,...notes.map(n=>n.pk));
