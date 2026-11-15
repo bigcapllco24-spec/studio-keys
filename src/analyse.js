@@ -1,6 +1,6 @@
 /* ---------- SE-7b: listening to a song you bring in (tempo, beats, key, chords) ----------
    analyseAudio(buf, {onProgress}) -> Promise of
-     {v, dur, bpm, bpmConf, beats:[s], downbeat:s, key:{tonic,mode,conf,level,alt,cands,why}, djKey,
+     {v, dur, bpm, bpmConf, bpmAlt (half or double time when plausible, else null), beats:[s], downbeat:s, key:{tonic,mode,conf,level,alt,cands,why}, djKey,
       chords:[{b,d,root,q,conf,alt}], loop:{start,bars,chords,conf}|null, bassRoots:[{b,d,root}], ms, how}
    b and d are in beats counted from the first downbeat (b 0 = bar 1); root is a pitch class 0-11 (null with q 'none');
    q is 'maj' | 'min' | '7' | 'm7' | 'maj7' | 'sus4' | '5' (root and fifth, no third) | 'none'.
@@ -25,7 +25,7 @@ function anaJob(x,sr,opt){
   'use strict';
   var md=function(a,n){ return ((a%n)+n)%n; };
   /* tuning knobs (fitted on our renders with tools/ana-node.mjs; opt.p overrides them for testing) */
-  var CF={chLo:130,chHi:2000,bsLo:40,bsHi:250,beta:7,lam:1.5,mv:1,inKey:0.6,nPen:0.18,keyCh:0.2,keyBass:0.3,keyFirst:0.25,keyDia:1,tk1:1,tk2:0.5,tk4:0.5,tk8:0,tc:124,ts:0.55,tb:1.12,snW:1,kickW:0.6,kickGap:0.08,qGap:0.15}, ck;
+  var CF={chLo:130,chHi:2000,bsLo:40,bsHi:250,beta:10,lam:3,mv:1,inKey:0.6,nPen:0.18,keyCh:0.2,keyBass:0.3,keyFirst:0.25,keyDia:1,tk1:1,tk2:0.5,tk4:0.5,tk8:0,tc:124,ts:0.8,tb:1.05,snW:1,kickW:0.6,kickGap:0.08,qGap:0.15}, ck;
   if(opt&&opt.p) for(ck in opt.p) CF[ck]=opt.p[ck];
   var now=(typeof performance!=='undefined'&&performance.now)?function(){ return performance.now(); }:function(){ return Date.now(); };
   /* ---- pass 1: harmony frames ---- */
@@ -113,10 +113,14 @@ function anaJob(x,sr,opt){
       var mxv=0, at=0, tot=0; for(q=0;q<BINS;q++){ var sm=fold[q]*0.5+fold[(q+1)%BINS]*0.25+fold[(q+BINS-1)%BINS]*0.25; tot+=fold[q]; if(sm>mxv){ mxv=sm; at=q; } } return keep?{s:mxv/(tot/BINS+1e-9),at:at}:mxv/(tot/BINS+1e-9); };
     var bb=best[0], bestF=null;
     for(var bt=bb-1.2;bt<=bb+1.2;bt+=0.02){ var sF=foldScore(60*fps/bt); if(!bestF||sF>bestF[1]) bestF=[bt,sF]; }
+    var hasBeat=best[2]>0&&len/sr>=6; /* silence, or under 6 s: no tempo */
     var BPM=bestF[0]; if(Math.abs(BPM-Math.round(BPM))<0.11) BPM=Math.round(BPM); else BPM=Math.round(BPM*10)/10;
     /* confidence: how far ahead of the best tempo that is not a simple multiple */
     var rival=0; cand.forEach(function(cn){ var r2=cn[0]/best[0]; if(Math.abs(r2-1)<0.04||Math.abs(r2-2)<0.06||Math.abs(r2-0.5)<0.03||Math.abs(r2-1.5)<0.05||Math.abs(r2-2/3)<0.03) return; if(cn[1]>rival) rival=cn[1]; });
-    var bpmConf=Math.max(0,Math.min(1,1-rival/best[1]));
+    var bpmConf=hasBeat?Math.max(0,Math.min(1,1-rival/best[1])):0;
+    /* half or double time is the classic doubt (drum & bass at 87 or 174, trap at 70 or 140): name it when it is plausible */
+    var rawAt=function(b){ var m=0; cand.forEach(function(cn){ if(Math.abs(cn[0]-b)<=1) m=Math.max(m,cn[2]); }); return m; };
+    var bpmAlt=null; if(BPM<100&&BPM*2<=190&&rawAt(BPM*2)>=best[2]*0.4) bpmAlt=Math.round(BPM*20)/10; else if(BPM>=135&&rawAt(BPM/2)>=best[2]*0.4) bpmAlt=Math.round(BPM*5)/10;
     var P=60*fps/BPM, fr2=foldScore(P,true);
     /* the beat's phase: the kick band when it clearly pulses on one point of the beat (hats and offbeat basslines pull the
        full band onto the offbeat), else both bands */
@@ -249,6 +253,8 @@ function anaJob(x,sr,opt){
     /* the chords favour the notes of the key; when the bass and chords say the key has other notes, listen again with it */
     if(!sameScale(HM.scored[0],K1)){ var HM2=harmony(HM.scored[0]); if(sameScale(HM2.scored[0],HM.scored[0])) HM=HM2; }
     var dph=HM.dph, chordsOut=HM.chordsOut, scored=HM.scored, loop=HM.loop, firstBar=HM.firstBar, nov=HM.nov;
+    /* a key needs about 8 beats of music with pitch in it (a short clip or a drum loop has none) */
+    var tonalBeats=0; for(q=0;q<NB;q++) if(BL[q]>=0.3) tonalBeats++; var keyOk=hasBeat&&tonalBeats>=8&&mxs.length>0;
     var KB1=scored[0], KB2=scored[1]||scored[0], kconf=KB1.s>0?Math.max(0,Math.min(1,(KB1.s-KB2.s)/KB1.s)):0;
     var level=kconf<0.02?1:kconf<0.06?2:kconf<0.14?3:4; if(!mxs.length) level=0;
     var NAMES=['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
@@ -259,9 +265,9 @@ function anaJob(x,sr,opt){
     /* bass roots per bar */
     var bassRoots=[]; for(var bi3=0;dph+bi3*4<NB;bi3++){ var q0=dph+bi3*4, v3=new Float32Array(12), z4; for(q=q0;q<Math.min(NB,q0+4);q++){ if(BL[q]<0.3) continue; for(z4=0;z4<12;z4++) v3[z4]+=BB[q*12+z4]; } var bi4=0, mx5=0; for(z4=0;z4<12;z4++) if(v3[z4]>mx5){ mx5=v3[z4]; bi4=z4; }
       var root=mx5>0.2?bi4:null; if(bassRoots.length&&bassRoots[bassRoots.length-1].root===root) bassRoots[bassRoots.length-1].d+=4; else bassRoots.push({b:bi3*4,d:4,root:root}); }
-    return {v:1,dur:Math.round(len/sr*100)/100,bpm:BPM,bpmConf:Math.round(bpmConf*100)/100,beats:beats.map(function(t){ return Math.round(t*1000)/1000; }),
-      downbeat:NB?Math.round(beats[dph]*1000)/1000:0,key:mxs.length?{tonic:KB1.tonic,mode:KB1.mode,conf:Math.round(kconf*1000)/1000,level:level,alt:{tonic:KB2.tonic,mode:KB2.mode},cands:cands,why:cands[0].why}:null,
-      chords:chords,loop:loop,bassRoots:bassRoots,tuning:Math.round(tune),debug:opt&&opt.debug?{ON:ON,ONL:ONL,H2:H2,TE:TE,BE:BE,gate:gate,BL:BL,H:H,sr:sr,PF:PF,PA:PA,PO:PO,CH:CH}:undefined,how:{tempo:cand.filter(function(c,ix){ return ix>0&&ix<cand.length-1&&c[2]>=cand[ix-1][2]&&c[2]>=cand[ix+1][2]; }).sort(function(a,b){ return b[2]-a[2]; }).slice(0,6).map(function(c){ return c[0]+':'+(c[2]/best[2]).toFixed(2)+'/'+(c[1]/best[1]).toFixed(2); }).join(' '),frames:F,tonal:mxs.length,onsetFrames:F2,fold:dbg,nov:Array.prototype.map.call(nov,function(v){ return Math.round(v*100)/100; }),dph:dph}};
+    return {v:1,dur:Math.round(len/sr*100)/100,bpm:hasBeat?BPM:null,bpmConf:Math.round(bpmConf*100)/100,bpmAlt:hasBeat?bpmAlt:null,tonalBeats:tonalBeats,beats:(hasBeat?beats:[]).map(function(t){ return Math.round(t*1000)/1000; }),
+      downbeat:NB&&hasBeat?Math.round(beats[dph]*1000)/1000:0,key:keyOk?{tonic:KB1.tonic,mode:KB1.mode,conf:Math.round(kconf*1000)/1000,level:level,alt:{tonic:KB2.tonic,mode:KB2.mode},cands:cands,why:cands[0].why}:null,
+      chords:keyOk?chords:[],loop:keyOk?loop:null,bassRoots:keyOk?bassRoots:[],tuning:Math.round(tune),debug:opt&&opt.debug?{ON:ON,ONL:ONL,H2:H2,TE:TE,BE:BE,gate:gate,BL:BL,H:H,sr:sr,PF:PF,PA:PA,PO:PO,CH:CH}:undefined,how:{tempo:cand.filter(function(c,ix){ return ix>0&&ix<cand.length-1&&c[2]>=cand[ix-1][2]&&c[2]>=cand[ix+1][2]; }).sort(function(a,b){ return b[2]-a[2]; }).slice(0,6).map(function(c){ return c[0]+':'+(c[2]/(best[2]||1)).toFixed(2)+'/'+(c[1]/(best[1]||1)).toFixed(2); }).join(' '),frames:F,tonal:mxs.length,onsetFrames:F2,fold:dbg,nov:Array.prototype.map.call(nov,function(v){ return Math.round(v*100)/100; }),dph:dph}};
   }
   /* refinish: the last stage again with other knobs (tools/ana-node.mjs sweeps them without redoing the FFTs) */
   return {step:step,progress:progress,result:function(){ return result; },refinish:function(p){ var d0={}, z; for(z in p){ d0[z]=CF[z]; CF[z]=p[z]; } var r0=finish(); for(z in d0) CF[z]=d0[z]; return r0; }};
