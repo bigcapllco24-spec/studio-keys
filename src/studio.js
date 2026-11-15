@@ -429,7 +429,7 @@ async function makeMp3(tracks,loopsOrSeconds,onProgress){
   const want=+loopsOrSeconds||60, loops=want>=30?Math.max(1,Math.min(64,Math.round(want/loopSec))):Math.max(1,Math.min(64,want));
   const [l,r]=await renderAudio(tracks,bpm,L), n=l.length, total=n*loops;
   let pk=0; for(let i=0;i<n;i++){ const a=Math.abs(l[i]), b=Math.abs(r[i]); if(a>pk) pk=a; if(b>pk) pk=b; }
-  const gain=pk>0.97?0.97/pk:1, fade=Math.min(Math.round(sr*2.5),Math.round(total/3));
+  const gain=pk>0.89?0.89/pk:1 /* -1 dBFS like the song MP3: decoders overshoot */, fade=Math.min(Math.round(sr*2.5),Math.round(total/3));
   const enc=new lamejs.Mp3Encoder(2,sr,192), out=[], B=1152, L16=new Int16Array(B), R16=new Int16Array(B);
   for(let i=0,k=0;i<total;i+=B,k++){
     const m=Math.min(B,total-i);

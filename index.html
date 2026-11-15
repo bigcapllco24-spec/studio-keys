@@ -3919,7 +3919,7 @@ async function makeMp3(tracks,loopsOrSeconds,onProgress){
   const want=+loopsOrSeconds||60, loops=want>=30?Math.max(1,Math.min(64,Math.round(want/loopSec))):Math.max(1,Math.min(64,want));
   const [l,r]=await renderAudio(tracks,bpm,L), n=l.length, total=n*loops;
   let pk=0; for(let i=0;i<n;i++){ const a=Math.abs(l[i]), b=Math.abs(r[i]); if(a>pk) pk=a; if(b>pk) pk=b; }
-  const gain=pk>0.97?0.97/pk:1, fade=Math.min(Math.round(sr*2.5),Math.round(total/3));
+  const gain=pk>0.89?0.89/pk:1 /* -1 dBFS like the song MP3: decoders overshoot */, fade=Math.min(Math.round(sr*2.5),Math.round(total/3));
   const enc=new lamejs.Mp3Encoder(2,sr,192), out=[], B=1152, L16=new Int16Array(B), R16=new Int16Array(B);
   for(let i=0,k=0;i<total;i+=B,k++){
     const m=Math.min(B,total-i);
@@ -4934,7 +4934,7 @@ function swingOver(a,curSwing){
   const v=resolveSwing(said!=null?said:a.swing,curSwing); if(v!==undefined&&said!=null) BATCH.swing=v; return v; }
 /* SE-8: hats the user named ("16th hats", "change the hats to 16ths") stay exactly as asked, through "another one" too
    (the flag lives in the drums recipe). Hats the AI picked on its own, with no hat words in the request, still vary. */
-const hatsSaid=()=>{ const t=String(LAST_TEXT.text||'').toLowerCase(); return !t||/hat|\b16|sixteenth|\b8th|\b8s\b|eighth|\b8\s*\/\s*8|off ?-?beat|shuffle|quarter|\brolls?\b/.test(t); };
+const hatsSaid=()=>{ const t=String(LAST_TEXT.text||'').toLowerCase(); return !t||/\bhats?\b|\bhi-?hats?\b|\bhihats?\b|\b16(th|ths|s)?\b|sixteenth|\b8(th|ths|s)\b|eighth|\b8\s*\/\s*8|off ?-?beat|shuffle|quarter|\brolls?\b/.test(t); };
 function grooveOver(a,curSwing){
   const o={kick:a.kick,back:a.back||(a.claps===true||a.clap===true?'clap':a.snare===true?'snare':undefined),open:a.open,shaker:a.shaker,ghost:a.ghost,swing:swingOver(a,curSwing),energy:a.energy,fill:a.fill,ride:a.ride};
   if(a.hats===false) o.hats='none'; else if(typeof a.hats==='string'){ const k=HAT_KIND[a.hats.toLowerCase()]||a.hats.toLowerCase(); if(k==='open') o.open=true; else if(k==='shaker') o.shaker=true; else { o.hats=k; if(a.hatsAsked===true||hatsSaid()) o.hatsAsked=true; } }
@@ -4962,6 +4962,10 @@ const ACT={
     if(!BATCH.tempo) setTempo(+a.bpm&&Math.abs(+a.bpm-BATCH.startBpm)>0.5?+a.bpm:(artist?artist.bpm:STYLES[s].bpm)); BATCH.vibe=true; const k=parseKey(a.key)||(artist?parseKey(artist.key):null); if(k&&!PROJ.key) setKey(k); ensureProg(true);
     return artist?`Vibe: ${artist.name}, ${artist.desc} (${CTRL.bpm} BPM, ${keyName(projectKey())})`:`Vibe: ${STYLES[s].name}, ${CTRL.bpm} BPM`; },
   add_drums(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a,true);
+    /* SE-8 fix 2: "another one" sent as add_drums again keeps the hats the user asked for, unless this request names
+       new hats or a new vibe (another artist or style unlocks them) */
+    const old=findTrack('drums'), oh=old&&old.recipe&&old.recipe.hatsAsked&&old.style===s&&(!artist||artist.name===old.ref)?old.recipe.hats:null;
+    if(oh&&(a.hats==null||(typeof a.hats==='string'&&(HAT_KIND[a.hats.toLowerCase()]||a.hats.toLowerCase())===oh)||!hatsSaid())) a=Object.assign({},a,{hats:oh,hatsAsked:true});
     const rec=grooveRecipe(s,artist,grooveOver(a,grooveRecipe(s,artist).swing)), seed=+a.seed||newSeed();
     const kit=resolveInst(a.kit||a.instrument,'drums')||(artist&&artist.sounds.kit)||STYLES[s].kit, I=loadI(kit);
     const g=freshGroove(rec,L_(),seed,!!+a.seed); if(BATCH.swing!=null) BATCH.swingShown=true;
