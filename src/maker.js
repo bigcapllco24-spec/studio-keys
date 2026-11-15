@@ -13,6 +13,13 @@ const INST_WORDS=[['bass808',/\b808\b/],['reese',/\breese\b/],['moog',/\bmoog\b/
 const ROLE_WORDS=[['drums',/\b(hats?|drums?|beat|kick|groove|percussion)\b/],['bass',/\b(bass ?line|bass)\b/],['chords',/\b(chords?|pads?|harmony|progression)\b/],['melody',/\b(melody|lead|hook|riff|tune|hum)\b/],['voice',/\b(voice|vocals?|singing)\b/]];
 /* swing words → a swing value for the groove action: "58%", 0, "a bit less", "less", "a bit more", "more"; null if none */
 function swingSaid(raw){ const t=' '+String(raw||'').toLowerCase().replace(/per ?cent/g,'%').replace(/[,.!?]+(?!\d)/g,' ')+' '; let m;
+  if(!/\b(swing|swings|swinging|swingin|swung|swingy|swingier|shuffle|straight|straighten|straighter|bounce|bouncy|bouncey|bouncier)\b/.test(t)) return null;
+  /* a step, not all the way: "straighten it a bit", "a bit straighter", "a little less bounce" go one rung down (70 → 66 → 58 → 54 → straight) */
+  if(/\bstraighten(ed)?( it| this| that| them| the (beat|groove|drums|hats|rhythm|swing))?( up| out)? (a (little|bit|touch|tad|notch)( bit)?|slightly|somewhat|some|a little more|a bit more)\b|\b(a (little|bit|touch|tad)( bit)?|slightly|bit|little|somewhat) straighten\b|\bstraighter\b|\b(a (little|bit|touch|tad)( bit)?|slightly) less (bounce|bouncy)\b|\btoo bouncy\b|\bless (bounce|bouncy)\b/.test(t)) return 'less';
+  /* bounce is the musician's word for swing: "make it bouncier", "more bounce", "a bit bouncier"; "bounce the song" is an export, not swing */
+  if(/\b(a (little|bit|touch|tad)( bit)?|slightly) (bouncier|bouncy|more bounce)\b|\ba (little|bit) more bounce\b/.test(t)) return 'a bit more';
+  if(/\b(bouncier|bouncey|bouncy|more bounce|some bounce|add bounce|with bounce|bounce to it)\b/.test(t)) return 'more';
+  if(/\b(no|without|lose the|kill the) bounce\b/.test(t)) return 0;
   if(!/\b(swing|swings|swinging|swingin|swung|swingy|swingier|shuffle|straight|straighten)\b/.test(t)) return null;
   if((m=t.match(/\b(\d{2,3}(?:\.\d+)?)\s*%?\s*(?:of\s+)?(?:swing|shuffle)\b/))||(m=t.match(/\b(?:swing|shuffle)\s*(?:to|at|of|on|by)?\s*(\d{2,3}(?:\.\d+)?)\b(?!\s*(?:bars?|bpm|beats?))/))) return m[1]+'%';
   if(/\b(no|no more|without|remove|kill|lose|drop|turn off|zero)( the| any| all)? (swing|shuffle)\b|\btake out (the |all the |all )?(swing|shuffle)\b|\btake (the |all the |all )?(swing|shuffle) out\b|\bget rid of (the |all the )?(swing|shuffle)\b|\b(beat|groove|drums|hats|rhythm)s? straight\b(?! to\b)|\bswing off\b|\bstraighten\b|\bstraight (beat|groove|hats|drums|16th|timing|feel|again)\b|\b(make|play|keep|put|go) (it|the (beat|groove|drums|hats)) (back )?straight\b|\bnot swung\b|^\s*(play |go |keep it |make it )?straight( please| again| now| then)?\s*$/.test(t)) return 0;
@@ -24,7 +31,7 @@ function swingSaid(raw){ const t=' '+String(raw||'').toLowerCase().replace(/per 
 /* is the request only about swing? (then it is one groove change; anything else said goes through the parser too) */
 function swingOnly(raw,hasDrums){ let s=' '+String(raw||'').toLowerCase().replace(/per ?cent/g,'%').replace(/[’']/g,'')+' '; const addPart=SWING_ADD_PART.test(s.replace(/[^a-z0-9 ]+/g,' ').replace(/ +/g,' '));
   s=s.replace(/\b\d{2,3}(\.\d+)?\s*%/g,' ').replace(/\b(swing|shuffle)\s*(to|at|of|on|by)?\s*\d{2,3}(\.\d+)?\b(?!\s*(bars?|bpm|beats?))/g,' ').replace(/\b\d{2,3}\s*(of\s+)?(swing|shuffle)\b/g,' ').replace(/\bswing(s|ing)? (it )?(more|harder)\b/g,' ');
-  s=s.replace(/\b(swing|swings|swinging|swingin|swung|swingy|swingier|shuffle|shuffled|shuffly|straight|straighter|straighten|more|less|lighter|softer|lower|reduce|turn|down|up|off|tone|a|an|the|bit|little|touch|tad|slightly|some|lots|loads|of|heavy|heavier|full|max|maximum|triplet|with|big|too|much|strong|is|its|it|make|put|play|keep|go|back|again|now|then|please|can|could|would|you|give|me|us|take|out|remove|kill|lose|drop|get|rid|no|without|any|all|zero|not|set|to|at|on|by|just|bring|this|that|yeah|ok|okay|hey|so|and|plus|add|adding|i|want|need|lets|amount|way|feel|timing|percent|hard)\b/g,' ');
+  s=s.replace(/\b(swing|swings|swinging|swingin|swung|swingy|swingier|shuffle|shuffled|shuffly|straight|straighter|straighten|bounce|bouncy|bouncey|bouncier|more|less|lighter|softer|lower|reduce|turn|down|up|off|tone|a|an|the|bit|little|touch|tad|slightly|some|lots|loads|of|heavy|heavier|full|max|maximum|triplet|with|big|too|much|strong|is|its|it|make|put|play|keep|go|back|again|now|then|please|can|could|would|you|give|me|us|take|out|remove|kill|lose|drop|get|rid|no|without|any|all|zero|not|set|to|at|on|by|just|bring|this|that|yeah|ok|okay|hey|so|and|plus|add|adding|i|want|need|lets|amount|way|feel|timing|percent|hard)\b/g,' ');
   /* "more swing on the chords", "make the bass swing more", "less swing in the hats": the part named is filler (the swing goes to the drums);
      a part is only a request of its own after an add verb ("add a bassline with some swing", "make a bassline with swing") */
   if(!addPart) s=s.replace(/\b(bass ?lines?|bass|basses|chords?|pads?|harmony|progression|melody|melodies|lead|hook|riff|keys|piano|synths?|arps?|parts?|other|everything|whole|entire|song|track|tune|in|into|for|across|onto)\b/g,' ');
@@ -61,16 +68,11 @@ function brainCore(raw,sws){
   if(/\b(download|export|bounce|render|save|give me)\b.*\b(mp3|audio file|song file|the song|the track)\b|\bmp3\b/.test(t)&&!/\b(zip|stems?|ableton|midi)\b/.test(t)){ const mm=t.match(/(\d+)\s*(min|minute)/), loops=t.match(/(\d+)\s*loops?/); return {actions:[{type:'export',format:'mp3',minutes:mm?+mm[1]:undefined,loops:loops?+loops[1]:undefined}]}; }
   if(/\b(download|export)\b.*\b(zip|stems?|ableton)\b/.test(t)) return {actions:[{type:'export',format:'zip'}]};
   /* "turn <audio track> into a bassline": a voice note, an imported recording, or one named ("turn hook idea into chords"). Checked before singing and voice notes. */
-  { const aud=PROJ.tracks.filter(x=>x.kind==='audio'), tm=aud.length&&t.match(/\b(?:turn|convert|make|transcribe) (.+?) (?:in)?to (?:a |an |the |some )?(bass(?:line)?|chords?|melody|notes|piano|instrument|midi)\b/);
-    if(tm){ const nm=s=>String(s).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), x=nm(tm[1].replace(/^(the|my|this|that|our) /,'')), roleWord=/^(drums?|beat|bass(line)?|chords?|pads?|melody|lead|hook)$/.test(x);
-      const bare=x.replace(/ (recording|voice ?note|memo|audio|track|clip|take|file)$/,'');
-      const named=[...aud].reverse().find(a=>{ const n=nm(a.name); return n===x||n===bare||(!roleWord&&x.length>=4&&(' '+n+' ').includes(' '+x+' ')); });
-      const hum=ASSIST.lastHum&&PROJ.tracks.findIndex(y=>y.id===ASSIST.lastHum), newest=aud[aud.length-1];
-      const generic=/^(it|that|this|voice ?notes?|voice ?memo|memo|voice|recording|audio|vocals?|clip|sample|take|singing)( \d+)?$/.test(x)&&!(/^(it|that|this)$/.test(x)&&hum>PROJ.tracks.indexOf(newest));
-      const hit=named||(generic?newest:null); if(hit) return {actions:[{type:'transcribe',track:hit.id,to:tm[2]}]}; } }
+  { const tc=audioConvert(t); if(tc) return tc; }
   { const fxw=t.match(/\b(reverb|delay|echo|sidechain|side chain|pump|compress(?:ion|or)?|drive|saturation|distortion|width|wider|stereo|low ?cut|high ?cut)\b/); const tr=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
     if(fxw&&tr&&/\b(add|put|more|less|on|to|give|use|some|turn)\b/.test(t)){ const less=/\b(less|reduce|lower|down|remove|no)\b/.test(t); return {actions:[{type:'track_fx',track:tr==='drums'?'drums':tr,effect:fxw[1],change:less?-20:(/\bmore\b/.test(t)?20:undefined),remove:/\b(remove|no|off)\b/.test(t)}]}; } }
   { const tone=toneFix(t); if(tone) return tone; }
+  { const lv=levelFix(t); if(lv) return lv; }
   if(/^\s*(undo|undo that|go back|revert( that)?|take that back)\b/.test(t)) return {actions:[{type:'undo'}]};
   if(/^\s*(redo|redo that)\b/.test(t)) return {actions:[{type:'redo'}]};
   if(/\b(voice note|record (my )?voice|just record( me)?|record (some )?audio)\b/.test(t)) return {actions:[{type:'sing',part:'voice'}]};
@@ -123,6 +125,62 @@ function brainCore(raw,sws){
   else if(/\b(play|start|listen|let'?s hear|hear it)\b/.test(t)) A.push({type:'transport',do:'play'});
   return {actions:A};
 }
+/* "turn <audio track> into a bassline": a voice note, an imported recording, or one named ("turn hook idea into chords").
+   Also "make the voice note a bassline", "use the recording as chords", "make a bassline from the voice note", "voice note to bassline",
+   "transcribe the voice note". Checked before singing and voice notes, so asking to convert never records a new voice note. */
+const AUD_TARGET='bass ?lines?|base ?lines?|bass|base|chords?|chord progression|melody|melodies|notes|piano|keys|instrument|synth|lead|midi';
+const AUD_NOUN=/\b(voice ?notes?|voice ?memos?|memos?|recordings?|recorded|audio|clips?|takes?|samples?|wav|mp3|files?)\b/;
+function audioConvert(t){
+  const s=t.replace(/[^a-z0-9' ]+/g,' ').replace(/ +/g,' ').trim(), C=[]; let m;
+  if((m=s.match(new RegExp('\\b(?:turn|convert|make|transcribe|change|use|put|play|map) (.+?) (?:(?:into|in to|to|as|onto|on) )?(?:a |an |the |some |my )?(?:[a-z]+ )?('+AUD_TARGET+')\\b')))) C.push([m[1],m[2]]);
+  if((m=s.match(new RegExp('\\b(?:make|turn|build|write|create|give me|get|do)(?: me)? (?:a |an |the |some )?(?:[a-z]+ )?('+AUD_TARGET+') (?:out of|from|with|using|based on|off) (.+)$')))) C.push([m[2],m[1]]);
+  if((m=s.match(new RegExp('^(?:(?:can|could|would) you |please |now |ok |okay |hey )*(.+?) (?:in ?to|to|as) (?:a |an |the )?('+AUD_TARGET+')\\b')))) C.push([m[1],m[2]]);
+  if((m=s.match(/\btranscribe (.+)$/))) C.push([m[1],'melody']);
+  const nm=v=>String(v).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), aud=PROJ.tracks.filter(y=>y.kind==='audio'), newest=aud[aud.length-1];
+  const hum=ASSIST.lastHum?PROJ.tracks.findIndex(y=>y.id===ASSIST.lastHum):-1, humNewer=hum>PROJ.tracks.indexOf(newest);
+  for(let [x,to] of C){
+    x=nm(x.replace(/\b(please|for me|now|again)\b/g,' ')).replace(/^(?:(?:can|could|would) you |please )+/,'').replace(/^(the|my|this|that|our|your|a) /,'').trim();
+    const canon=/^bas/.test(to)?'bass':/^chord/.test(to)?'chords':'melody', roleWord=/^(drums?|beat|bass(line)?|chords?|pads?|melody|lead|hook|it|that|this)$/.test(x);
+    const bare=x.replace(/ (recording|voice ?note|memo|audio|track|clip|take|file)$/,'');
+    const named=[...aud].reverse().find(a=>{ const n=nm(a.name); return n===x||n===bare||(!roleWord&&x.length>=4&&((' '+n+' ').includes(' '+x+' ')||n.length>=4&&(' '+x+' ').includes(' '+n+' '))); });
+    if(named) return {actions:[{type:'transcribe',track:named.id,to:canon}]};
+    const noun=AUD_NOUN.test(x)&&x.split(' ').length<=7, pron=/^(it|that|this|that one|this one)$/.test(x), weak=/^(voice|vocals?|singing)( \d+)?$/.test(x);
+    if(!aud.length){ if(noun) return {actions:[],reply:`There’s no voice note or recording in this song yet. Say “record a voice note” first, or drop a recording in, then ask me to turn it into ${canon==='bass'?'a bassline':canon==='chords'?'chords':'a melody'}.`}; continue; }
+    if(noun||(pron||weak)&&!humNewer) return {actions:[{type:'transcribe',track:newest.id,to:canon}]}; }
+  return null; }
+/* level and punch words about a part: "turn the melody down a bit", "bring the bass up", "chords louder", "drums too loud",
+   "softer hats", "make the kick punchier". A sentence about level or tone never adds or replaces a part: it moves the fader
+   (in dB: about 3 for "a bit", 5 plain, 8 for "a lot"), and for a drum inside the kit the EQ band where it lives
+   (kick: low, snare and clap: mid, hats: high); punch is more compressor plus a little low end, same pattern. */
+const DRUM_VOICE=[['kick',/\b(kicks?|kick drum|bass drum)\b/,'low','the kick'],['hats',/\bhats\b/,'high','the hats'],['snare',/\b(snares?|claps?|rims?|rimshots?)\b/,'mid','the snare and clap']];
+const LEVEL_NOT=/\b(octaves?|semitones?|pitch|key|tempo|bpm|speed|slow|faster|slower|quicker|swing|shuffle|bounce|energy|busy|busier|reverb|delay|echo|filter|cutoff|sidechain|patch|preset|instrument|switch|shake|build|notes|transpose|register|deeper|higher|another|different|variation|regenerate|new one|one more|mute|unmute|solo|remove|delete|pump|break|strip|warm|open|move|shift|8th|16th|quarter|offbeat|trap)\b|\bmix it up\b|\bnote (up|down)\b|\b(softer|calmer|chill(er)?) (groove|beat)\b/;
+const LEVEL_UP=/\b(louder|turn(?: [a-z']+){0,3} up|bring(?: [a-z']+){0,3} up|push(?: [a-z']+){0,3} up|boost|raise|lift|more volume|too (quiet|soft|low|weak)|(is|are|sounds?|feels?|seems?)( a bit| a little| way| so| really| kind of)? (quiet|soft|buried|lost|weak)|can'?t hear|cannot hear|hard to hear|hardly hear|barely hear|buried|more (kicks?|snares?|claps?|bass)(?! ?lines?)|up)\b/;
+const LEVEL_DOWN=/\b(quieter|softer|less loud|turn(?: [a-z']+){0,3} down|bring(?: [a-z']+){0,3} down|pull(?: [a-z']+){0,3} (down|back)|back off|lower|reduce|tone down|too loud|too much|too hot|too strong|too big|overpowering|drowning|(is|are|sounds?|feels?|seems?)( a bit| a little| way| so| really| kind of)? loud|down)\b/;
+const PUNCH=/\b(punch(y|ier|iest|iness)?|snappier|snappy|more snap|more knock|knockier|hits? harder|hit hard|more thump|thumpier|more impact)\b/;
+function levelFix(t){
+  if(LEVEL_NOT.test(t)||/\b(add|give me|make(?: me)? (?:a|an|some))\b(?: (?!(?:to|on|in|for|of|with)\b)[\w-]+){0,3}? (bass ?lines?|bass|808|chords?|melod(?:y|ies)|drums?|beat|groove|pads?|leads?|hook|riff|pluck|piano|keys|strings|choir|arp)\b/.test(t)) return null;
+  const punch=PUNCH.test(t), up=!punch&&LEVEL_UP.test(t), down=!punch&&!/\bdown ?beat\b/.test(t)&&LEVEL_DOWN.test(t);
+  if(!punch&&up===down) return null;
+  const dv=DRUM_VOICE.find(([k,re])=>re.test(t)); let role=dv?'drums':(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
+  const small=/\b(a (little|bit|touch|tad|notch|hair)( bit)?|slightly|just a bit|tiny bit|bit|little|somewhat)\b/.test(t), big=/\b(a lot|lots|way|much|loads|really|heaps|so)\b/.test(t);
+  const dbm=t.match(/(\d+(?:\.\d)?) ?(?:db|decibels?)\b/), n=dbm?Math.min(12,+dbm[1]):small?3:big?8:5, sign=up?1:-1;
+  const master=!role&&!punch&&/\b(louder|quieter|too loud|too quiet|(turn|bring) (it|everything|the (whole )?(song|track|mix|master|volume|thing)|the master|the volume|master|volume) (up|down)|(turn|bring) (up|down) (the )?(volume|master|song|mix|everything)|volume (up|down))\b/.test(t);
+  if(!role&&!punch&&!master) return null;
+  if(master){ const v0=MIX.master?MIX.master.vol:1; if(up&&v0>=0.999) return {actions:[],reply:'The master is already at full volume. Turn your speakers up, or say “make it louder” after turning a part down.'}; return {actions:[{type:'mix',track:'master',db:sign*n}],reply:`Turned the whole song ${up?'up':'down'} ${n} dB.`}; }
+  if(punch&&!role) role='drums';
+  const list=PROJ.tracks.filter(x=>x.role===role), part=dv?dv[3]:(TONE_PART[role]||'the '+role), Part=part[0].toUpperCase()+part.slice(1);
+  if(!list.length) return {actions:[],reply:role==='voice'?'There’s no vocal yet. Say “record a voice note” to add one.':role==='drums'||role==='chords'?`There are no ${role} yet. Want me to add some?`:`There’s no ${part.replace(/^the /,'')} yet. Want me to add one?`};
+  const A=[];
+  if(punch){ const c=Math.round(((list[0].fx&&list[0].fx.comp)||0)*100), band=role!=='drums'?null:dv&&dv[0]==='snare'?'mid':dv&&dv[0]==='hats'?null:'low';
+    list.forEach(T=>{ if(c<90) A.push({type:'track_fx',track:T.id,effect:'compressor',change:20}); if(band) A.push({type:'mix',track:T.id,eq:{[band]:2}}); });
+    if(!A.length) return {actions:[],reply:`${Part} is already compressed as far as I’d go. Try “${dv?dv[0]+' louder':part.replace(/^the /,'')+' louder'}”.`};
+    return {actions:A,reply:`Punchier ${part.replace(/^the /,'')}: ${c<90?`compressor on ${role==='drums'?'the drums':part} up to ${Math.min(100,c+20)}%`:''}${c<90&&band?' and ':''}${band?`2 dB more ${band==='low'?'low end':'mids'}`:''}, same ${role==='drums'?'pattern':'notes'}.`}; }
+  if(dv){ const d=sign*(small?2:big?5:3); list.forEach(T=>A.push({type:'mix',track:T.id,eq:{[dv[2]]:d}}));
+    return {actions:A,reply:`${up?'Brought up':'Softened'} ${part}: ${Math.abs(d)} dB ${up?'more':'less'} ${dv[2]==='low'?'low end':dv[2]==='mid'?'mids':'highs'} on the drums, same pattern.`}; }
+  if(up&&list.every(T=>T.vol>=0.999)) return {actions:[],reply:`${Part} is already at full volume. Say “turn the ${list.some(x=>x.role!=='drums')&&PROJ.tracks.some(x=>x.role==='drums'&&x!==list[0])?'drums':'others'} down a bit” to make room for it.`};
+  list.forEach(T=>A.push({type:'mix',track:T.id,db:sign*n}));
+  const v0=list[0].vol, got=Math.abs(40*Math.log10(clamp(v0*Math.pow(10,sign*n/40),0.001,1)/Math.max(0.001,v0)));
+  return {actions:A,reply:`${up?'Brought':'Turned'} ${part} ${up?'up':'down'} ${got<n-0.4?got.toFixed(1)+' dB (that’s full volume)':n+' dB'}, same ${role==='drums'?'pattern':'notes'}.`}; }
 /* mixing words: "the bass is muddy", "cut the lows on the bass", "the mix is harsh". Changes EQ and low cut with the
    existing track_fx / mix actions and keeps the notes. Each repeat ("still muddy") goes a step further. */
 const TONE_PART={drums:'the drums',bass:'the bass',chords:'the chords',melody:'the melody',voice:'the vocal'};

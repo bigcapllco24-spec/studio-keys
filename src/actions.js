@@ -152,6 +152,11 @@ const ACT={
   mix(a){ const ref=String(a.track||'').toLowerCase(); const id=['master','keys','pads'].includes(ref)?ref:(findTrack(a.track)||{}).id; if(!id) return; const cfg=chCfg(id); const out=[];
     if(a.volume!=null){ chSet(id,'vol',clamp(+a.volume/100,0,1)); out.push(`volume ${Math.round(cfg.vol*100)}`); }
     if(a.change!=null){ chSet(id,'vol',clamp(cfg.vol+(+a.change)/100,0,1)); out.push(`volume ${Math.round(cfg.vol*100)}`); }
+    /* db: a relative fader move in decibels ("a bit quieter" = -3); the fader's gain is vol² so dB/40 is the fader step */
+    if(a.db!=null&&isFinite(+a.db)&&+a.db){ const v0=cfg.vol, v1=clamp(v0*Math.pow(10,clamp(+a.db,-24,12)/40),0,1); chSet(id,'vol',v1); const got=v0>0&&v1>0?40*Math.log10(v1/v0):0;
+      out.push(Math.abs(got)<0.05?(+a.db>0?'already at full volume':'already silent'):`${got>0?'up':'down'} ${Math.abs(got).toFixed(Math.abs(got)<1?1:0)} dB (volume ${Math.round(v1*100)})`); }
+    /* eq: relative EQ steps in dB, {low:+3} ("more kick" on the drums), {high:-3} ("softer hats") */
+    if(a.eq&&typeof a.eq==='object') ['low','mid','high'].forEach(b=>{ const d=+a.eq[b]; if(!d||!isFinite(d)) return; const f={low:'lo',mid:'mid',high:'hi'}[b], v=clamp(Math.round((+cfg[f]||0)+d),-15,15); chSet(id,f,v); out.push(`${b} EQ ${v>0?'+':''}${v} dB`); });
     ['low','mid','high'].forEach(b=>{ if(a[b]!=null){ chSet(id,{low:'lo',mid:'mid',high:'hi'}[b],clamp(+a[b],-15,15)); out.push(`${b} ${a[b]>0?'+':''}${a[b]} dB`); } });
     if(a.mute!=null){ cfg.mute=!!a.mute; chApply(id); out.push(a.mute?'muted':'unmuted'); }
     if(a.solo!=null){ cfg.solo=!!a.solo; refreshTrackGains(); out.push(a.solo?'solo':'solo off'); }

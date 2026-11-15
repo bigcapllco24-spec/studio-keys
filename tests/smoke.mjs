@@ -54,6 +54,12 @@ try {
   ok('"the mix is muddy" changes the mix FX', mud.mix.ch > mud.mix.ch0 && /track_fx/.test(mud.mix.types), `chords low cut ${mud.mix.ch0}→${mud.mix.ch} Hz`);
   const still = await E(() => ['add a bassline', 'let me sing the bassline', 'record a voice note', 'another one'].map(s => localBrain(s).actions.map(a => a.type + (a.part ? ':' + a.part : '')).join('+')).join(' | '));
   ok('"add a bassline", "sing the bassline", "voice note", "another one" unchanged', still === 'add_bass | sing:bass | sing:voice | vary', still);
+  // AI-6: level and punch words change the fader / EQ / compressor and never add or remake a part
+  const lv = await E(() => { const T = r => PROJ.tracks.find(t => t.role === r), m = T('melody'), d = T('drums'), sig = () => PROJ.tracks.map(t => t.id + ':' + t.events.map(e => e.n + '@' + e.b).join()).join('|');
+    const s0 = sig(), n0 = PROJ.tracks.length, v0 = m.vol, c0 = d.fx.comp || 0, hi0 = d.hi || 0, lo0 = d.lo || 0, R = {};
+    for (const s of ['turn the melody down a bit', 'make the kick punchier', 'bring the bass up', 'chords louder', 'drums too loud', 'softer hats']) R[s] = runActions(localBrain(s).actions).join(', ');
+    return { db: 40 * Math.log10(m.vol / v0), comp: [c0, d.fx.comp], hi: [hi0, d.hi], lo: [lo0, d.lo], same: sig() === s0, added: PROJ.tracks.length - n0, R }; });
+  ok('"turn the melody down a bit" = -3 dB, "kick punchier" = more compressor, "softer hats" = less highs; no part added or remade', Math.abs(lv.db + 3) < 0.1 && lv.comp[1] > lv.comp[0] && lv.hi[1] < lv.hi[0] && lv.same && lv.added === 0, `melody ${lv.db.toFixed(1)} dB, comp ${lv.comp.join('→')}, drums high ${lv.hi.join('→')} dB, +${lv.added} tracks`);
   const tone = await E(() => { const t = PROJ.tracks.find(t => t.role === 'bass'), n0 = JSON.stringify(t.events), lo0 = t.lo || 0;
     runActions(localBrain('boost the lows on the bass').actions); const boost = { lo0, lo: t.lo || 0, same: JSON.stringify(t.events) === n0 };
     runActions(localBrain('the bass is muddy').actions); const hp1 = t.fx.hp; const S = localBrain('still muddy'); runActions(S.actions);
@@ -82,12 +88,16 @@ try {
   const inp = await p.$('#importFile'); await inp.uploadFile(fx('test.mid')); await W(800); await inp.uploadFile(fx('sing.wav')); await W(1500);
   const tv = await E(() => { const a = PROJ.tracks.find(t => t.kind === 'audio'); const x = localBrain('turn the voice note into a bassline').actions, y = localBrain('turn ' + a.name + ' into chords').actions; return { x: x.map(q => q.type).join(), y: y.map(q => q.type + ':' + q.to + ':' + (q.track === a.id)).join(), n: PROJ.tracks.length, r: runActions(y).join(), n2: PROJ.tracks.length }; });
   ok('"turn the voice note into a bassline" transcribes', tv.x === 'transcribe', tv.x);
-  ok('"turn <recording name> into chords" transcribes that track', tv.y === 'transcribe:chords:true' && tv.n2 === tv.n + 1 && /chords/.test(tv.r), tv.r);
+  const tv2 = await E(() => ['make the voice note a bassline', 'turn the voice note I just recorded into a bassline', 'make a bassline from the voice note', 'turn the voice note into a base line', 'record a voice note'].map(s => localBrain(s).actions.map(a => a.type + ':' + (a.to || a.part)).join('+')).join(' | '));
+  ok('voice note phrasings convert the recording ("record a voice note" still records)', tv2 === 'transcribe:bass | transcribe:bass | transcribe:bass | transcribe:bass | sing:voice', tv2);
+  ok('"turn <recording name> into chords" transcribes that track',tv.y === 'transcribe:chords:true' && tv.n2 === tv.n + 1 && /chords/.test(tv.r), tv.r);
   const im = await E(() => { const r = runActions([{ type: 'transcribe', to: 'bass' }]); return { tracks: PROJ.tracks.map(t => t.name + ':' + t.kind).join(', '), r: r.join() }; });
   ok('import MIDI + audio, turn audio into a bassline', /Lead:notes/.test(im.tracks) && /sing:audio/.test(im.tracks) && /bassline/.test(im.tracks), im.tracks);
   // 6. sing a bassline over the beat (fake microphone sings C E G A C G)
   await E(() => newSong('Smoke sing')); await W(300);
-  await E(() => { runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_chords' }]); ASSIST.run('let me sing the bassline'); });
+  await E(() => { runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_chords' }]); window.__sayLog = []; const o = ASSIST.say; ASSIST.say = function (m, op) { window.__sayLog.push(m); ASSIST.say = o; return o.call(this, m, op); }; ASSIST.run('let me sing the bassline'); });
+  await W(300); const sr = await E(() => (window.__sayLog || [])[0] || '');
+  ok('the sing reply doesn\'t suggest singing what you just asked for', /Sing the bassline/.test(sr) && !/let me sing|Bassline next/.test(sr), sr);
   await W(3500); const guide = await E(() => TAKE_GUIDE && PROJ.tracks.filter(trackAudible).every(t => t.role === 'drums'));
   ok('while singing, only the drums play', guide);
   await E(() => { window.__live = 0; const orig = noteOn; window.noteOn = function () { if (LOOP.state === 'take') window.__live++; return orig.apply(this, arguments); }; });
@@ -196,6 +206,11 @@ try {
   ok('hats lift on beats 2 and 4, in-between 16ths sit back', fe.on24 > fe.on13 * 1.05 && fe.on24 > fe.off * 1.2, `2/4 ${fe.on24.toFixed(2)} vs 1/3 ${fe.on13.toFixed(2)} vs off-16ths ${fe.off.toFixed(2)}`);
   ok('"more swing" is full triplet swing (off-16ths 1/12 beat late)', fe.more.sw > 0.32 && Math.abs(fe.lag - 1 / 12) < 0.01 && /66%/.test(fe.more.r), `${fe.lag.toFixed(3)} beat · ${fe.more.r}`);
   ok('"less swing" steps down (66 → 58 → 54 → straight), exact "swing 58%", "no swing"', fe.less.map(x => x.sw).join() === '0.16,0.08,0' && /58%/.test(fe.less[0].r) && Math.abs(fe.exact.sw - 0.16) < 0.005 && fe.none.sw === 0, fe.less.map(x => x.r).join(' → '));
+  // AI-6: "straighten it a bit" / "a bit straighter" / "a little less bounce" step one rung; "make it bouncier" steps up; "straighten it" is straight
+  const st = await E(() => { const drums = () => PROJ.tracks.find(t => t.role === 'drums'), said = txt => { LAST_TEXT.text = txt; runActions(localBrain(txt).actions); LAST_TEXT.text = ''; return drums().recipe.swing; };
+    runActions([{ type: 'add_drums', style: 'house', swing: '70%' }]); const down = ['too swingy, straighten it a bit', 'a bit straighter', 'a little less bounce', 'straighten the hats a little'].map(said);
+    const up = said('make it bouncier'); runActions([{ type: 'groove', swing: '70%' }]); return { down, up, full: said('straighten it') }; });
+  ok('"straighten it a bit" steps 70 → 66 → 58 → 54 → straight; "bouncier" swings; "straighten it" is straight', st.down.join() === '0.333,0.16,0.08,0' && st.up > 0.3 && st.full === 0, `${st.down.join(' → ')} · bouncier ${st.up} · straighten ${st.full}`);
   ok('human styles: kick pushes about 10 ms early', fe.kickMs < -6 && fe.kickMs > -14, `${fe.kickMs.toFixed(1)} ms`);
   // with the AI on (mocked like the old live prompt, which sends swing 0 for "less swing"), the user's words still step down
   const ai = await E(async () => { const of = window.fetch, eng = ASSIST.engine, drums = () => PROJ.tracks.find(t => t.role === 'drums');
