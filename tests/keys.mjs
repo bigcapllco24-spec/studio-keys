@@ -2,7 +2,7 @@
 // takes about 3-8 minutes a song headless. Usage: node tests/keys.mjs [--set 2] [--only N] [--secs 180] [--dump DIR] [--quick]
 //   1) tools/ana-harness.mjs --check: 12 of our songs (drum intro, then the loop) must read the exact key on >= 10/12 (the rest
 //      relative or a fifth away), chords right on >= 80% of bars, BPM exact, under 3 s a song (timing is load-sensitive)
-//   2) drums only: a 60 s drum loop in 6 styles must read "no key" (QA 15 Nov: 6/6 read a key on preview-se-7bc)
+//   2) drums only: a 60 s drum loop in 6 styles must read "no key" (QA 15 Nov: 0/6 before SE-7bc fix 1, 6/6 after)
 // --quick skips 1). Exit code 1 if either part fails.
 import { createRequire } from 'module'; import fs from 'fs'; import path from 'path'; import { spawnSync } from 'child_process';
 const nm = process.env.SK_NODE_MODULES || (fs.existsSync('/tmp/sk-test/node_modules/puppeteer-core') ? '/tmp/sk-test/node_modules' : null);
