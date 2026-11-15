@@ -74,6 +74,18 @@ try {
       R[gap * 1000 + ' ms'] = audioToNotes(makeBuf(x, sr)).length; }
     return R; });
   ok('import: 8 notes on one pitch with short exact-silence gaps stay 8 notes', Object.values(stc).every(n => n === 8), JSON.stringify(stc));
+  // QA, 15 Nov (UX-10 re-check): audio that is sound most of the time is still read. (a) 8 held notes sung with a short breath
+  // (1.8 of every 2 beats at 124 bpm, 0.1 s gaps, -54 dB noise floor), like a take where you hold each bass note; (b) a dense
+  // bounce: 32 notes of 0.2 s with 40 ms gaps and no silence before or after. The level gate must not sit above every frame
+  const dense = await E(() => { const sr = 44100, R = {}, s = 60 / 124, rnd = (k => () => (k = (k * 16807) % 2147483647) / 2147483647)(7);
+    const tone = (x, o, len, f, ramp) => { for (let i = 0; i < len; i++) { const t = i / sr, a = Math.min(1, i / ramp, (len - i) / ramp); let v = 0; for (let h = 1; h < 6; h++) v += Math.sin(2 * Math.PI * f * h * t) / h; x[o + i] += 0.3 * a * v; } };
+    const held = new Float32Array(Math.round(16 * s * sr)); for (let i = 0; i < held.length; i++) held[i] = (rnd() * 2 - 1) * 0.002;
+    [45, 48, 52, 43, 45, 50, 47, 40].forEach((n, k) => tone(held, Math.round(2 * k * s * sr), Math.round(1.8 * s * sr), 440 * Math.pow(2, (n - 69) / 12), Math.round(0.03 * sr)));
+    R.held = audioToNotes(makeBuf(held, sr)).length;
+    const nl = Math.round(0.2 * sr), gl = Math.round(0.04 * sr), loop = new Float32Array(32 * (nl + gl)), fs = [110, 110, 130.81, 130.81, 196, 196, 110, 110];
+    for (let k = 0; k < 32; k++) tone(loop, k * (nl + gl), nl, fs[k % 8], 240);
+    R.dense = audioToNotes(makeBuf(loop, sr)).length; return R; });
+  ok('held sung notes with short breaths, and a dense bounce, are still turned into notes', dense.held === 8 && dense.dense >= 28, `held ${dense.held}/8, dense ${dense.dense}/32`);
   // 6. sing a bassline over the beat (fake microphone sings C E G A C G)
   await E(() => newSong('Smoke sing')); await W(300);
   await E(() => { runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_chords' }]); ASSIST.run('let me sing the bassline'); });
@@ -222,7 +234,7 @@ try {
     window.__a2n = audioToNotes; window.audioToNotes = function (buf, o) { const r = window.__a2n(buf, o), x = buf.getChannelData(0), sr = buf.sampleRate; let holes = 0;
       for (let i = 1; i < x.length; i++) { if (x[i] !== 0 || x[i - 1] === 0) continue; let j = i; while (j < x.length && x[j] === 0) j++; const mid = (i + j) / 2 / sr;
         if (j < x.length && j - i >= 0.002 * sr && j - i < 0.06 * sr && r.some(n => mid > n.t0 && mid < n.t1)) holes++; i = j; }
-      window.__tk.push({ holes }); return r; };
+      window.__tk.push({ holes, cut: TAKE_REC.tailMs }); return r; };
     window.__busy = setInterval(() => { const t = performance.now() + 4 + Math.random() * 25; while (performance.now() < t); }, 35); });
   for (let k = 0; k < 5; k++) { await E(() => ASSIST.run('let me sing the bassline'));
     for (let i = 0; i < 40; i++) { await W(500); if (await E(n => window.__tk.length > n && LOOP.state !== 'take', k)) break; }
@@ -230,6 +242,15 @@ try {
       if (r) { r.n = ev.length; r.dbl = ev.filter((e, i) => i && e.n === ev[i - 1].n).length; } loopStop(); }, k); await W(400); }
   const tk = await E(() => { clearInterval(window.__busy); window.audioToNotes = window.__a2n; return window.__tk; });
   ok('5 sung basslines in a row: no holes in the recording, no doubled notes', tk.length === 5 && tk.every(r => r.n >= 4 && !r.holes && !r.dbl), tk.map(r => `${r.n} notes/${r.dbl} doubled/${r.holes} holes`).join(', '));
+  // QA, 15 Nov (UX-10 re-check): the take waits for the recorder's last blocks, so its end isn't cut
+  ok('a sung take\'s last beat is recorded to the end (no audio cut at the end)', tk.length === 5 && tk.every(r => r.cut === 0), tk.map(r => `${r.cut} ms`).join(', '));
+  // QA, 15 Nov (UX-10 re-check): Stop pressed after the last beat, while the take waits for its tail, cancels it cleanly
+  const stp = await E(async () => { const before = JSON.stringify(PROJ.tracks.map(t => [t.name, t.events.length])); let fin = 0; const f = TAKE.finish; TAKE.finish = function () { fin++; return f.apply(this, arguments); };
+    try { ASSIST.run('let me sing the bassline'); const s0 = performance.now(); while (LOOP.state !== 'take' && performance.now() - s0 < 8000) await new Promise(r => setTimeout(r, 20));
+      let at = null; while (LOOP.state === 'take' && performance.now() - s0 < 20000) { if (A.ctx.currentTime >= TR.t0 + PROJ.bars * 4 * spb() + 0.005) { at = +(A.ctx.currentTime - TR.t0 - PROJ.bars * 4 * spb()).toFixed(3); $('#stopBtn').click(); break; } await new Promise(r => setTimeout(r, 2)); }
+      await new Promise(r => setTimeout(r, 900));
+      return { at, fin, st: LOOP.state, mic: MIC.on, same: JSON.stringify(PROJ.tracks.map(t => [t.name, t.events.length])) === before, msg: $('#micStatus').textContent }; } finally { TAKE.finish = f; } });
+  ok('Stop right after a take\'s last beat cancels it: old take kept, mic off', stp.at != null && stp.fin === 0 && stp.st === 'stopped' && !stp.mic && stp.same, JSON.stringify(stp));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
