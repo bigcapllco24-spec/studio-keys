@@ -206,6 +206,21 @@ try {
         const bpm0 = CTRL.bpm; await handleRequest(s); loopStop(); R[s] = { bpm: CTRL.bpm - bpm0, back: drums().recipe.back }; }
       return R; } finally { ASSIST.engine = eng; } });
   ok('"faster" about a part keeps the tempo, "add a snare roll" keeps the clap', n23['make the bass faster'].bpm === 0 && n23['faster chords'].bpm === 0 && n23['make it faster'].bpm === 5 && n23['add a snare roll'].back !== 'snare' && n23['add a snare'].back === 'snare', JSON.stringify(n23));
+  // UX-10: 5 sung bass takes in a row on a busy page: the recording has no holes inside notes and no note comes out doubled
+  // (sing.wav never sings the same note twice in a row, and its own gaps are 100 ms of silence)
+  await E(() => newSong('Smoke takes')); await W(300);
+  await E(() => { runActions([{ type: 'add_drums', style: 'house' }]); setBars(2); loopStop(); window.__tk = [];
+    window.__a2n = audioToNotes; window.audioToNotes = function (buf) { const r = window.__a2n(buf), x = buf.getChannelData(0), sr = buf.sampleRate; let holes = 0;
+      for (let i = 1; i < x.length; i++) { if (x[i] !== 0 || x[i - 1] === 0) continue; let j = i; while (j < x.length && x[j] === 0) j++; const mid = (i + j) / 2 / sr;
+        if (j < x.length && j - i >= 0.002 * sr && j - i < 0.06 * sr && r.some(n => mid > n.t0 && mid < n.t1)) holes++; i = j; }
+      window.__tk.push({ holes }); return r; };
+    window.__busy = setInterval(() => { const t = performance.now() + 4 + Math.random() * 25; while (performance.now() < t); }, 35); });
+  for (let k = 0; k < 5; k++) { await E(() => ASSIST.run('let me sing the bassline'));
+    for (let i = 0; i < 40; i++) { await W(500); if (await E(n => window.__tk.length > n && LOOP.state !== 'take', k)) break; }
+    await E(n => { const t = PROJ.tracks.find(t => t.take === 'bass'), ev = t ? [...t.events].sort((a, b) => a.b - b.b) : [], r = window.__tk[n];
+      if (r) { r.n = ev.length; r.dbl = ev.filter((e, i) => i && e.n === ev[i - 1].n).length; } loopStop(); }, k); await W(400); }
+  const tk = await E(() => { clearInterval(window.__busy); window.audioToNotes = window.__a2n; return window.__tk; });
+  ok('5 sung basslines in a row: no holes in the recording, no doubled notes', tk.length === 5 && tk.every(r => r.n >= 4 && !r.holes && !r.dbl), tk.map(r => `${r.n} notes/${r.dbl} doubled/${r.holes} holes`).join(', '));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
