@@ -23,8 +23,13 @@ function addBubble(who,text,chips){
 }
 function setOrb(state,text){ const o=$('#asOrb'); o.dataset.state=state; $('#asStatus').textContent=text; }
 function idleText(){ return ASSIST.listening?`Listening. Say “${ASSIST.name}” and what you want, or hum a melody.`:`Press the orb and speak, or type below. Turn on “Always listening” to just say “${ASSIST.name}”.`; }
+/* chord symbols read as words: "Em · C/E · F♯7" -> "E minor, C over E, F sharp 7" */
+const CH_SAY={'':'',m:' minor',min:' minor',7:' 7',m7:' minor 7',maj7:' major 7',sus4:' sus 4',sus2:' sus 2',dim:' diminished',5:' 5'};
+function sayChords(s){ return String(s).replace(/(^|[\s(,;:])([A-G])([♭♯#b]?)(maj7|m7|sus4|sus2|dim|min|m|7|5)?(?:\/([A-G])([♭♯#b]?))?(?=$|[\s·,.;:)?!…])/g,(all,pre,r,acc,q,br,ba)=>{
+    if(!acc&&!q&&!br) return all; const ac=x=>x==='♭'||x==='b'?' flat':x==='♯'||x==='#'?' sharp':''; return pre+r+ac(acc)+(CH_SAY[q||'']||'')+(br?' over '+br+ac(ba):''); })
+  .replace(/\s*·\s*/g,', ').replace(/\bN\.C\./g,'no chord').replace(/ …/g,''); }
 function speak(msg){
-  if(!('speechSynthesis' in window)) return; try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(msg.replace(/[“”]/g,'')); u.rate=1.05; u.pitch=1;
+  if(!('speechSynthesis' in window)) return; try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(sayChords(msg.replace(/[“”]/g,''))); u.rate=1.05; u.pitch=1;
     const v=speechSynthesis.getVoices().find(x=>/en-(IN|GB|US)/.test(x.lang)&&/female|natural|google/i.test(x.name))||speechSynthesis.getVoices().find(x=>/^en/.test(x.lang)); if(v) u.voice=v;
     const done=()=>{ if(!ASSIST.speaking) return; ASSIST.speaking=false; clearTimeout(ASSIST.speakT); setOrb(ASSIST.listening?'listening':'idle',idleText()); ASSIST.awakeUntil=performance.now()+8000; };
     ASSIST.speaking=true; setOrb('speaking','Speaking…'); u.onend=u.onerror=done;
@@ -42,11 +47,19 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
   return `Shape it with effects (“more reverb on the chords”), mix it, or download the MP3.`; }
 function projectState(){
   return {name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:keyContext(),style:PROJ.style||null,playing:TR.running,
-    tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute})),
+    tracks:PROJ.tracks.map(t=>Object.assign({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute},t.kind==='audio'?{heard:anaContext(t)}:t.gen?{}:{own:true})),
     taste:TASTE.profile?{artists:(TASTE.profile.artists||[]).slice(0,12),styles:(TASTE.profile.styles||[]).map(s=>s.style),playlists:(TASTE.profile.playlists||[]).map(p=>p.name+(p.style?' ('+p.style+')':'')).slice(0,8)}:null,
     vibe:PROJ.ref||null,
+    chords:songChordsContext(),
+    offer:offerOpen()?{keysAsked:OFFER.text,ifUserSaysYes:OFFER.actions}:null,
     keysSound:zoneInst('keys').name,padsSound:zoneInst('pads').name,effects:FX.slots.map(s=>`${FX_LIB[s.type].name} ${Math.round(s.amount*100)}%`)};
 }
+/* SE-7c: for the AI, the song's chords and what Keys heard in a song dropped in (never the audio itself) */
+function songChordsContext(){ const has=Array.isArray(PROJ.chords)&&PROJ.chords.length; if(!has&&!PROJ.tracks.some(t=>t.kind==='notes'&&['bass','chords'].includes(t.role))) return 'none yet';
+  return chordsText(chordBlocks().slice(0,16))+(has?(PROJ.chords.some(c=>c.from==='audio')?' (taken from a song the user brought in)':' (fixed by the user)'):" (Keys' own progression)"); }
+function anaContext(t){ const a=typeof trackAna==='function'&&trackAna(t); if(!a) return 'not listened to yet (analyse_song listens)'; if(!a.key&&!a.bpm) return 'no key or tempo (too short or silent)';
+  const ch=a.key?chordsFromAna(a,{to:'song'}).slice(0,8):[];
+  return (a.key?`${keyName(a.key)} (${KEY_WORDS[a.key.level]||''}${a.key.alt?', or '+keyName(a.key.alt):''}; ${a.key.why||''}), DJ key ${a.djKey}`:'no key (drums only)')+(a.bpm?`, ${Math.round(a.bpm)} BPM`:'')+(ch.length?`, main loop ${chordsText(ch)}`:''); }
 async function detectEngine(){
   if(!/^https?:$/.test(location.protocol)){ ASSIST.engine=null; showEngine(); return; }
   try{ const r=await fetch('/api/assistant',{method:'GET',cache:'no-store'}); const j=await r.json(); ASSIST.engine=j&&j.ok?j.engine:null; }catch(e){ ASSIST.engine=null; }
@@ -66,6 +79,8 @@ async function handleRequest(text){
       done=runActions(j.actions||[]); reply=j.reply||'';
     }catch(e){ console.warn('assistant AI failed, using offline brain',e); const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
   } else { const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
+  /* SE-7c: what the app really heard or changed (a song's key, chords, a fixed bar) is the reply, not the AI's guess */
+  if(BATCH.say) reply=BATCH.say; else if(!reply&&BATCH.reply) reply=BATCH.reply;
   if(!reply) reply=done.length?'Done: '+done.join(', ')+'. '+nextStep():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
   ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false; LAST_TEXT.text='';
   if(BATCH.take){ ASSIST.say(reply,{chips:done,speak:false}); if(ASSIST.voice) speak('Sing after the count-in.'); } else ASSIST.say(reply,{chips:done}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());

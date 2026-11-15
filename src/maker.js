@@ -31,7 +31,54 @@ function swingOnly(raw,hasDrums){ let s=' '+String(raw||'').toLowerCase().replac
   if(hasDrums) s=s.replace(/\b(beat|groove|drums?|(hi|high)[ -]?hats?|hihats?|hats?|rhythm)\b/g,' ');
   return !s.replace(/[^a-z0-9]+/g,'').length; }
 const SWING_ADD_PART=/\b(add|adding|bring in|layer|put in|write|create|make|give me|want|need)( me)?( a| an| some| new| another| more)? (?!(?:the|my|it|this|that|its|your) )([a-z]+ )?(bass ?lines?|bass|chords?|pads?|harmony|progression|melody|lead|hook|riff|keys|piano|synths?|arps?)\b/;
+/* ---------- SE-7c: a song's key and chords, fixing a bar's chord, matching a loop's key (and "yes" to Keys' offer) ---------- */
+const YES_RE=/^\s*(yes|yeah|yea|yep|yup|sure|ok|okay|ok do it|do it|go ahead|go for it|please do|yes please|sounds good|let'?s do it|let'?s go|perfect|haan|haan ji|haanji|han|haa|ha|ji|ji haan|theek hai|thik hai|kar do|karo|chalo)\b[\s.!,]*(please|do it|go ahead|ji|karo|kar do|yes|sure)?[\s.!]*$/i;
+const NO_RE=/^\s*(no|nope|nah|not now|leave it|don'?t|no thanks|nahi|nahin|na|mat karo|rehne do)\b[\s.!,]*(thanks|thank you|leave it|it'?s fine|ji)?[\s.!]*$/i;
+const ORD={first:1,second:2,third:3,fourth:4,fifth:5,sixth:6,seventh:7,eighth:8,ninth:9,tenth:10,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8};
+/* "what key / what chords / analyse this song" (English and Hinglish) */
+const ANA_ASK=/\b(what|which|whats|what's|tell me|find|detect|kaunsi|kaun ?si|konsi|kon ?si)\b.*\b(key|scale|chords?|bpm|tempo)\b|\b(key|scale|chords?|bpm|tempo)\b.*\b(kya|kaunsi|kaun ?si|konsi|kon ?si)\b|\b(analy[sz]e|listen to|figure out|work out)\b.*\b(song|track|loop|this|it|clip|file|audio|chords?|key)\b/;
+const SONG_WORD='(?:song|track|loop|clip|file|audio|recording|mp3|sample|gaane|gane|gaana)';
+const TAKE_VERB=/\b(put|take|use|add|copy|grab|bring|steal|get|lift|give me|want|daal|daalo|dalo|daal do|laga|lagao|chahiye|same)\b/;
+function wantsSongChords(t){ if(!/\bchords?\b/.test(t)) return false;
+  if(new RegExp('\\b(?<!my |mere |mera |our )'+SONG_WORD+"\\s*('s|s|ke|ki|ka)?\\s+chords?\\b").test(t)) return true;
+  if(new RegExp('\\bchords?\\b.*\\b(from|of|off|out of|in|se)\\s+(the|this|that|is|us|ye|yeh)\\s+'+SONG_WORD+'\\b').test(t)) return true;
+  if(/\b(those|these|same|original|its|iske|uske|ye|yeh|wo|woh|their)\s+chords?\b/.test(t)) return true;
+  return false; }
+/* "make bar 4 B minor", "bar 2 should be F#7", "make bars 3 and 4 C", "make the fourth bar beat 3 E", "bar 4 ko B minor kar do" */
+function barChord(raw){ let s=' '+String(raw).toLowerCase().replace(/[?!.]+\s*$/,'')+' ', bar=null, bars, beat, m;
+  const bm=s.match(/\s(?:from |on |at )?beat\s*(\d|one|two|three|four)\b(?:\s*of)?/); if(bm){ beat=+bm[1]||ORD[bm[1]]; s=s.replace(bm[0],' '); }
+  if((m=s.match(/\bbars?\s*(\d{1,2})\s*(?:-|to|and|through|&)\s*(\d{1,2})\b/))){ bar=+m[1]; bars=Math.max(1,+m[2]-bar+1); }
+  else if((m=s.match(/\b(?:bar|measure)\s*(?:number\s*|no\.?\s*)?(\d{1,2}|one|two|three|four|five|six|seven|eight)\b/))) bar=+m[1]||ORD[m[1]];
+  else if((m=s.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:bar|measure)\b/)||s.match(/\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+(?:bar|measure)\b/))) bar=+m[1]||ORD[m[1]];
+  if(!bar) return null;
+  const tidy=x=>x.replace(/\s+/g,' ').trim(), after=tidy(s.slice(m.index+m[0].length)), before=tidy(s.slice(0,m.index));
+  const tries=[];
+  const a1=after.replace(/^(?:of the song |of my song |of the loop )?(?:(?:should|must|could|can|will) be|needs to be|to be|to|into|be|is|as|=|:|ko|ka chord|ki chord|chord|the chord|with)\s+/,'').replace(/\s+(?:karo|kar do|kardo|banao|bana do|please|chord|instead|now|then|ok|okay|thanks)$/,'').replace(/\s+(?:karo|kar do|please|chord)$/,'');
+  tries.push(a1,a1.replace(/^(?:a|an)\s+/,''));
+  const b1=before.replace(/^(?:(?:hey )?keys,? )?(?:can you |could you |please |i want |let'?s |lets )?(?:make|set|change|put|turn|switch|use|play|give me|i want)?\s*(?:it|that|the chord|a chord|the chords)?\s*(?:to|into)?\s*/,'').replace(/\s+(?:in|on|for|at|of)(?: the)?$/,'').replace(/\s+chord$/,'');
+  tries.push(b1,b1.replace(/^(?:a|an)\s+/,''));
+  for(const x of tries){ if(!x||x.length>24) continue; const c=parseChord(x); if(c) return {type:'set_chord',bar,chord:chordName(c),beat,bars}; }
+  return null; }
+function songTalk(raw,t){
+  const hasAudio=PROJ.tracks.some(x=>x.kind==='audio');
+  const named=PROJ.tracks.slice().sort((a,b)=>b.name.length-a.name.length).find(x=>x.name.length>=4&&t.includes(' '+x.name.toLowerCase()+' '));
+  const mine=/\b(my|our) (own )?(song|track|tune|project)\b|\b(mera|mere|meri) (gaana|gaane|song)\b/.test(t)&&!new RegExp('\\b(this|that|the|is|us) '+SONG_WORD+'\\b').test(t);
+  if(/\b(key\s*(to|back to|on|ko)?\s*auto(matic)?|auto(matic)?\s*key|unlock (the )?key|unset (the )?key|clear (the )?key|forget (the )?key|let (the )?key (be )?(auto|detected))\b/.test(t)) return {actions:[{type:'key',key:'auto'}]};
+  const bc=/\b(bar|bars|measure)\b/.test(t)&&barChord(raw); if(bc) return {actions:[bc]};
+  if(/\b(match|fit|put|move|transpose|shift|bring|change|set|make|kar|karo|kar do)\b/.test(t)&&(/\b(to|in|into|with|mein|me)\s+(my|our|the song'?s|meri|mere|apni)\s+(song'?s\s+)?key\b/.test(t)||/\b(meri|mere|apni) key (mein|me)\b/.test(t))||/\b(same key as|in key with)\s+(my|the|our|mere)\s+(song|track|project)\b/.test(t)||/\bmatch (the |its )?key\b/.test(t)&&/\b(loop|clip|sample|midi|this|it)\b/.test(t))
+    return {actions:[{type:'match_key',track:named?named.name:undefined}]};
+  const takeChords=wantsSongChords(t)&&(TAKE_VERB.test(t)||/\b(on|in|to|onto|into|mein|me)\s+(my|our|mere|meri)\b/.test(t));
+  if(takeChords&&!/^\s*(what|which|kya|kaunsi|konsi)\b/.test(t)){
+    const to=/\b(the song'?s key|original key|its (own )?key|their key|same key|keep the key|in the song'?s key|uski key|unki key|as it is|as they are)\b/.test(t)?'song':'mine';
+    const bass=/\bbass/.test(t)&&!/\b(without|no|minus|not the) (the )?bass/.test(t), bm=t.match(/\b(\d{1,2})\s*bars?\b/);
+    return {actions:[{type:'chords_from_audio',track:named&&named.kind==='audio'?named.name:undefined,to,bass:bass||undefined,bars:bm?+bm[1]:undefined},{type:'transport',do:'play'}]}; }
+  if(/\b(use|set|take|switch to|change to|go to|put|move)\b.*\b(the song'?s key|the key of (the|this|that) song|its key|that key|the same key|song ki key|uski key)\b/.test(t)&&!/\bchords?\b/.test(t)) return {actions:[{type:'key',key:'song',from:'song'}]};
+  if(ANA_ASK.test(t)&&!/\b(add|make me|give me|set|change|use|put)\b/.test(t))
+    return {actions:[{type:'analyse_song',track:mine||!hasAudio?'mine':named&&named.kind==='audio'?named.name:undefined}]};
+  return null; }
 function localBrain(raw){
+  { const of=offerOpen(); if(of&&YES_RE.test(raw)) return {actions:of.actions.map(x=>Object.assign({},x))};
+    if(of&&NO_RE.test(raw)){ OFFER.actions=null; return {actions:[],reply:'OK, I left it as it is.'}; } }
   const sws=swingSaid(raw), anyDrums=PROJ.tracks.some(x=>x.role==='drums'), hasDrums=PROJ.tracks.some(x=>x.role==='drums'&&x.recipe);
   if(sws!=null&&swingOnly(raw,hasDrums)){
     if(hasDrums) return {actions:[{type:'groove',track:'drums',swing:sws}]};
@@ -51,6 +98,7 @@ function plainClapSnare(t){ const m=t.match(/\badd (a |some |the )?(claps?|snare
   return !rest.replace(/\b(please|too|as well|instead|back|again|now|on|the|2|two|4|four|backbeat|back ?beat|beat|drums?|groove|to|in|it|of|one|of the)\b/g,' ').trim().length; }
 function brainCore(raw,sws){
   const t=' '+raw.toLowerCase().replace(/hi[\s-]?hats?|high[\s-]?hats?|hihats?/g,'hats').replace(/drum ?(and|&|n|'n') ?bass|d ?& ?b|d n b/g,'dnb').replace(/hip[\s-]?hop/g,'hiphop').replace(/lo[\s-]?fi/g,'lofi').replace(/eighths?|8ths?|8th notes?|eight notes?|8\s*\/\s*8/g,' 8th ').replace(/sixteenths?|16ths?|16 notes?|16\s*\/\s*16/g,' 16th ').replace(/beats per minute|bpm/g,' bpm ')+' ';
+  { const st=songTalk(raw,t); if(st) return st; }
   const A=[]; let m;
   const artist=artistIn(raw); let ref=artist?artist.name:undefined;
   const plm=raw.match(/\b(?:like|from|vibe of|in the style of)\s+(?:my\s+)?(.+?)\s+playlist\b/i)||raw.match(/\bmy playlist\s+["“]?([^"”,.]+)["”]?/i);
@@ -88,7 +136,7 @@ function brainCore(raw,sws){
   if((m=t.match(/(\d{2,3}(?:\.\d)?)\s*bpm/)||t.match(/tempo (?:to |of |at )?(\d{2,3})/))) A.push({type:'tempo',bpm:+m[1]});
   else if(/\b(faster|speed (it )?up|quicker|slower|slow (it )?down)\b/.test(t)&&!/\bhats\b/.test(t)&&!FASTER_PART.test(t)&&PROJ.tracks.length) A.push({type:'tempo',bpm:Math.round(CTRL.bpm)+(/\b(slower|slow (it )?down)\b/.test(t)?-5:5)*(/\b(a lot|much|way)\b/.test(t)?2:1)});
   if((m=t.match(/\b(\d{1,2})\s*bars?\b/))) A.push({type:'bars',bars:+m[1]});
-  if((m=t.match(/\b(?:in|key of|key)\s+([a-g](?:\s*(?:sharp|flat|#|b))?\s*(?:major|minor|maj|min|m)?)\b/)) && /major|minor|maj|min|\bkey\b|sharp|flat|#/.test(m[0])) A.push({type:'key',key:m[1]});
+  if((m=t.match(/\b(?:in|key of|key (?:to|in)|key)\s+([a-g](?:\s*(?:sharp|flat|#|b))?\s*(?:major|minor|maj|min|m)?)\b/)) && /major|minor|maj|min|\bkey\b|sharp|flat|#/.test(m[0])) A.push({type:'key',key:m[1]});
   if(/\b(new song|new project|start over)\b/.test(t)) return {actions:[{type:'new_project'}],reply:'Started a new song. Your last one is saved.'};
   if(/\bsave\b/.test(t)) A.push({type:'save'});
   if(/\b(stop|pause)\b/.test(t)) A.push({type:'transport',do:'stop'});

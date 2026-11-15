@@ -5418,7 +5418,54 @@ function swingOnly(raw,hasDrums){ let s=' '+String(raw||'').toLowerCase().replac
   if(hasDrums) s=s.replace(/\b(beat|groove|drums?|(hi|high)[ -]?hats?|hihats?|hats?|rhythm)\b/g,' ');
   return !s.replace(/[^a-z0-9]+/g,'').length; }
 const SWING_ADD_PART=/\b(add|adding|bring in|layer|put in|write|create|make|give me|want|need)( me)?( a| an| some| new| another| more)? (?!(?:the|my|it|this|that|its|your) )([a-z]+ )?(bass ?lines?|bass|chords?|pads?|harmony|progression|melody|lead|hook|riff|keys|piano|synths?|arps?)\b/;
+/* ---------- SE-7c: a song's key and chords, fixing a bar's chord, matching a loop's key (and "yes" to Keys' offer) ---------- */
+const YES_RE=/^\s*(yes|yeah|yea|yep|yup|sure|ok|okay|ok do it|do it|go ahead|go for it|please do|yes please|sounds good|let'?s do it|let'?s go|perfect|haan|haan ji|haanji|han|haa|ha|ji|ji haan|theek hai|thik hai|kar do|karo|chalo)\b[\s.!,]*(please|do it|go ahead|ji|karo|kar do|yes|sure)?[\s.!]*$/i;
+const NO_RE=/^\s*(no|nope|nah|not now|leave it|don'?t|no thanks|nahi|nahin|na|mat karo|rehne do)\b[\s.!,]*(thanks|thank you|leave it|it'?s fine|ji)?[\s.!]*$/i;
+const ORD={first:1,second:2,third:3,fourth:4,fifth:5,sixth:6,seventh:7,eighth:8,ninth:9,tenth:10,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8};
+/* "what key / what chords / analyse this song" (English and Hinglish) */
+const ANA_ASK=/\b(what|which|whats|what's|tell me|find|detect|kaunsi|kaun ?si|konsi|kon ?si)\b.*\b(key|scale|chords?|bpm|tempo)\b|\b(key|scale|chords?|bpm|tempo)\b.*\b(kya|kaunsi|kaun ?si|konsi|kon ?si)\b|\b(analy[sz]e|listen to|figure out|work out)\b.*\b(song|track|loop|this|it|clip|file|audio|chords?|key)\b/;
+const SONG_WORD='(?:song|track|loop|clip|file|audio|recording|mp3|sample|gaane|gane|gaana)';
+const TAKE_VERB=/\b(put|take|use|add|copy|grab|bring|steal|get|lift|give me|want|daal|daalo|dalo|daal do|laga|lagao|chahiye|same)\b/;
+function wantsSongChords(t){ if(!/\bchords?\b/.test(t)) return false;
+  if(new RegExp('\\b(?<!my |mere |mera |our )'+SONG_WORD+"\\s*('s|s|ke|ki|ka)?\\s+chords?\\b").test(t)) return true;
+  if(new RegExp('\\bchords?\\b.*\\b(from|of|off|out of|in|se)\\s+(the|this|that|is|us|ye|yeh)\\s+'+SONG_WORD+'\\b').test(t)) return true;
+  if(/\b(those|these|same|original|its|iske|uske|ye|yeh|wo|woh|their)\s+chords?\b/.test(t)) return true;
+  return false; }
+/* "make bar 4 B minor", "bar 2 should be F#7", "make bars 3 and 4 C", "make the fourth bar beat 3 E", "bar 4 ko B minor kar do" */
+function barChord(raw){ let s=' '+String(raw).toLowerCase().replace(/[?!.]+\s*$/,'')+' ', bar=null, bars, beat, m;
+  const bm=s.match(/\s(?:from |on |at )?beat\s*(\d|one|two|three|four)\b(?:\s*of)?/); if(bm){ beat=+bm[1]||ORD[bm[1]]; s=s.replace(bm[0],' '); }
+  if((m=s.match(/\bbars?\s*(\d{1,2})\s*(?:-|to|and|through|&)\s*(\d{1,2})\b/))){ bar=+m[1]; bars=Math.max(1,+m[2]-bar+1); }
+  else if((m=s.match(/\b(?:bar|measure)\s*(?:number\s*|no\.?\s*)?(\d{1,2}|one|two|three|four|five|six|seven|eight)\b/))) bar=+m[1]||ORD[m[1]];
+  else if((m=s.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:bar|measure)\b/)||s.match(/\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+(?:bar|measure)\b/))) bar=+m[1]||ORD[m[1]];
+  if(!bar) return null;
+  const tidy=x=>x.replace(/\s+/g,' ').trim(), after=tidy(s.slice(m.index+m[0].length)), before=tidy(s.slice(0,m.index));
+  const tries=[];
+  const a1=after.replace(/^(?:of the song |of my song |of the loop )?(?:(?:should|must|could|can|will) be|needs to be|to be|to|into|be|is|as|=|:|ko|ka chord|ki chord|chord|the chord|with)\s+/,'').replace(/\s+(?:karo|kar do|kardo|banao|bana do|please|chord|instead|now|then|ok|okay|thanks)$/,'').replace(/\s+(?:karo|kar do|please|chord)$/,'');
+  tries.push(a1,a1.replace(/^(?:a|an)\s+/,''));
+  const b1=before.replace(/^(?:(?:hey )?keys,? )?(?:can you |could you |please |i want |let'?s |lets )?(?:make|set|change|put|turn|switch|use|play|give me|i want)?\s*(?:it|that|the chord|a chord|the chords)?\s*(?:to|into)?\s*/,'').replace(/\s+(?:in|on|for|at|of)(?: the)?$/,'').replace(/\s+chord$/,'');
+  tries.push(b1,b1.replace(/^(?:a|an)\s+/,''));
+  for(const x of tries){ if(!x||x.length>24) continue; const c=parseChord(x); if(c) return {type:'set_chord',bar,chord:chordName(c),beat,bars}; }
+  return null; }
+function songTalk(raw,t){
+  const hasAudio=PROJ.tracks.some(x=>x.kind==='audio');
+  const named=PROJ.tracks.slice().sort((a,b)=>b.name.length-a.name.length).find(x=>x.name.length>=4&&t.includes(' '+x.name.toLowerCase()+' '));
+  const mine=/\b(my|our) (own )?(song|track|tune|project)\b|\b(mera|mere|meri) (gaana|gaane|song)\b/.test(t)&&!new RegExp('\\b(this|that|the|is|us) '+SONG_WORD+'\\b').test(t);
+  if(/\b(key\s*(to|back to|on|ko)?\s*auto(matic)?|auto(matic)?\s*key|unlock (the )?key|unset (the )?key|clear (the )?key|forget (the )?key|let (the )?key (be )?(auto|detected))\b/.test(t)) return {actions:[{type:'key',key:'auto'}]};
+  const bc=/\b(bar|bars|measure)\b/.test(t)&&barChord(raw); if(bc) return {actions:[bc]};
+  if(/\b(match|fit|put|move|transpose|shift|bring|change|set|make|kar|karo|kar do)\b/.test(t)&&(/\b(to|in|into|with|mein|me)\s+(my|our|the song'?s|meri|mere|apni)\s+(song'?s\s+)?key\b/.test(t)||/\b(meri|mere|apni) key (mein|me)\b/.test(t))||/\b(same key as|in key with)\s+(my|the|our|mere)\s+(song|track|project)\b/.test(t)||/\bmatch (the |its )?key\b/.test(t)&&/\b(loop|clip|sample|midi|this|it)\b/.test(t))
+    return {actions:[{type:'match_key',track:named?named.name:undefined}]};
+  const takeChords=wantsSongChords(t)&&(TAKE_VERB.test(t)||/\b(on|in|to|onto|into|mein|me)\s+(my|our|mere|meri)\b/.test(t));
+  if(takeChords&&!/^\s*(what|which|kya|kaunsi|konsi)\b/.test(t)){
+    const to=/\b(the song'?s key|original key|its (own )?key|their key|same key|keep the key|in the song'?s key|uski key|unki key|as it is|as they are)\b/.test(t)?'song':'mine';
+    const bass=/\bbass/.test(t)&&!/\b(without|no|minus|not the) (the )?bass/.test(t), bm=t.match(/\b(\d{1,2})\s*bars?\b/);
+    return {actions:[{type:'chords_from_audio',track:named&&named.kind==='audio'?named.name:undefined,to,bass:bass||undefined,bars:bm?+bm[1]:undefined},{type:'transport',do:'play'}]}; }
+  if(/\b(use|set|take|switch to|change to|go to|put|move)\b.*\b(the song'?s key|the key of (the|this|that) song|its key|that key|the same key|song ki key|uski key)\b/.test(t)&&!/\bchords?\b/.test(t)) return {actions:[{type:'key',key:'song',from:'song'}]};
+  if(ANA_ASK.test(t)&&!/\b(add|make me|give me|set|change|use|put)\b/.test(t))
+    return {actions:[{type:'analyse_song',track:mine||!hasAudio?'mine':named&&named.kind==='audio'?named.name:undefined}]};
+  return null; }
 function localBrain(raw){
+  { const of=offerOpen(); if(of&&YES_RE.test(raw)) return {actions:of.actions.map(x=>Object.assign({},x))};
+    if(of&&NO_RE.test(raw)){ OFFER.actions=null; return {actions:[],reply:'OK, I left it as it is.'}; } }
   const sws=swingSaid(raw), anyDrums=PROJ.tracks.some(x=>x.role==='drums'), hasDrums=PROJ.tracks.some(x=>x.role==='drums'&&x.recipe);
   if(sws!=null&&swingOnly(raw,hasDrums)){
     if(hasDrums) return {actions:[{type:'groove',track:'drums',swing:sws}]};
@@ -5438,6 +5485,7 @@ function plainClapSnare(t){ const m=t.match(/\badd (a |some |the )?(claps?|snare
   return !rest.replace(/\b(please|too|as well|instead|back|again|now|on|the|2|two|4|four|backbeat|back ?beat|beat|drums?|groove|to|in|it|of|one|of the)\b/g,' ').trim().length; }
 function brainCore(raw,sws){
   const t=' '+raw.toLowerCase().replace(/hi[\s-]?hats?|high[\s-]?hats?|hihats?/g,'hats').replace(/drum ?(and|&|n|'n') ?bass|d ?& ?b|d n b/g,'dnb').replace(/hip[\s-]?hop/g,'hiphop').replace(/lo[\s-]?fi/g,'lofi').replace(/eighths?|8ths?|8th notes?|eight notes?|8\s*\/\s*8/g,' 8th ').replace(/sixteenths?|16ths?|16 notes?|16\s*\/\s*16/g,' 16th ').replace(/beats per minute|bpm/g,' bpm ')+' ';
+  { const st=songTalk(raw,t); if(st) return st; }
   const A=[]; let m;
   const artist=artistIn(raw); let ref=artist?artist.name:undefined;
   const plm=raw.match(/\b(?:like|from|vibe of|in the style of)\s+(?:my\s+)?(.+?)\s+playlist\b/i)||raw.match(/\bmy playlist\s+["“]?([^"”,.]+)["”]?/i);
@@ -5475,7 +5523,7 @@ function brainCore(raw,sws){
   if((m=t.match(/(\d{2,3}(?:\.\d)?)\s*bpm/)||t.match(/tempo (?:to |of |at )?(\d{2,3})/))) A.push({type:'tempo',bpm:+m[1]});
   else if(/\b(faster|speed (it )?up|quicker|slower|slow (it )?down)\b/.test(t)&&!/\bhats\b/.test(t)&&!FASTER_PART.test(t)&&PROJ.tracks.length) A.push({type:'tempo',bpm:Math.round(CTRL.bpm)+(/\b(slower|slow (it )?down)\b/.test(t)?-5:5)*(/\b(a lot|much|way)\b/.test(t)?2:1)});
   if((m=t.match(/\b(\d{1,2})\s*bars?\b/))) A.push({type:'bars',bars:+m[1]});
-  if((m=t.match(/\b(?:in|key of|key)\s+([a-g](?:\s*(?:sharp|flat|#|b))?\s*(?:major|minor|maj|min|m)?)\b/)) && /major|minor|maj|min|\bkey\b|sharp|flat|#/.test(m[0])) A.push({type:'key',key:m[1]});
+  if((m=t.match(/\b(?:in|key of|key (?:to|in)|key)\s+([a-g](?:\s*(?:sharp|flat|#|b))?\s*(?:major|minor|maj|min|m)?)\b/)) && /major|minor|maj|min|\bkey\b|sharp|flat|#/.test(m[0])) A.push({type:'key',key:m[1]});
   if(/\b(new song|new project|start over)\b/.test(t)) return {actions:[{type:'new_project'}],reply:'Started a new song. Your last one is saved.'};
   if(/\bsave\b/.test(t)) A.push({type:'save'});
   if(/\b(stop|pause)\b/.test(t)) A.push({type:'transport',do:'stop'});
@@ -5597,11 +5645,68 @@ function regenTrack(t,opts={}){
   if(!t||!t.gen) return null; const s=t.style||PROJ.style||'house', seed=opts.seed||newSeed();
   if(t.role==='drums'){ const rec=Object.assign({},t.recipe||grooveRecipe(s,findArtist(t.ref)),opts.recipe||{}); rec.energy=clamp(Math.round(+rec.energy||3),1,5); const g=makeGroove(rec,L_(),seed); Object.assign(t,{events:g.events,recipe:rec,seed,desc:g.desc}); return g.desc; }
   if(t.role==='bass'){ t.events=genBass(s,L_(),seed); t.seed=seed; return 'a new bassline'; }
-  if(t.role==='chords'){ t.events=genChords(s,L_(),seed); t.seed=seed; return 'a new chord rhythm'; }
+  if(t.role==='chords'){ t.events=genChords(s,L_(),seed,heldChordStyle(t.inst,s)); t.seed=seed; return 'a new chord rhythm'; }
   if(t.role==='melody'){ t.events=genMelody(L_(),seed,s); t.seed=seed; return 'a new melody'; }
   return null;
 }
 const loadI=id=>{ const I=INST.get(id); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); return I; };
+/* ---------- SE-7c: a song's key and chords by voice ----------
+   Keys only offers to change your song after hearing one ("Set your song to E minor?"); OFFER holds the actions a "yes" runs
+   (the offline parser and the AI both see it). Replies for these actions come from what the app really heard (BATCH.say). */
+const OFFER={actions:null,text:'',at:0};
+function makeOffer(text,actions){ OFFER.actions=actions; OFFER.text=text; OFFER.at=Date.now(); BATCH.offered=true; }
+const offerOpen=()=>OFFER.actions&&Date.now()-OFFER.at<180000?OFFER:null;
+const sayAdd=s=>{ BATCH.say=BATCH.say?BATCH.say+' '+s:s; };
+/* the song a request is about: the audio track it names, else the newest audio track with an analysis, else the newest audio */
+function songTrack(ref){ const au=PROJ.tracks.filter(t=>t.kind==='audio'); if(!au.length) return null;
+  if(ref&&!/^(it|this|that|song|the song|this song|that song|track|this track|loop|this loop|audio)$/i.test(String(ref).trim())){ const t=findTrack(ref); if(t&&t.kind==='audio') return t; }
+  return [...au].reverse().find(t=>t.ana&&t.ana.v===ANA_VER)||au[au.length-1]; }
+/* the analysis cached on an audio track (t.ana), if it is still for this clip */
+function trackAna(t){ if(!t||t.kind!=='audio'||!t.ana||t.ana.v!==ANA_VER) return null; const buf=AUD.get(t.id); return buf?anaCached(t,buf):t.ana; }
+/* listen to a clip that has no analysis yet: fn(track, ana) -> {say, chips} runs when it is done and Keys says the result.
+   One job per clip (the import hook may already be listening to it). Returns false when the audio isn't loaded. */
+const ANA_JOBS=new Map();
+function anaThen(t,fn){ const buf=AUD.get(t.id); if(!buf||typeof analyseAudio!=='function') return false; const id=t.id;
+  let job=ANA_JOBS.get(id);
+  if(!job){ job=analyseAudio(buf,{onProgress:p=>{ if(typeof setOrb==='function'&&!ASSIST.speaking) setOrb('thinking',`Listening to “${t.name}”… ${Math.round(p*100)}%`); }})
+      .then(res=>{ const c=anaCache(res,buf), tt=PROJ.tracks.find(x=>x.id===id); if(tt){ tt.ana=c; saveProject(); } return c; }); ANA_JOBS.set(id,job); job.then(()=>ANA_JOBS.delete(id),()=>ANA_JOBS.delete(id)); }
+  job.then(ana=>{ const tt=PROJ.tracks.find(x=>x.id===id); if(!tt) return; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
+      const r=fn(tt,ana)||{}; if(!BATCH.offered) OFFER.actions=null; renderTracks(); uiLoop(); if(r.say&&typeof ASSIST!=='undefined') ASSIST.say(r.say,{chips:r.chips||[]}); if(typeof setOrb==='function'&&!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText()); })
+    .catch(e=>{ console.warn('analysis failed',e); if(typeof ASSIST!=='undefined') ASSIST.say(`I couldn’t listen to “${t.name}”. Try importing it again.`); });
+  return true; }
+/* run fn now if the clip is analysed, else listen first; the request's reply says Keys is listening */
+function withAna(t,fn){ const ana=trackAna(t); if(ana){ const r=fn(t,ana)||{}; if(r.say) sayAdd(r.say); return (r.chips||[])[0]||r.chip; }
+  if(anaThen(t,fn)){ sayAdd(`Listening to “${t.name}”, one moment.`); return `Listening to ${t.name}`; }
+  sayAdd(`“${t.name}” is still loading. Ask me again in a moment.`); }
+const SURE_SAY=['',", but I'm not sure",', I think',", I'm fairly sure",", I'm sure"];
+const capFirst=s=>s?s[0].toUpperCase()+s.slice(1):s;
+/* the key the song has without this track (for matching a loop to it) */
+function keyWithout(t){ const k=PROJ.key; if(k&&k.tonic!=null&&KEY_HARD.includes(k.from||'you')) return {tonic:k.tonic,mode:k.mode};
+  const d=detectKey(pitchedNotes({tracks:PROJ.tracks.filter(x=>x!==t)})); if(d) return {tonic:d.tonic,mode:d.mode}; return k&&k.tonic!=null?{tonic:k.tonic,mode:k.mode}:null; }
+/* "what key is this song": key, tempo, sureness, the second guess with its reason, the main loop's chords; then an offer */
+function anaReport(t,ana){
+  const k=ana.key, bpm=ana.bpm?Math.round(ana.bpm):null, ch=chordsFromAna(ana,{to:'song'}), chips=[];
+  if(!k&&!bpm) return {say:`I can't hear a key or a tempo in “${t.name}”. It may be too short, or only drums.`,chips:['No key in this clip']};
+  if(!k) return {say:`“${t.name}” is at ${bpm} BPM${ana.bpmAlt?' (or '+Math.round(ana.bpmAlt)+')':''}, but I can't hear a key in it: it sounds like drums only.`,chips:[`${bpm} BPM`,'No key in this clip']};
+  let s=`${keyName(k)}${bpm?' at '+bpm:''}${SURE_SAY[k.level]||''}.`;
+  const why=k.why||((k.cands||[])[0]||{}).why;
+  if(k.level<4&&k.alt) s+=` It could be ${keyName(k.alt)}${why?'; '+why:''}.`; else if(why) s+=` ${capFirst(why)}.`;
+  if(ch.length&&ch.some(c=>c.root!=null)) s+=` The main loop goes ${chordsText(ch.slice(0,8))}${ch.length>8?' …':''}.`;
+  chips.push(`${keyName(k)} · ${KEY_WORDS[k.level]||''}`); if(bpm) chips.push(`${bpm} BPM${ana.bpmAlt?' or '+Math.round(ana.bpmAlt):''}`); if(ana.djKey) chips.push(`DJ key ${ana.djKey}`);
+  const mine=keyStatus(), hard=mine.key&&KEY_HARD.includes(mine.from), tempoOff=bpm&&(ana.bpmConf==null||ana.bpmConf>=0.15)&&Math.abs(CTRL.bpm-bpm)>1;
+  const yes=[{type:'key',key:keyName(k),from:'song'}].concat(tempoOff?[{type:'tempo',bpm}]:[]);
+  if(sameKey(mine.key,k)&&hard){ if(ch.length){ s+=` That's your song's key already. Want those chords on your song?`; makeOffer('Put the song’s chords on your song',[{type:'chords_from_audio',track:t.name}]); } else s+=` That's your song's key already.`; }
+  else { const q=`${hard?'Move':'Set'} your song to ${keyName(k)}${tempoOff?' at '+bpm+' BPM':''}?`; s+=' '+q; makeOffer(q,yes); }
+  return {say:s,chips}; }
+/* the same question about your own song (no song dropped in, or "my song") */
+function mineReport(){ const st=keyStatus(), has=PROJ.tracks.some(t=>t.kind==='notes'&&['bass','chords'].includes(t.role))||(Array.isArray(PROJ.chords)&&PROJ.chords.length);
+  if(!st.key) return {say:`Your song has no key yet: there aren't enough notes to tell. Play or sing a few more, or pick a key.`,chips:['No key yet']};
+  const tag={you:'you set it',keys:'I picked it for the first part',vibe:'it came with the vibe',song:'it came from the song you brought in'}[st.from];
+  let s=tag?`Your song is in ${keyName(st.key)} at ${Math.round(CTRL.bpm)} BPM; ${tag}.`:`Your song sounds like ${keyName(st.key)} at ${Math.round(CTRL.bpm)} BPM${SURE_SAY[st.level]||''}.`;
+  if(!tag&&st.level<4&&st.alt) s+=` It could be ${keyName(st.alt)}${st.why?'; '+st.why:''}.`;
+  if(has) s+=` The chords go ${chordsText(chordBlocks().slice(0,8))}.`;
+  if(!tag&&st.level<4){ const q=`Set it to ${keyName(st.key)}?`; s+=' '+q; makeOffer(q,[{type:'key',key:keyName(st.key)}]); }
+  return {say:s,chips:[keyStatusText(st),`DJ key ${djKey(st.key)}`]}; }
 const ACT={
   vibe(a){ const {s,artist}=resolveVibe(a); if(!artist&&!pickStyle(a.style)) return; PROJ.style=s; if(artist) PROJ.ref=artist.name;
     if(!BATCH.tempo) setTempo(+a.bpm&&Math.abs(+a.bpm-BATCH.startBpm)>0.5?+a.bpm:(artist?artist.bpm:STYLES[s].bpm)); BATCH.vibe=true; const k=parseKey(a.key)||(artist?parseKey(artist.key):null); if(k&&!PROJ.key&&(a.key||!keyStatus().key)) setKey(k,'vibe'); ensureProg(true); /* SE-7a: an artist's key never overrides the key your own notes are in */
@@ -5627,7 +5732,11 @@ const ACT={
     const sw=swingWords(+t.recipe.swing||0,prev); return Object.keys(over).length>1?`${sw}; ${t.desc}`:sw; },
   vary(a){ const t=findTrack(a.track||'drums'); if(!t) return;
     if(!t.gen){ return `${t.name} is your own part, so I left it as it is`; }
-    if(t.role==='chords'&&a.progression!==false){ ensureProg(true); PROJ.tracks.filter(x=>x.gen&&(x.role==='bass'||x.role==='chords'||x.role==='melody')).forEach(x=>regenTrack(x)); return `New chord progression (${PROJ.prog.map(d=>['i','ii','iii','iv','v','vi','vii'][d]).join('–')}); bass and melody follow it`; }
+    if(t.role==='chords'&&a.progression!==false){ const had=Array.isArray(PROJ.chords)&&PROJ.chords.length?(PROJ.chords.some(c=>c.from==='audio')?'the song':'your'):null;
+      if(had) clearChords(); /* SE-7c: chords from a song (or fixed by hand) would hide the new progression; undo brings them back */
+      ensureProg(true); PROJ.tracks.filter(x=>x.gen&&(x.role==='bass'||x.role==='chords'||x.role==='melody')).forEach(x=>regenTrack(x));
+      if(had) BATCH.say=`New chord progression: ${chordsText(chordBlocks().slice(0,8))}, in place of ${had==='the song'?"the song's chords":'your chords'}; bass and melody follow it. Say undo to get them back.`;
+      return `New chord progression (${PROJ.prog.map(d=>['i','ii','iii','iv','v','vi','vii'][d]).join('–')}); bass and melody follow it`; }
     /* "another one with less swing": the new take gets the new swing, so its chip shows the real amount (one chip, not two) */
     if(t.role==='drums'&&t.recipe&&typeof swingSaid==='function'&&swingSaid(LAST_TEXT.text)!=null){ const prev=+t.recipe.swing||0, v=swingOver({},prev);
       if(v!==undefined){ const d=regenTrack(t,{recipe:{swing:v}}); BATCH.swingShown=true; return d?`${swingWords(v,prev)}; ${t.name}: ${d}`:null; } }
@@ -5641,7 +5750,17 @@ const ACT={
     const t=addPart({role:'melody',inst:id,gen:true,name:a.instrument?I.name:'Melody',events:genMelody(L_(),seed,s),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name}`; },
   tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
   bars(a){ setBars(+a.bars||+a.value||4); return `${PROJ.bars} bars`; },
-  key(a){ const k=parseKey(a.key||a.value); if(!k) return; setKey(k,'you'); BATCH.key=true; return `Key ${keyName(k)}`; },
+  /* key: "F minor"; "auto" unlocks it (back to the key worked out from your notes); "song" = the key heard in the newest
+     analysed song. from: "song" labels it "from the song" (said yes to Keys' offer); your parts move with it as when you pick one */
+  key(a){ const raw=String(a.key||a.value||'').trim();
+    if(/^(auto|automatic|unlock|unlocked|none|off|clear|detect)$/i.test(raw)){ const had=PROJ.key&&PROJ.key.tonic!=null; setKey(null); BATCH.key=true; const st=keyStatus();
+      return had||st.key?`Key on auto${st.key?' ('+keyStatusText(st)+')':''}`:'Key on auto'; }
+    let k=parseKey(raw), from=a.from==='song'?'song':'you';
+    if(!k&&/^(song|the song|song'?s|the song'?s key|its|it)$/i.test(raw)){ const t=songTrack(a.track), ana=trackAna(t); if(!ana||!ana.key){ BATCH.say=t?`I haven't heard a key in “${t.name}” yet. Ask me what key it is first.`:'There is no song in here yet. Drop one in and I can find its key.'; return; } k={tonic:ana.key.tonic,mode:ana.key.mode}; from='song'; }
+    if(!k) return; setKey(k,'you'); if(from==='song'&&PROJ.key) PROJ.key.from='song'; BATCH.key=true;
+    if(from==='song'){ const t=songTrack(a.track), ana=trackAna(t), mineCh=PROJ.tracks.some(x=>x.fromSong&&t&&x.fromSong===t.id);
+      if(ana&&ana.chords&&ana.chords.some(c=>c.root!=null)&&!mineCh){ BATCH.reply=`Your song is in ${keyName(k)} now, the song's key. Want its chords on your song too?`; makeOffer('Put the song’s chords on your song',[{type:'chords_from_audio',track:t.name}]); }
+      else BATCH.reply=`Your song is in ${keyName(k)} now, the song's key.`; } return `Key ${keyName(k)}${from==='song'?' · from the song':''}`; },
   style(a){ const s=pickStyle(a.style||a.value)||(findArtist(a.style||a.value)||{}).style; if(!s) return; PROJ.style=s; if(a.keepTempo!==true && !a.bpm) setTempo(STYLES[s].bpm); return `${STYLES[s].name} style`; },
   drum_pattern(a){ const rows=a.rows||a.pattern||{}; const spec={};
     for(const [name,str] of Object.entries(rows)){ const n=DRUM_WORD[String(name).toLowerCase()]||parsePitch(name)||(+name||null); if(n&&typeof str==='string') spec[n]=str.replace(/[^xo.|X-]/g,'').replace(/X/g,'x').replace(/-/g,'.'); }
@@ -5691,12 +5810,51 @@ const ACT={
     exportMp3(len); return 'Making your MP3, the download starts in a few seconds'; },
   save(a){ if(a.name) PROJ.name=String(a.name).slice(0,60); saveNamed(); return `Saved “${PROJ.name}”`; },
   new_project(a){ newSong(a.name); return 'New song'; },
-  rename(a){ if(!a.name) return; PROJ.name=String(a.name).slice(0,60); saveProject(); return `Song renamed to “${PROJ.name}”`; }
+  rename(a){ if(!a.name) return; PROJ.name=String(a.name).slice(0,60); saveProject(); return `Song renamed to “${PROJ.name}”`; },
+  /* SE-7c: "what key is this song?" Says the key, tempo, how sure, the second guess and why, the main loop's chords. Never
+     changes the song: it offers ("Set your song to E minor?") and a "yes" sends the key action with from "song".
+     track: an audio track (default the newest song dropped in); "mine" (or no song in the project) = your own song. */
+  analyse_song(a){ const mine=/^(mine|my song|my track|project|my own)$/i.test(String(a.track||'').trim()), t=mine?null:songTrack(a.track);
+    if(!t){ const r=mineReport(); sayAdd(r.say); return r.chips[0]; }
+    return withAna(t,anaReport); },
+  /* "put those chords on my song": the song's chords on a new Chords track (our own voicing), in your key unless to "song" */
+  chords_from_audio(a){ const t=songTrack(a.track);
+    if(!t){ sayAdd(`There's no song in here to take chords from. Drop an audio file on the studio, then ask me again.`); return; }
+    const bass=a.bass===true||a.bass==='true', to=/^(song|theirs|original|its|their)$/i.test(String(a.to||''))?'song':'mine', bars=Math.round(+a.bars)||undefined;
+    return withAna(t,(tt,ana)=>{ const r=addSongChords(tt,{bars,to,bass,ana});
+      if(!r) return {say:`I couldn't hear clear chords in “${tt.name}”${ana.key?'':': it sounds like drums only'}. Try a part of the song with music in it.`,chips:['No chords found']};
+      return {say:`${r.text}. I can write a new melody over these chords.`,chips:[`Chords from ${tt.name}`]}; }); },
+  /* "make bar 4 B minor": bar is 1-based; chord a name ("Bm", "F#7", "C/E", "N.C."); beat (2-4) only from that beat; bars: how many */
+  set_chord(a){ const bar=Math.round(+a.bar), raw=a.chord!=null?a.chord:a.value, c=parseChord(raw);
+    if(!c){ sayAdd(`I couldn't read “${raw==null?'':raw}” as a chord. Say it like “B minor” or “F sharp 7”.`); return; }
+    if(!isFinite(bar)){ sayAdd(`Which bar? Say it like “make bar 4 ${chordName(c)}”.`); return; }
+    if(!(bar>=1&&bar<=PROJ.bars)){ sayAdd(`Your loop has ${PROJ.bars} bar${PROJ.bars>1?'s':''}, so there's no bar ${bar}.`); return; }
+    const r=setChord(bar,c,{beat:a.beat!=null?+a.beat:undefined,bars:a.bars!=null?+a.bars:undefined}); if(!r){ sayAdd(`I couldn't change bar ${bar}.`); return; }
+    sayAdd(r.text+'.'); return `Bar ${r.bar}: ${r.name}`; },
+  /* "match this loop to my key": a notes loop moves into your key; audio can't be re-pitched yet, so Keys offers to move
+     your song to the loop's key instead */
+  match_key(a){ let t=a.track?findTrack(a.track):null;
+    if(!t) t=[...PROJ.tracks].reverse().find(x=>x.kind==='audio'||(x.kind==='notes'&&!x.gen&&x.role!=='drums'&&!(INST.get(x.inst)||{}).percussive));
+    if(!t){ sayAdd(`There's no loop to match yet. Drop a loop or a MIDI file in, then ask me again.`); return; }
+    if(t.kind==='audio') return withAna(t,(tt,ana)=>{ const cur=keyWithout(tt);
+      if(!ana.key) return {say:`I can't hear a key in “${tt.name}”: it sounds like drums only, so it fits any key.`,chips:['No key in this clip']};
+      if(sameKey(cur,ana.key)) return {say:`“${tt.name}” is already in your key, ${keyName(cur)}.`,chips:[keyName(cur)]};
+      const q=`Set your song to ${keyName(ana.key)}?`;
+      makeOffer(q,[{type:'key',key:keyName(ana.key),from:'song'}]);
+      return {say:cur?`“${tt.name}” is in ${keyName(ana.key)} and your song is in ${keyName(cur)}. I can't re-pitch audio yet without changing its speed, so shall I move your song to ${keyName(ana.key)} instead?`:`“${tt.name}” is in ${keyName(ana.key)} and your song has no key yet. ${q}`,chips:[`${tt.name}: ${keyName(ana.key)}`]}; });
+    if(t.kind!=='notes'||t.role==='drums'||(INST.get(t.inst)||{}).percussive){ sayAdd(`“${t.name}” is drums, so it has no key to match.`); return; }
+    if(t.gen){ sayAdd(`“${t.name}” is one of my parts, so it already follows your key, ${keyName(projectKey())}.`); return; }
+    const notes=pitchedNotes({tracks:[t]}), det=notes.length>=3?detectKey(notes,{loose:true}):null, cur=keyWithout(t);
+    if(!det){ sayAdd(`“${t.name}” has too few notes for me to tell its key.`); return; }
+    if(!cur){ const q=`Set your song to ${keyName(det)}?`; makeOffer(q,[{type:'key',key:keyName(det)}]); sayAdd(`Your song has no key yet, and “${t.name}” sounds like ${keyName(det)}. ${q}`); return `${t.name}: ${keyName(det)}`; }
+    const d=keyShift(det,cur); if(!d){ sayAdd(`“${t.name}” is already in your key, ${keyName(cur)}.`); return; }
+    [t.events,...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(ev=>ev.forEach(e=>e.n=clamp(e.n+d,0,127)));
+    sayAdd(`Moved “${t.name}” ${shiftWords(d)}, from ${keyName(det)} into your key, ${keyName(cur)}.`); return `${t.name} ${d>0?'+':''}${d}`; }
 };
 function runActions(list){
   const done=[]; let changed=false; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
   for(const raw of list||[]){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; try{ const r=ACT[a.type](a); if(r){ done.push(r); changed=true; } }catch(e){ console.warn('action failed',a,e); } }
-  if(changed){ saveProject(); renderTracks(); uiLoop(); }
+  if(changed){ saveProject(); renderTracks(); uiLoop(); if(!BATCH.offered) OFFER.actions=null; }
   return done;
 }
 
@@ -5964,8 +6122,13 @@ function addBubble(who,text,chips){
 }
 function setOrb(state,text){ const o=$('#asOrb'); o.dataset.state=state; $('#asStatus').textContent=text; }
 function idleText(){ return ASSIST.listening?`Listening. Say “${ASSIST.name}” and what you want, or hum a melody.`:`Press the orb and speak, or type below. Turn on “Always listening” to just say “${ASSIST.name}”.`; }
+/* chord symbols read as words: "Em · C/E · F♯7" -> "E minor, C over E, F sharp 7" */
+const CH_SAY={'':'',m:' minor',min:' minor',7:' 7',m7:' minor 7',maj7:' major 7',sus4:' sus 4',sus2:' sus 2',dim:' diminished',5:' 5'};
+function sayChords(s){ return String(s).replace(/(^|[\s(,;:])([A-G])([♭♯#b]?)(maj7|m7|sus4|sus2|dim|min|m|7|5)?(?:\/([A-G])([♭♯#b]?))?(?=$|[\s·,.;:)?!…])/g,(all,pre,r,acc,q,br,ba)=>{
+    if(!acc&&!q&&!br) return all; const ac=x=>x==='♭'||x==='b'?' flat':x==='♯'||x==='#'?' sharp':''; return pre+r+ac(acc)+(CH_SAY[q||'']||'')+(br?' over '+br+ac(ba):''); })
+  .replace(/\s*·\s*/g,', ').replace(/\bN\.C\./g,'no chord').replace(/ …/g,''); }
 function speak(msg){
-  if(!('speechSynthesis' in window)) return; try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(msg.replace(/[“”]/g,'')); u.rate=1.05; u.pitch=1;
+  if(!('speechSynthesis' in window)) return; try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(sayChords(msg.replace(/[“”]/g,''))); u.rate=1.05; u.pitch=1;
     const v=speechSynthesis.getVoices().find(x=>/en-(IN|GB|US)/.test(x.lang)&&/female|natural|google/i.test(x.name))||speechSynthesis.getVoices().find(x=>/^en/.test(x.lang)); if(v) u.voice=v;
     const done=()=>{ if(!ASSIST.speaking) return; ASSIST.speaking=false; clearTimeout(ASSIST.speakT); setOrb(ASSIST.listening?'listening':'idle',idleText()); ASSIST.awakeUntil=performance.now()+8000; };
     ASSIST.speaking=true; setOrb('speaking','Speaking…'); u.onend=u.onerror=done;
@@ -5983,11 +6146,19 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
   return `Shape it with effects (“more reverb on the chords”), mix it, or download the MP3.`; }
 function projectState(){
   return {name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:keyContext(),style:PROJ.style||null,playing:TR.running,
-    tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute})),
+    tracks:PROJ.tracks.map(t=>Object.assign({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute},t.kind==='audio'?{heard:anaContext(t)}:t.gen?{}:{own:true})),
     taste:TASTE.profile?{artists:(TASTE.profile.artists||[]).slice(0,12),styles:(TASTE.profile.styles||[]).map(s=>s.style),playlists:(TASTE.profile.playlists||[]).map(p=>p.name+(p.style?' ('+p.style+')':'')).slice(0,8)}:null,
     vibe:PROJ.ref||null,
+    chords:songChordsContext(),
+    offer:offerOpen()?{keysAsked:OFFER.text,ifUserSaysYes:OFFER.actions}:null,
     keysSound:zoneInst('keys').name,padsSound:zoneInst('pads').name,effects:FX.slots.map(s=>`${FX_LIB[s.type].name} ${Math.round(s.amount*100)}%`)};
 }
+/* SE-7c: for the AI, the song's chords and what Keys heard in a song dropped in (never the audio itself) */
+function songChordsContext(){ const has=Array.isArray(PROJ.chords)&&PROJ.chords.length; if(!has&&!PROJ.tracks.some(t=>t.kind==='notes'&&['bass','chords'].includes(t.role))) return 'none yet';
+  return chordsText(chordBlocks().slice(0,16))+(has?(PROJ.chords.some(c=>c.from==='audio')?' (taken from a song the user brought in)':' (fixed by the user)'):" (Keys' own progression)"); }
+function anaContext(t){ const a=typeof trackAna==='function'&&trackAna(t); if(!a) return 'not listened to yet (analyse_song listens)'; if(!a.key&&!a.bpm) return 'no key or tempo (too short or silent)';
+  const ch=a.key?chordsFromAna(a,{to:'song'}).slice(0,8):[];
+  return (a.key?`${keyName(a.key)} (${KEY_WORDS[a.key.level]||''}${a.key.alt?', or '+keyName(a.key.alt):''}; ${a.key.why||''}), DJ key ${a.djKey}`:'no key (drums only)')+(a.bpm?`, ${Math.round(a.bpm)} BPM`:'')+(ch.length?`, main loop ${chordsText(ch)}`:''); }
 async function detectEngine(){
   if(!/^https?:$/.test(location.protocol)){ ASSIST.engine=null; showEngine(); return; }
   try{ const r=await fetch('/api/assistant',{method:'GET',cache:'no-store'}); const j=await r.json(); ASSIST.engine=j&&j.ok?j.engine:null; }catch(e){ ASSIST.engine=null; }
@@ -6007,6 +6178,8 @@ async function handleRequest(text){
       done=runActions(j.actions||[]); reply=j.reply||'';
     }catch(e){ console.warn('assistant AI failed, using offline brain',e); const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
   } else { const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
+  /* SE-7c: what the app really heard or changed (a song's key, chords, a fixed bar) is the reply, not the AI's guess */
+  if(BATCH.say) reply=BATCH.say; else if(!reply&&BATCH.reply) reply=BATCH.reply;
   if(!reply) reply=done.length?'Done: '+done.join(', ')+'. '+nextStep():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
   ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false; LAST_TEXT.text='';
   if(BATCH.take){ ASSIST.say(reply,{chips:done,speak:false}); if(ASSIST.voice) speak('Sing after the count-in.'); } else ASSIST.say(reply,{chips:done}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());

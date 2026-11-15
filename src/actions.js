@@ -91,11 +91,68 @@ function regenTrack(t,opts={}){
   if(!t||!t.gen) return null; const s=t.style||PROJ.style||'house', seed=opts.seed||newSeed();
   if(t.role==='drums'){ const rec=Object.assign({},t.recipe||grooveRecipe(s,findArtist(t.ref)),opts.recipe||{}); rec.energy=clamp(Math.round(+rec.energy||3),1,5); const g=makeGroove(rec,L_(),seed); Object.assign(t,{events:g.events,recipe:rec,seed,desc:g.desc}); return g.desc; }
   if(t.role==='bass'){ t.events=genBass(s,L_(),seed); t.seed=seed; return 'a new bassline'; }
-  if(t.role==='chords'){ t.events=genChords(s,L_(),seed); t.seed=seed; return 'a new chord rhythm'; }
+  if(t.role==='chords'){ t.events=genChords(s,L_(),seed,heldChordStyle(t.inst,s)); t.seed=seed; return 'a new chord rhythm'; }
   if(t.role==='melody'){ t.events=genMelody(L_(),seed,s); t.seed=seed; return 'a new melody'; }
   return null;
 }
 const loadI=id=>{ const I=INST.get(id); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); return I; };
+/* ---------- SE-7c: a song's key and chords by voice ----------
+   Keys only offers to change your song after hearing one ("Set your song to E minor?"); OFFER holds the actions a "yes" runs
+   (the offline parser and the AI both see it). Replies for these actions come from what the app really heard (BATCH.say). */
+const OFFER={actions:null,text:'',at:0};
+function makeOffer(text,actions){ OFFER.actions=actions; OFFER.text=text; OFFER.at=Date.now(); BATCH.offered=true; }
+const offerOpen=()=>OFFER.actions&&Date.now()-OFFER.at<180000?OFFER:null;
+const sayAdd=s=>{ BATCH.say=BATCH.say?BATCH.say+' '+s:s; };
+/* the song a request is about: the audio track it names, else the newest audio track with an analysis, else the newest audio */
+function songTrack(ref){ const au=PROJ.tracks.filter(t=>t.kind==='audio'); if(!au.length) return null;
+  if(ref&&!/^(it|this|that|song|the song|this song|that song|track|this track|loop|this loop|audio)$/i.test(String(ref).trim())){ const t=findTrack(ref); if(t&&t.kind==='audio') return t; }
+  return [...au].reverse().find(t=>t.ana&&t.ana.v===ANA_VER)||au[au.length-1]; }
+/* the analysis cached on an audio track (t.ana), if it is still for this clip */
+function trackAna(t){ if(!t||t.kind!=='audio'||!t.ana||t.ana.v!==ANA_VER) return null; const buf=AUD.get(t.id); return buf?anaCached(t,buf):t.ana; }
+/* listen to a clip that has no analysis yet: fn(track, ana) -> {say, chips} runs when it is done and Keys says the result.
+   One job per clip (the import hook may already be listening to it). Returns false when the audio isn't loaded. */
+const ANA_JOBS=new Map();
+function anaThen(t,fn){ const buf=AUD.get(t.id); if(!buf||typeof analyseAudio!=='function') return false; const id=t.id;
+  let job=ANA_JOBS.get(id);
+  if(!job){ job=analyseAudio(buf,{onProgress:p=>{ if(typeof setOrb==='function'&&!ASSIST.speaking) setOrb('thinking',`Listening to “${t.name}”… ${Math.round(p*100)}%`); }})
+      .then(res=>{ const c=anaCache(res,buf), tt=PROJ.tracks.find(x=>x.id===id); if(tt){ tt.ana=c; saveProject(); } return c; }); ANA_JOBS.set(id,job); job.then(()=>ANA_JOBS.delete(id),()=>ANA_JOBS.delete(id)); }
+  job.then(ana=>{ const tt=PROJ.tracks.find(x=>x.id===id); if(!tt) return; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
+      const r=fn(tt,ana)||{}; if(!BATCH.offered) OFFER.actions=null; renderTracks(); uiLoop(); if(r.say&&typeof ASSIST!=='undefined') ASSIST.say(r.say,{chips:r.chips||[]}); if(typeof setOrb==='function'&&!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText()); })
+    .catch(e=>{ console.warn('analysis failed',e); if(typeof ASSIST!=='undefined') ASSIST.say(`I couldn’t listen to “${t.name}”. Try importing it again.`); });
+  return true; }
+/* run fn now if the clip is analysed, else listen first; the request's reply says Keys is listening */
+function withAna(t,fn){ const ana=trackAna(t); if(ana){ const r=fn(t,ana)||{}; if(r.say) sayAdd(r.say); return (r.chips||[])[0]||r.chip; }
+  if(anaThen(t,fn)){ sayAdd(`Listening to “${t.name}”, one moment.`); return `Listening to ${t.name}`; }
+  sayAdd(`“${t.name}” is still loading. Ask me again in a moment.`); }
+const SURE_SAY=['',", but I'm not sure",', I think',", I'm fairly sure",", I'm sure"];
+const capFirst=s=>s?s[0].toUpperCase()+s.slice(1):s;
+/* the key the song has without this track (for matching a loop to it) */
+function keyWithout(t){ const k=PROJ.key; if(k&&k.tonic!=null&&KEY_HARD.includes(k.from||'you')) return {tonic:k.tonic,mode:k.mode};
+  const d=detectKey(pitchedNotes({tracks:PROJ.tracks.filter(x=>x!==t)})); if(d) return {tonic:d.tonic,mode:d.mode}; return k&&k.tonic!=null?{tonic:k.tonic,mode:k.mode}:null; }
+/* "what key is this song": key, tempo, sureness, the second guess with its reason, the main loop's chords; then an offer */
+function anaReport(t,ana){
+  const k=ana.key, bpm=ana.bpm?Math.round(ana.bpm):null, ch=chordsFromAna(ana,{to:'song'}), chips=[];
+  if(!k&&!bpm) return {say:`I can't hear a key or a tempo in “${t.name}”. It may be too short, or only drums.`,chips:['No key in this clip']};
+  if(!k) return {say:`“${t.name}” is at ${bpm} BPM${ana.bpmAlt?' (or '+Math.round(ana.bpmAlt)+')':''}, but I can't hear a key in it: it sounds like drums only.`,chips:[`${bpm} BPM`,'No key in this clip']};
+  let s=`${keyName(k)}${bpm?' at '+bpm:''}${SURE_SAY[k.level]||''}.`;
+  const why=k.why||((k.cands||[])[0]||{}).why;
+  if(k.level<4&&k.alt) s+=` It could be ${keyName(k.alt)}${why?'; '+why:''}.`; else if(why) s+=` ${capFirst(why)}.`;
+  if(ch.length&&ch.some(c=>c.root!=null)) s+=` The main loop goes ${chordsText(ch.slice(0,8))}${ch.length>8?' …':''}.`;
+  chips.push(`${keyName(k)} · ${KEY_WORDS[k.level]||''}`); if(bpm) chips.push(`${bpm} BPM${ana.bpmAlt?' or '+Math.round(ana.bpmAlt):''}`); if(ana.djKey) chips.push(`DJ key ${ana.djKey}`);
+  const mine=keyStatus(), hard=mine.key&&KEY_HARD.includes(mine.from), tempoOff=bpm&&(ana.bpmConf==null||ana.bpmConf>=0.15)&&Math.abs(CTRL.bpm-bpm)>1;
+  const yes=[{type:'key',key:keyName(k),from:'song'}].concat(tempoOff?[{type:'tempo',bpm}]:[]);
+  if(sameKey(mine.key,k)&&hard){ if(ch.length){ s+=` That's your song's key already. Want those chords on your song?`; makeOffer('Put the song’s chords on your song',[{type:'chords_from_audio',track:t.name}]); } else s+=` That's your song's key already.`; }
+  else { const q=`${hard?'Move':'Set'} your song to ${keyName(k)}${tempoOff?' at '+bpm+' BPM':''}?`; s+=' '+q; makeOffer(q,yes); }
+  return {say:s,chips}; }
+/* the same question about your own song (no song dropped in, or "my song") */
+function mineReport(){ const st=keyStatus(), has=PROJ.tracks.some(t=>t.kind==='notes'&&['bass','chords'].includes(t.role))||(Array.isArray(PROJ.chords)&&PROJ.chords.length);
+  if(!st.key) return {say:`Your song has no key yet: there aren't enough notes to tell. Play or sing a few more, or pick a key.`,chips:['No key yet']};
+  const tag={you:'you set it',keys:'I picked it for the first part',vibe:'it came with the vibe',song:'it came from the song you brought in'}[st.from];
+  let s=tag?`Your song is in ${keyName(st.key)} at ${Math.round(CTRL.bpm)} BPM; ${tag}.`:`Your song sounds like ${keyName(st.key)} at ${Math.round(CTRL.bpm)} BPM${SURE_SAY[st.level]||''}.`;
+  if(!tag&&st.level<4&&st.alt) s+=` It could be ${keyName(st.alt)}${st.why?'; '+st.why:''}.`;
+  if(has) s+=` The chords go ${chordsText(chordBlocks().slice(0,8))}.`;
+  if(!tag&&st.level<4){ const q=`Set it to ${keyName(st.key)}?`; s+=' '+q; makeOffer(q,[{type:'key',key:keyName(st.key)}]); }
+  return {say:s,chips:[keyStatusText(st),`DJ key ${djKey(st.key)}`]}; }
 const ACT={
   vibe(a){ const {s,artist}=resolveVibe(a); if(!artist&&!pickStyle(a.style)) return; PROJ.style=s; if(artist) PROJ.ref=artist.name;
     if(!BATCH.tempo) setTempo(+a.bpm&&Math.abs(+a.bpm-BATCH.startBpm)>0.5?+a.bpm:(artist?artist.bpm:STYLES[s].bpm)); BATCH.vibe=true; const k=parseKey(a.key)||(artist?parseKey(artist.key):null); if(k&&!PROJ.key&&(a.key||!keyStatus().key)) setKey(k,'vibe'); ensureProg(true); /* SE-7a: an artist's key never overrides the key your own notes are in */
@@ -121,7 +178,11 @@ const ACT={
     const sw=swingWords(+t.recipe.swing||0,prev); return Object.keys(over).length>1?`${sw}; ${t.desc}`:sw; },
   vary(a){ const t=findTrack(a.track||'drums'); if(!t) return;
     if(!t.gen){ return `${t.name} is your own part, so I left it as it is`; }
-    if(t.role==='chords'&&a.progression!==false){ ensureProg(true); PROJ.tracks.filter(x=>x.gen&&(x.role==='bass'||x.role==='chords'||x.role==='melody')).forEach(x=>regenTrack(x)); return `New chord progression (${PROJ.prog.map(d=>['i','ii','iii','iv','v','vi','vii'][d]).join('–')}); bass and melody follow it`; }
+    if(t.role==='chords'&&a.progression!==false){ const had=Array.isArray(PROJ.chords)&&PROJ.chords.length?(PROJ.chords.some(c=>c.from==='audio')?'the song':'your'):null;
+      if(had) clearChords(); /* SE-7c: chords from a song (or fixed by hand) would hide the new progression; undo brings them back */
+      ensureProg(true); PROJ.tracks.filter(x=>x.gen&&(x.role==='bass'||x.role==='chords'||x.role==='melody')).forEach(x=>regenTrack(x));
+      if(had) BATCH.say=`New chord progression: ${chordsText(chordBlocks().slice(0,8))}, in place of ${had==='the song'?"the song's chords":'your chords'}; bass and melody follow it. Say undo to get them back.`;
+      return `New chord progression (${PROJ.prog.map(d=>['i','ii','iii','iv','v','vi','vii'][d]).join('–')}); bass and melody follow it`; }
     /* "another one with less swing": the new take gets the new swing, so its chip shows the real amount (one chip, not two) */
     if(t.role==='drums'&&t.recipe&&typeof swingSaid==='function'&&swingSaid(LAST_TEXT.text)!=null){ const prev=+t.recipe.swing||0, v=swingOver({},prev);
       if(v!==undefined){ const d=regenTrack(t,{recipe:{swing:v}}); BATCH.swingShown=true; return d?`${swingWords(v,prev)}; ${t.name}: ${d}`:null; } }
@@ -135,7 +196,17 @@ const ACT={
     const t=addPart({role:'melody',inst:id,gen:true,name:a.instrument?I.name:'Melody',events:genMelody(L_(),seed,s),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name}`; },
   tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
   bars(a){ setBars(+a.bars||+a.value||4); return `${PROJ.bars} bars`; },
-  key(a){ const k=parseKey(a.key||a.value); if(!k) return; setKey(k,'you'); BATCH.key=true; return `Key ${keyName(k)}`; },
+  /* key: "F minor"; "auto" unlocks it (back to the key worked out from your notes); "song" = the key heard in the newest
+     analysed song. from: "song" labels it "from the song" (said yes to Keys' offer); your parts move with it as when you pick one */
+  key(a){ const raw=String(a.key||a.value||'').trim();
+    if(/^(auto|automatic|unlock|unlocked|none|off|clear|detect)$/i.test(raw)){ const had=PROJ.key&&PROJ.key.tonic!=null; setKey(null); BATCH.key=true; const st=keyStatus();
+      return had||st.key?`Key on auto${st.key?' ('+keyStatusText(st)+')':''}`:'Key on auto'; }
+    let k=parseKey(raw), from=a.from==='song'?'song':'you';
+    if(!k&&/^(song|the song|song'?s|the song'?s key|its|it)$/i.test(raw)){ const t=songTrack(a.track), ana=trackAna(t); if(!ana||!ana.key){ BATCH.say=t?`I haven't heard a key in “${t.name}” yet. Ask me what key it is first.`:'There is no song in here yet. Drop one in and I can find its key.'; return; } k={tonic:ana.key.tonic,mode:ana.key.mode}; from='song'; }
+    if(!k) return; setKey(k,'you'); if(from==='song'&&PROJ.key) PROJ.key.from='song'; BATCH.key=true;
+    if(from==='song'){ const t=songTrack(a.track), ana=trackAna(t), mineCh=PROJ.tracks.some(x=>x.fromSong&&t&&x.fromSong===t.id);
+      if(ana&&ana.chords&&ana.chords.some(c=>c.root!=null)&&!mineCh){ BATCH.reply=`Your song is in ${keyName(k)} now, the song's key. Want its chords on your song too?`; makeOffer('Put the song’s chords on your song',[{type:'chords_from_audio',track:t.name}]); }
+      else BATCH.reply=`Your song is in ${keyName(k)} now, the song's key.`; } return `Key ${keyName(k)}${from==='song'?' · from the song':''}`; },
   style(a){ const s=pickStyle(a.style||a.value)||(findArtist(a.style||a.value)||{}).style; if(!s) return; PROJ.style=s; if(a.keepTempo!==true && !a.bpm) setTempo(STYLES[s].bpm); return `${STYLES[s].name} style`; },
   drum_pattern(a){ const rows=a.rows||a.pattern||{}; const spec={};
     for(const [name,str] of Object.entries(rows)){ const n=DRUM_WORD[String(name).toLowerCase()]||parsePitch(name)||(+name||null); if(n&&typeof str==='string') spec[n]=str.replace(/[^xo.|X-]/g,'').replace(/X/g,'x').replace(/-/g,'.'); }
@@ -185,11 +256,50 @@ const ACT={
     exportMp3(len); return 'Making your MP3, the download starts in a few seconds'; },
   save(a){ if(a.name) PROJ.name=String(a.name).slice(0,60); saveNamed(); return `Saved “${PROJ.name}”`; },
   new_project(a){ newSong(a.name); return 'New song'; },
-  rename(a){ if(!a.name) return; PROJ.name=String(a.name).slice(0,60); saveProject(); return `Song renamed to “${PROJ.name}”`; }
+  rename(a){ if(!a.name) return; PROJ.name=String(a.name).slice(0,60); saveProject(); return `Song renamed to “${PROJ.name}”`; },
+  /* SE-7c: "what key is this song?" Says the key, tempo, how sure, the second guess and why, the main loop's chords. Never
+     changes the song: it offers ("Set your song to E minor?") and a "yes" sends the key action with from "song".
+     track: an audio track (default the newest song dropped in); "mine" (or no song in the project) = your own song. */
+  analyse_song(a){ const mine=/^(mine|my song|my track|project|my own)$/i.test(String(a.track||'').trim()), t=mine?null:songTrack(a.track);
+    if(!t){ const r=mineReport(); sayAdd(r.say); return r.chips[0]; }
+    return withAna(t,anaReport); },
+  /* "put those chords on my song": the song's chords on a new Chords track (our own voicing), in your key unless to "song" */
+  chords_from_audio(a){ const t=songTrack(a.track);
+    if(!t){ sayAdd(`There's no song in here to take chords from. Drop an audio file on the studio, then ask me again.`); return; }
+    const bass=a.bass===true||a.bass==='true', to=/^(song|theirs|original|its|their)$/i.test(String(a.to||''))?'song':'mine', bars=Math.round(+a.bars)||undefined;
+    return withAna(t,(tt,ana)=>{ const r=addSongChords(tt,{bars,to,bass,ana});
+      if(!r) return {say:`I couldn't hear clear chords in “${tt.name}”${ana.key?'':': it sounds like drums only'}. Try a part of the song with music in it.`,chips:['No chords found']};
+      return {say:`${r.text}. I can write a new melody over these chords.`,chips:[`Chords from ${tt.name}`]}; }); },
+  /* "make bar 4 B minor": bar is 1-based; chord a name ("Bm", "F#7", "C/E", "N.C."); beat (2-4) only from that beat; bars: how many */
+  set_chord(a){ const bar=Math.round(+a.bar), raw=a.chord!=null?a.chord:a.value, c=parseChord(raw);
+    if(!c){ sayAdd(`I couldn't read “${raw==null?'':raw}” as a chord. Say it like “B minor” or “F sharp 7”.`); return; }
+    if(!isFinite(bar)){ sayAdd(`Which bar? Say it like “make bar 4 ${chordName(c)}”.`); return; }
+    if(!(bar>=1&&bar<=PROJ.bars)){ sayAdd(`Your loop has ${PROJ.bars} bar${PROJ.bars>1?'s':''}, so there's no bar ${bar}.`); return; }
+    const r=setChord(bar,c,{beat:a.beat!=null?+a.beat:undefined,bars:a.bars!=null?+a.bars:undefined}); if(!r){ sayAdd(`I couldn't change bar ${bar}.`); return; }
+    sayAdd(r.text+'.'); return `Bar ${r.bar}: ${r.name}`; },
+  /* "match this loop to my key": a notes loop moves into your key; audio can't be re-pitched yet, so Keys offers to move
+     your song to the loop's key instead */
+  match_key(a){ let t=a.track?findTrack(a.track):null;
+    if(!t) t=[...PROJ.tracks].reverse().find(x=>x.kind==='audio'||(x.kind==='notes'&&!x.gen&&x.role!=='drums'&&!(INST.get(x.inst)||{}).percussive));
+    if(!t){ sayAdd(`There's no loop to match yet. Drop a loop or a MIDI file in, then ask me again.`); return; }
+    if(t.kind==='audio') return withAna(t,(tt,ana)=>{ const cur=keyWithout(tt);
+      if(!ana.key) return {say:`I can't hear a key in “${tt.name}”: it sounds like drums only, so it fits any key.`,chips:['No key in this clip']};
+      if(sameKey(cur,ana.key)) return {say:`“${tt.name}” is already in your key, ${keyName(cur)}.`,chips:[keyName(cur)]};
+      const q=`Set your song to ${keyName(ana.key)}?`;
+      makeOffer(q,[{type:'key',key:keyName(ana.key),from:'song'}]);
+      return {say:cur?`“${tt.name}” is in ${keyName(ana.key)} and your song is in ${keyName(cur)}. I can't re-pitch audio yet without changing its speed, so shall I move your song to ${keyName(ana.key)} instead?`:`“${tt.name}” is in ${keyName(ana.key)} and your song has no key yet. ${q}`,chips:[`${tt.name}: ${keyName(ana.key)}`]}; });
+    if(t.kind!=='notes'||t.role==='drums'||(INST.get(t.inst)||{}).percussive){ sayAdd(`“${t.name}” is drums, so it has no key to match.`); return; }
+    if(t.gen){ sayAdd(`“${t.name}” is one of my parts, so it already follows your key, ${keyName(projectKey())}.`); return; }
+    const notes=pitchedNotes({tracks:[t]}), det=notes.length>=3?detectKey(notes,{loose:true}):null, cur=keyWithout(t);
+    if(!det){ sayAdd(`“${t.name}” has too few notes for me to tell its key.`); return; }
+    if(!cur){ const q=`Set your song to ${keyName(det)}?`; makeOffer(q,[{type:'key',key:keyName(det)}]); sayAdd(`Your song has no key yet, and “${t.name}” sounds like ${keyName(det)}. ${q}`); return `${t.name}: ${keyName(det)}`; }
+    const d=keyShift(det,cur); if(!d){ sayAdd(`“${t.name}” is already in your key, ${keyName(cur)}.`); return; }
+    [t.events,...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(ev=>ev.forEach(e=>e.n=clamp(e.n+d,0,127)));
+    sayAdd(`Moved “${t.name}” ${shiftWords(d)}, from ${keyName(det)} into your key, ${keyName(cur)}.`); return `${t.name} ${d>0?'+':''}${d}`; }
 };
 function runActions(list){
   const done=[]; let changed=false; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
   for(const raw of list||[]){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; try{ const r=ACT[a.type](a); if(r){ done.push(r); changed=true; } }catch(e){ console.warn('action failed',a,e); } }
-  if(changed){ saveProject(); renderTracks(); uiLoop(); }
+  if(changed){ saveProject(); renderTracks(); uiLoop(); if(!BATCH.offered) OFFER.actions=null; }
   return done;
 }
