@@ -270,11 +270,15 @@ try {
     const sel = $('#keySel'); sel.value = '0:minor'; sel.dispatchEvent(new Event('change')); R.menu = out(cm); R.chordN = PROJ.tracks.find(t => t.name === 'My chords').events[0].n;
     await newSong('Smoke key relabel'); addTrack({ role: 'chords', inst: 'piano', name: 'My chords', events: ch.map(e => Object.assign({}, e)) }); R.rel0 = PROJ.tracks[0].events[0].n; $('#keyInfo').click(); document.querySelector('#keyPop [data-kset="0"]').click(); R.relabel = PROJ.tracks[0].events[0].n; R.relKey = keyStatusText();
     await newSong('Smoke key chip'); const t = addTrack({ role: 'free', inst: 'piano', name: 'Draw', events: [] }); R.chip0 = $('#keyInfo').textContent.trim(); openEditor(t.id);
-    [[62, 65, 69], [58, 62, 65], [65, 69, 72], [60, 64, 67]].forEach((c, i) => c.forEach(n => edTrack().events.push({ b: i * 4, d: 3.5, n, v: 0.7 }))); edChanged(); await wait(300); R.chip1 = $('#keyInfo').textContent.replace(/\s+/g, ' ').trim(); closeEditor(); return R; });
-  ok('key: picking a key moves parts whose key came from your notes (hum, played chords), one undo; Set only relabels; chip follows the piano roll',
+    [[62, 65, 69], [58, 62, 65], [65, 69, 72], [60, 64, 67]].forEach((c, i) => c.forEach(n => edTrack().events.push({ b: i * 4, d: 3.5, n, v: 0.7 }))); edChanged(); await wait(300); R.chip1 = $('#keyInfo').textContent.replace(/\s+/g, ' ').trim();
+    ED.sel = new Set(edTrack().events); edShift(1); edShift(1); await wait(300); R.chip2 = $('#keyInfo').textContent.replace(/\s+/g, ' ').trim(); closeEditor();
+    /* QA retest 2: a key Keys or a vibe picks never moves notes whose key came from a hum */
+    R.soft = []; for (const [tonic, from] of [[0, 'keys'], [5, 'vibe']]) { await newSong('Smoke key soft'); const hm = [62, 65, 69, 67, 65, 64, 62, 60, 62, 65, 64, 62].map((n, i) => ({ b: i, d: 0.9, n, v: 0.8 }));
+      takeKey(hm, true, 'hum'); addTrack({ role: 'melody', inst: 'lead', name: 'Hum', events: hm }); setKey({ tonic, mode: 'minor' }, from); R.soft.push(PROJ.tracks[0].events[0].n); } return R; });
+  ok('key: picking a key moves parts whose key came from your notes (hum, played chords), one undo; Set only relabels; Keys/vibe keys never move notes; chip follows the piano roll (draw, transpose)',
     / · from your humming$/.test(kmv.hum) && kmv.before > 0 && kmv.after === 0 && kmv.set === 'C minor · set' && kmv.hn === 60 && kmv.hn0 === 62 && /^D minor/.test(kmv.undo)
-    && /^A minor/.test(kmv.am) && kmv.menu === 0 && kmv.chordN === 60 && kmv.relabel === kmv.rel0 && / · set$/.test(kmv.relKey) && /no key yet/.test(kmv.chip0) && /^D minor/.test(kmv.chip1),
-    `hum ${kmv.hum}: ${kmv.before} → ${kmv.after} outside C minor (${kmv.set}), undo ${kmv.undo}; played Am → menu C minor: ${kmv.menu} outside; Set → ${kmv.relKey}, note ${kmv.rel0} → ${kmv.relabel}; chip ${kmv.chip0} → ${kmv.chip1}`);
+    && /^A minor/.test(kmv.am) && kmv.menu === 0 && kmv.chordN === 60 && kmv.relabel === kmv.rel0 && / · set$/.test(kmv.relKey) && /no key yet/.test(kmv.chip0) && /^D minor/.test(kmv.chip1) && /^E minor/.test(kmv.chip2) && kmv.soft.join() === '62,62',
+    `hum ${kmv.hum}: ${kmv.before} → ${kmv.after} outside C minor (${kmv.set}), undo ${kmv.undo}; played Am → menu C minor: ${kmv.menu} outside; Set → ${kmv.relKey}, note ${kmv.rel0} → ${kmv.relabel}; chip ${kmv.chip0} → ${kmv.chip1} → +2: ${kmv.chip2}; Keys/vibe key on a hum: notes ${kmv.soft.join(' / ')}`);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
