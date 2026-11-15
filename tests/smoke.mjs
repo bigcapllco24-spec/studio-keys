@@ -139,7 +139,7 @@ try {
   const sp = await E(async () => { setTempo(124); songTemplate('short'); const t0 = performance.now(); const dr = PROJ.tracks.filter(t => trackAudible(t) && t.role === 'drums'); const m = await makeSongMp3(dr, null, { context: PROJ.tracks.filter(trackAudible) }); /* drums only keeps the check fast */ const ms = performance.now() - t0;
     const u = new Uint8Array(await m.blob.arrayBuffer()), d = await A.ctx.decodeAudioData(u.buffer.slice(0)); let pk = 0; for (let c = 0; c < d.numberOfChannels; c++) { const x = d.getChannelData(c); for (let i = 0; i < x.length; i++) { const a = Math.abs(x[i]); if (a > pk) pk = a; } }
     return { dec: d.duration, pk: 20 * Math.log10(pk || 1e-9), rms: 20 * Math.log10(m.rms || 1e-9), sec: ms / 1000 }; });
-  ok('song: whole-song MP3 of the Short layout, drums (decodes back, no clipping)', Math.abs(sp.dec - 33.0) < 0.1 && sp.pk < 0 && sp.rms > -40, `${sp.dec.toFixed(2)} s, peak ${sp.pk.toFixed(2)} dBFS, RMS ${sp.rms.toFixed(1)} dB, ${sp.sec.toFixed(0)} s to make`);
+  ok('song: whole-song MP3 of the Short layout, drums (decodes back, peak under -0.3 dBFS)', Math.abs(sp.dec - 33.0) < 0.1 && sp.pk < -0.3 && sp.rms > -40, `${sp.dec.toFixed(2)} s, peak ${sp.pk.toFixed(2)} dBFS, RMS ${sp.rms.toFixed(1)} dB, ${sp.sec.toFixed(0)} s to make`);
   const rc = await E(() => { songMode('song'); recordPress(); const m = SONG.view.mode; loopStop(); return m; });
   ok('song: Rec in Song mode switches to Loop', rc === 'loop', rc);
   // UX-5: a part sung in Song mode lands like a part Keys adds (selected section only) and says where it plays, once back in Song mode
@@ -222,9 +222,19 @@ try {
     for (const ref of ['Stephan Bodzin', 'Ben Böhmer']) { await newSong('Smoke 16th hats'); let seed = 0;
       for (let s = 1; s < 400 && !seed; s++) { runActions([{ type: 'add_drums', ref, seed: 7000 + s }]); if (hatSteps() < 16) seed = 7000 + s; }
       const r0 = rest(T().events), h0 = hatSteps(); runActions(localBrain('change the hats to 16ths').actions); const h1 = hatSteps(), keep = rest(T().events) === r0;
-      const g0 = grid(); runActions(localBrain('more swing').actions); R[ref] = { seed, h0, h1, keep, swingKeeps: grid() === g0 }; loopStop(); }
+      const g0 = grid(); runActions(localBrain('more swing').actions); const swingKeeps = grid() === g0; const ha = [];
+      const eng = ASSIST.engine; ASSIST.engine = null; try { for (let i = 0; i < 3; i++) { await handleRequest('another one'); loopStop(); ha.push(hatSteps()); } } finally { ASSIST.engine = eng; } /* QA retest: the 16ths you asked for stay through "another one" */
+      R[ref] = { seed, h0, h1, keep, swingKeeps, ha }; loopStop(); }
     return R; });
-  ok('"change the hats to 16ths" makes 16th hats and keeps kick, clap and percussion; "more swing" keeps the pattern', Object.values(h16).every(x => x.seed && x.h1 === 16 && x.keep && x.swingKeeps), Object.entries(h16).map(([k, x]) => `${k}: hats on ${x.h0} → ${x.h1} of 16 steps${x.keep ? '' : ', rest changed'}${x.swingKeeps ? '' : ', swing moved notes'}`).join(' · '));
+  ok('"change the hats to 16ths" makes 16th hats and keeps kick, clap and percussion; "more swing" keeps the pattern', Object.values(h16).every(x => x.seed && x.h1 === 16 && x.keep && x.swingKeeps && x.ha.every(h => h === 16)), Object.entries(h16).map(([k, x]) => `${k}: hats on ${x.h0} → ${x.h1} of 16 steps${x.keep ? '' : ', rest changed'}${x.swingKeeps ? '' : ', swing moved notes'}, then "another one" ×3: ${x.ha.join('/')}`).join(' · '));
+  // SE-8 fix 1 (QA): one hit per drum per moment, and the kick idea the reply names is heard, in every style (4 and 8 bars, 10 seeds each)
+  const dd = await E(() => { const bad = [];
+    for (const s of Object.keys(GROOVES)) for (const L of [16, 32]) for (let k = 1; k <= 10; k++) { const g = makeGroove(grooveRecipe(s, null), L, 3100 + k), ev = g.events.slice().sort((a, b) => a.b - b.b || a.n - b.n), kv = ev.filter(e => e.n === 36).map(e => e.v);
+      let dup = 0; for (let i = 0; i < ev.length; i++) for (let j = i + 1; j < ev.length && ev[j].b - ev[i].b < 0.02; j++) if (ev[j].n === ev[i].n) dup++;
+      const unheard = /ghost kicks/.test(g.desc) && !kv.some(v => v < 0.4) || /kick pickups/.test(g.desc) && !kv.some(v => v > 0.37 && v < 0.6);
+      if (dup || unheard) bad.push(`${s} ${L / 4} bars seed ${3100 + k}: ${dup} doubled${unheard ? ', kick idea named but not heard' : ''}`); }
+    return { n: Object.keys(GROOVES).length * 20, bad }; });
+  ok('no stacked hits (one hit per drum per moment) and no kick idea named that isn\'t heard, every style', !dd.bad.length, dd.bad.slice(0, 3).join('; ') || `${dd.n} grooves`);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
