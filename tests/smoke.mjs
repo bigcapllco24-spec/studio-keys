@@ -216,6 +216,15 @@ try {
       R.push({ ref: ref.replace(/ drums|drums like |124 bpm /g, ''), mx, kit: t().inst, n: PROJ.tracks.filter(x => x.role === 'drums').length }); }
     return R; });
   ok('"another one" ×10 never repeats a groove (Böhmer, Bodzin, house: every pair < 0.9 alike)', an.every(x => x.mx < 0.9 && x.n === 1), an.map(x => `${x.ref} ${x.mx.toFixed(2)}`).join(' · '));
+  // SE-8 (QA): "change the hats to 16ths" gives 16th hats even when the style's own hats are 16ths with gaps, and keeps everything else; "more swing" keeps the pattern
+  const h16 = await E(async () => { const R = {}; const T = () => PROJ.tracks.find(t => t.role === 'drums'), rest = ev => ev.filter(e => ![42, 44, 46].includes(e.n)).map(e => e.n + '@' + e.b.toFixed(3) + ':' + e.v.toFixed(3)).sort().join();
+    const hatSteps = () => new Set(T().events.filter(e => (e.n === 42 || e.n === 46) && e.b < 4).map(e => Math.round(e.b * 4) % 16)).size, grid = () => T().events.map(e => e.n + '@' + Math.round(e.b * 4)).sort().join();
+    for (const ref of ['Stephan Bodzin', 'Ben Böhmer']) { await newSong('Smoke 16th hats'); let seed = 0;
+      for (let s = 1; s < 400 && !seed; s++) { runActions([{ type: 'add_drums', ref, seed: 7000 + s }]); if (hatSteps() < 16) seed = 7000 + s; }
+      const r0 = rest(T().events), h0 = hatSteps(); runActions(localBrain('change the hats to 16ths').actions); const h1 = hatSteps(), keep = rest(T().events) === r0;
+      const g0 = grid(); runActions(localBrain('more swing').actions); R[ref] = { seed, h0, h1, keep, swingKeeps: grid() === g0 }; loopStop(); }
+    return R; });
+  ok('"change the hats to 16ths" makes 16th hats and keeps kick, clap and percussion; "more swing" keeps the pattern', Object.values(h16).every(x => x.seed && x.h1 === 16 && x.keep && x.swingKeeps), Object.entries(h16).map(([k, x]) => `${k}: hats on ${x.h0} → ${x.h1} of 16 steps${x.keep ? '' : ', rest changed'}${x.swingKeeps ? '' : ', swing moved notes'}`).join(' · '));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
