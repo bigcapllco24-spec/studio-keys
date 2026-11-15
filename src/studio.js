@@ -331,12 +331,25 @@ const TAKE={chunks:[],notes:[],open:null,part:'melody',tail:0.14,ending:false,
     /* the raw recording is only used to find the notes; it isn't added as a track (owner, 13 Nov) */
     this.chunks=[]; this.notes=[];
     LOOP.state='playing'; refreshTrackGains(); saveProject(); renderTracks(); uiLoop();
-    this.backSong();
+    this.backSong(); if(mt) catchUpTrack(mt);
     const what=part==='chords'?`${new Set(notes.map(e=>e.b)).size} chords built on the notes you sang`:`${notes.length} notes`;
     $('#micStatus').textContent=`Take saved: ${what} on “${PART_NAME[part]}”. It’s playing back now.`;
     ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
   }
 };
+/* a track added while the loop plays (a finished take): the scheduler has already passed now..TR.schedT, so its notes there
+   would be skipped on this pass. Schedule them, and start a note that is still sounding late rather than drop it (a decaying
+   instrument only when it began under 0.08 s ago: a late piano hit sounds like a mistake). Loop mode only: going back to
+   Song mode restarts the transport (UX-10 fix 2) */
+function catchUpTrack(tr){
+  if(!A.ctx||!TR.running||!PLAYING.has(LOOP.state)||songOn()||!trackAudible(tr)||tr.kind==='audio') return 0;
+  const inst=INST.get(tr.inst), L=LOOP.L, s=spb(), now=A.ctx.currentTime, bNow=(now-TR.t0)/s, bS=(TR.schedT-TR.t0)/s; if(!inst||!(L>0)||bS<=bNow) return 0;
+  let n=0;
+  for(const e of tr.events) for(let k=Math.max(0,Math.ceil((bNow-e.b-e.d)/L-1e-9)); k*L+e.b<bS; k++){ if(e.cyc!=null&&k<=e.cyc) continue;
+    const B=k*L+e.b, T=TR.t0+B*s, end=T+e.d*s, t=Math.max(T,now+0.01); if(end-t<0.05) continue;
+    if(T<now&&inst.percussive&&now-T>0.08) continue; scheduleEvent(tr,e,t,end-t); n++; }
+  return n;
+}
 function makeBuf(pcm,sr){ const b=new AudioBuffer({length:Math.max(1,pcm.length),numberOfChannels:1,sampleRate:sr}); b.copyToChannel(pcm,0); return b; }
 
 

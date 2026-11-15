@@ -45,7 +45,10 @@ function audioToNotes(buf,o){
   const sr=buf.sampleRate, x=buf.getChannelData(0), N=2048, hop=512, det=makePitchDetector(N,sr,55,1200), frames=[];
   for(let i=0;i+N<=x.length;i+=hop){ const r=det(x,i); frames.push({t:(i+N/2)/sr,f:r.f,clar:r.clar,rms:r.rms}); }
   if(!frames.length) return [];
-  const rs=frames.map(f=>f.rms).sort((a,b)=>a-b), gate=Math.max(0.006,rs[Math.floor(rs.length*0.2)]*3,rs[Math.floor(rs.length*0.97)]*0.07);
+  /* level gate: 3x the noise floor (the 20th-percentile frame), at least -23 dB under the loud frames. The floor term is capped at
+     -16.5 dB under them (UX-10 fix 2): when under ~20% of the frames are quiet (held notes with short breaths, a dense bounce),
+     that frame is a sung one, 3x it sat above every frame and no note was found. The cap keeps a note sung 16 dB softer */
+  const rs=frames.map(f=>f.rms).sort((a,b)=>a-b), loud=rs[Math.floor(rs.length*0.97)], gate=Math.max(0.006,Math.min(rs[Math.floor(rs.length*0.2)]*3,loud*0.15),loud*0.07);
   /* holes: sample ranges [i,j) the take recorder marked as never arrived and patched (o.holes, UX-10). The level dip around a
      patched hole is not a new attack, so a held note isn't split in two. Only takes pass holes: an imported file has none, so
      short silences in it (a gated synth, staccato notes) always end a note (UX-10 fix 1) */
