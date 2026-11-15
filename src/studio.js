@@ -37,14 +37,20 @@ function setBars(n){
 /* SE-7a: setKey(k, from). from: 'you' (chosen; the default), 'keys' (Keys picked it), 'vibe', 'song', or 'notes' (a soft key from
    a sung take: it never locks and never moves notes). Changing a key that was set moves the parts with it, as before;
    {move:false} only relabels (the key popover's "Set": the notes are already in that key). setKey(null) goes back to auto.
-   Picking a key yourself (from 'you') when the key came from your notes moves the parts from that key too (nearest way). */
+   Picking a key yourself (from 'you') when the key came from your notes moves the parts from that key too (nearest way).
+   {shift: n} moves the parts (and PROJ.chords) by n semitones whatever the old key was. */
 function setKey(k,from,opts){
   from=from||'you'; const old=PROJ.key, hard=x=>x&&x.tonic!=null&&KEY_HARD.includes(x.from||'you');
   if(k&&from==='notes'&&hard(old)) return; /* a sung take never overrides a key that was set */
   /* the key the parts are in now: a set key, or (fix 2) the key worked out from your notes when you pick a new one */
   const was=hard(old)?old:(k&&from==='you'&&!(opts&&opts.move===false)?keyStatus().key:null);
   PROJ.kv=2; PROJ.key=k?Object.assign({tonic:k.tonic,mode:k.mode,from},from==='notes'&&k.src?{src:k.src}:{}):null;
-  if(was && k && from!=='notes' && was.tonic!==k.tonic && !(opts&&opts.move===false)){ let d=mod(k.tonic-was.tonic,12); if(d>6) d-=12; PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && !(INST.get(t.inst)||{}).percussive) [t.events,...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(ev=>ev.forEach(e=>e.n+=d)); }); }
+  /* SE-7c: opts.shift moves the parts by exactly that many semitones (the song card's "Set my key to E minor" works it out
+     through the relative mode, so G major parts going to E minor stay put); the song's chords (PROJ.chords) move with the parts */
+  let d=0; if(opts&&opts.shift!=null&&k) d=Math.round(+opts.shift)||0;
+  else if(was && k && from!=='notes' && was.tonic!==k.tonic && !(opts&&opts.move===false)){ d=mod(k.tonic-was.tonic,12); if(d>6) d-=12; }
+  if(d){ PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && !(INST.get(t.inst)||{}).percussive) [t.events,...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(ev=>ev.forEach(e=>e.n+=d)); });
+    if(PROJ.chords) PROJ.chords=transposeChords(PROJ.chords,d); }
   $('#keySel').value=hard(PROJ.key)?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks();
 }
 $('#keySel').innerHTML='<option value="">Key: auto</option>'+['major','minor'].map(m=>PC_NAMES.map((n,i)=>`<option value="${i}:${m}">${n} ${m}</option>`).join('')).join('');

@@ -179,6 +179,11 @@
       <div class="song-map" id="songMap" hidden role="group" aria-label="Song map: tap a section to loop it"></div>
       <div class="hint song-hint" id="songHint" hidden>Click a part to switch it on or off · double-click it to edit its notes · drag a section to move it, its right edge to resize (Alt+drag copies) · right-click (or hold on a tablet) for more · with the song area selected: Space play · Ctrl/Cmd+D duplicate · Ctrl/Cmd+L loop · Delete · + − W zoom · Home</div>
       <div class="pl-head"><span class="pl-corner">Tracks</span><canvas id="ruler" aria-hidden="true"></canvas></div>
+      <div class="chordlane" id="chordLane" hidden>
+        <div class="cl-corner"><span class="pl-corner">Chords</span><span class="cl-src" id="chordSrc"></span><button class="lk" type="button" id="chordReset" hidden title="Go back to the chords Keys picked (Ctrl+Z brings these back)">↺ Use Keys’ chords</button></div>
+        <div class="cl-view"><div class="cl-strip" id="chordStrip" role="toolbar" aria-label="Chords of the song: click a chord to fix it, arrow keys move"></div></div>
+      </div>
+      <div class="chordpop" id="chordPop" role="dialog" aria-label="Fix this chord" hidden></div>
       <div class="tracks" id="tracks"></div>
       <div class="drop-hint">Drop audio or MIDI files to add them as tracks</div>
       <div class="playhead" id="playhead"></div>

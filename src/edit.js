@@ -123,6 +123,28 @@ async function importFile(f){
   const over=buf.duration>PROJ.bars*4*spb()+0.05;
   toast(`Added “${base}” (${buf.duration.toFixed(1)} s)${over?`. Only the first ${PROJ.bars} bars play; add bars to hear more`:''}. Use “Turn into notes” to play it on an instrument.`);
   ASSIST.say(`Added “${base}”. Drag it left or right to line it up, or say “${ASSIST.name}, turn ${base.length<20?base:'it'} into a bassline” to play it on an instrument.`,{speak:false});
+  if(buf.duration>=6) setTimeout(()=>listenToSong(t),400); /* SE-7c: key, tempo and chords, in the background (never blocks the import) */
+}
+/* ----- SE-7c: listen to a song on an audio track (key, tempo, chords) and keep the result on the track (t.ana) -----
+   It runs in a Worker (analyse.js), with a progress toast. Storing the result is not an undo step: undo never "forgets" what a
+   song was heard as (ANA_MEM brings it back onto a track an undo restored without it). */
+const ANA_RUN=new Set(), ANA_MEM=new Map();
+const anaSummary=a=>[a.key?keyName(a.key):'no key in this clip',a.bpm?a.bpm+' BPM':''].filter(Boolean).join(' · ');
+function anaRestore(){ PROJ.tracks.forEach(t=>{ if(t.kind==='audio'&&!t.ana&&ANA_MEM.has(t.id)) t.ana=ANA_MEM.get(t.id); }); }
+function anaStore(t,ana){ t.ana=ana; ANA_MEM.set(t.id,ana);
+  try{ const o=JSON.parse(UNDO.last), x=o&&o.p&&(o.p.tracks||[]).find(y=>y.id===t.id); if(x){ x.ana=ana; UNDO.last=JSON.stringify(o); } }catch(e){}
+  _saveProject(); }
+async function listenToSong(t,o={}){
+  if(!t||t.kind!=='audio'||ANA_RUN.has(t.id)||typeof analyseAudio!=='function') return null;
+  const buf=AUD.get(t.id); if(!buf){ if(!o.quiet) toast('That audio isn’t loaded yet. Try again in a moment.'); return null; }
+  const hit=anaCached(t,buf); if(hit&&!o.again){ anaStore(t,hit); renderTracks(); return hit; }
+  ANA_RUN.add(t.id); renderTracks(); const nm=t.name.length>28?t.name.slice(0,27)+'…':t.name; let last=-1;
+  toast(`Listening to ${nm}…`);
+  try{ const res=await analyseAudio(buf,{onProgress:p=>{ const pc=Math.min(99,Math.floor(p*10)*10); if(pc>last){ last=pc; toast(`Listening to ${nm}… ${pc}%`); } }});
+    ANA_RUN.delete(t.id); const live=PROJ.tracks.find(x=>x.id===t.id); if(!live){ return null; } /* deleted, or another song opened */
+    const c=anaCache(res,buf); anaStore(live,c); CARDHIDE.delete(live.id); renderTracks();
+    toast(`${nm}: ${anaSummary(c)}. Its key and chords are on the track.`); return c; }
+  catch(e){ ANA_RUN.delete(t.id); renderTracks(); toast(`I couldn’t listen to ${nm}: ${e.message}`); return null; }
 }
 $('#importBtn').onclick=()=>$('#importFile').click();
 $('#importFile').addEventListener('change',async e=>{ for(const f of e.target.files) await importFile(f); e.target.value=''; });

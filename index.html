@@ -704,6 +704,59 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
   .sec.slim .sname{padding:4px 3px}
 }
 @media (max-width:860px){.song-head{grid-template-columns:minmax(0,1fr)}}
+/* ---------- SE-7c: chord strip, chord fixer, song card ---------- */
+.chordlane{display:grid;grid-template-columns:300px minmax(0,1fr);gap:10px;align-items:center;padding:6px;border:1px solid var(--t5);border-left:4px solid var(--accent);border-radius:12px;background:var(--t2)}
+.cl-corner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;padding-left:2px}
+.cl-corner .pl-corner{padding-left:0}
+.cl-src{font-size:12px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-corner .lk{font-size:12px}
+.cl-view{min-width:0;overflow-x:auto;overflow-y:hidden;border-radius:8px;background:var(--t1);border:1px solid var(--line)}
+.cl-strip{position:relative;height:44px;min-width:100%}
+.cb{position:absolute;top:3px;bottom:3px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:0;padding:0 7px;margin:0;border-radius:6px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent) calc(var(--o,1) * 26%),var(--t3));color:var(--ink);cursor:pointer;overflow:hidden;text-align:left;font:inherit;box-sizing:border-box;border-left-width:1px}
+.cb b{font:700 13px/1.2 var(--body);white-space:nowrap;opacity:calc(.55 + var(--o,1) * .45)}
+.cb span{font:500 10.5px/1.25 var(--mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cb.unsure{border-style:dashed;background:color-mix(in srgb,var(--accent) calc(var(--o,1) * 14%),var(--t2))}
+.cb.none{background:var(--t2);border-style:dashed;border-color:var(--line)}
+.cb.none b{color:var(--muted);font-weight:600}
+.cb.mine{border-color:var(--signal)}
+.cb:hover{border-color:var(--ink2)}
+.cb[aria-expanded="true"]{outline:2px solid var(--signal);outline-offset:-2px}
+.cb.now{background:var(--accent);border-color:var(--accent);border-style:solid}
+.cb.now b{color:var(--on-accent);opacity:1}.cb.now span{color:var(--on-accent);opacity:.85}
+.cb:focus-visible{outline:2px solid var(--signal);outline-offset:-2px;z-index:1}
+.chordpop{position:absolute;z-index:60;width:min(340px,calc(100vw - 32px));padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);box-shadow:0 12px 30px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:9px;font-size:13px}
+.chordpop .cp-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.chordpop .cp-top b{font:600 16px var(--serif)}
+.chordpop .cp-notes{font:500 12px var(--mono);color:var(--ink2)}
+.chordpop .cp-sure{font-size:12px;color:var(--muted)}
+.cp-roots{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+.cp-roots button{min-height:34px;border-radius:8px;border:1px solid var(--line);background:var(--raised);color:var(--ink);font:600 13px var(--body);cursor:pointer;padding:0}
+.cp-roots button:hover{border-color:var(--t8)}
+.cp-roots button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.chordpop .cp-q{margin-left:0;display:flex}.chordpop .cp-q button{flex:1 1 0;min-height:34px}
+.cp-now{display:flex;align-items:baseline;gap:8px;padding:6px 10px;border-radius:8px;background:var(--t1);border:1px solid var(--line)}
+.cp-now b{font:700 15px var(--body)}.cp-now span{font:500 12px var(--mono);color:var(--muted)}
+.cp-act{display:flex;gap:6px;flex-wrap:wrap}.cp-act .btn{min-height:36px}
+.cp-type{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.cp-type input{flex:1 1 auto;min-width:0;max-width:none;width:auto}
+.songcard{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;padding:10px 12px;margin-top:2px;border-radius:10px;border:1px solid var(--t5);border-top:1px dashed var(--line);background:var(--t2);font-size:13px}
+.songcard.busy{padding:8px 12px}
+.sc-head{display:flex;align-items:baseline;gap:4px 10px;flex-wrap:wrap}
+.sc-head b{font:600 17px var(--serif)}
+.sc-head>span:not(.spacer){color:var(--ink2);font-size:13px}
+.sc-head>span.mono{font-size:12px;color:var(--muted)}
+.sc-why{color:var(--muted);font-size:12.5px}
+.sc-ch{font:500 13px var(--mono);color:var(--ink)}
+.sc-k{font:600 11px var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-right:4px}
+.sc-act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.sc-act .btn{min-height:34px}
+.sc-tog[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.lk.ana-l{color:var(--signal)}
+.lk.ana-l[aria-pressed="true"]{text-decoration:underline;text-underline-offset:3px}
+@media (max-width:860px){.chordlane{grid-template-columns:minmax(0,1fr);gap:6px}.cl-strip{min-width:max(100%,calc(var(--bars,4) * 46px))}}
+@media (max-width:600px){
+  .chordpop{position:fixed;left:16px!important;right:16px;top:auto!important;bottom:16px;width:auto;max-height:calc(100vh - 32px);overflow:auto}
+  .cp-roots button,.chordpop .cp-q button,.cp-act .btn{min-height:44px}
+}
 @media (max-width:600px){
   .playlist.song .sh-time,.playlist.song .slane,.playlist.song .song-hint,.playlist.song #songAddSec,.playlist.song .sh-l2 .seg,.playlist.song .playhead{display:none!important}
   .playlist.song .song-map:not([hidden]){display:flex;flex-wrap:wrap;gap:6px}
@@ -891,6 +944,11 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
       <div class="song-map" id="songMap" hidden role="group" aria-label="Song map: tap a section to loop it"></div>
       <div class="hint song-hint" id="songHint" hidden>Click a part to switch it on or off · double-click it to edit its notes · drag a section to move it, its right edge to resize (Alt+drag copies) · right-click (or hold on a tablet) for more · with the song area selected: Space play · Ctrl/Cmd+D duplicate · Ctrl/Cmd+L loop · Delete · + − W zoom · Home</div>
       <div class="pl-head"><span class="pl-corner">Tracks</span><canvas id="ruler" aria-hidden="true"></canvas></div>
+      <div class="chordlane" id="chordLane" hidden>
+        <div class="cl-corner"><span class="pl-corner">Chords</span><span class="cl-src" id="chordSrc"></span><button class="lk" type="button" id="chordReset" hidden title="Go back to the chords Keys picked (Ctrl+Z brings these back)">↺ Use Keys’ chords</button></div>
+        <div class="cl-view"><div class="cl-strip" id="chordStrip" role="toolbar" aria-label="Chords of the song: click a chord to fix it, arrow keys move"></div></div>
+      </div>
+      <div class="chordpop" id="chordPop" role="dialog" aria-label="Fix this chord" hidden></div>
       <div class="tracks" id="tracks"></div>
       <div class="drop-hint">Drop audio or MIDI files to add them as tracks</div>
       <div class="playhead" id="playhead"></div>
@@ -4124,14 +4182,20 @@ function setBars(n){
 /* SE-7a: setKey(k, from). from: 'you' (chosen; the default), 'keys' (Keys picked it), 'vibe', 'song', or 'notes' (a soft key from
    a sung take: it never locks and never moves notes). Changing a key that was set moves the parts with it, as before;
    {move:false} only relabels (the key popover's "Set": the notes are already in that key). setKey(null) goes back to auto.
-   Picking a key yourself (from 'you') when the key came from your notes moves the parts from that key too (nearest way). */
+   Picking a key yourself (from 'you') when the key came from your notes moves the parts from that key too (nearest way).
+   {shift: n} moves the parts (and PROJ.chords) by n semitones whatever the old key was. */
 function setKey(k,from,opts){
   from=from||'you'; const old=PROJ.key, hard=x=>x&&x.tonic!=null&&KEY_HARD.includes(x.from||'you');
   if(k&&from==='notes'&&hard(old)) return; /* a sung take never overrides a key that was set */
   /* the key the parts are in now: a set key, or (fix 2) the key worked out from your notes when you pick a new one */
   const was=hard(old)?old:(k&&from==='you'&&!(opts&&opts.move===false)?keyStatus().key:null);
   PROJ.kv=2; PROJ.key=k?Object.assign({tonic:k.tonic,mode:k.mode,from},from==='notes'&&k.src?{src:k.src}:{}):null;
-  if(was && k && from!=='notes' && was.tonic!==k.tonic && !(opts&&opts.move===false)){ let d=mod(k.tonic-was.tonic,12); if(d>6) d-=12; PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && !(INST.get(t.inst)||{}).percussive) [t.events,...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(ev=>ev.forEach(e=>e.n+=d)); }); }
+  /* SE-7c: opts.shift moves the parts by exactly that many semitones (the song card's "Set my key to E minor" works it out
+     through the relative mode, so G major parts going to E minor stay put); the song's chords (PROJ.chords) move with the parts */
+  let d=0; if(opts&&opts.shift!=null&&k) d=Math.round(+opts.shift)||0;
+  else if(was && k && from!=='notes' && was.tonic!==k.tonic && !(opts&&opts.move===false)){ d=mod(k.tonic-was.tonic,12); if(d>6) d-=12; }
+  if(d){ PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && !(INST.get(t.inst)||{}).percussive) [t.events,...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(ev=>ev.forEach(e=>e.n+=d)); });
+    if(PROJ.chords) PROJ.chords=transposeChords(PROJ.chords,d); }
   $('#keySel').value=hard(PROJ.key)?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks();
 }
 $('#keySel').innerHTML='<option value="">Key: auto</option>'+['major','minor'].map(m=>PC_NAMES.map((n,i)=>`<option value="${i}:${m}">${n} ${m}</option>`).join('')).join('');
@@ -5074,12 +5138,144 @@ function keyPopOpen(open){
   document.addEventListener('pointerdown',e=>{ if(!p.hidden&&!p.contains(e.target)&&!b.contains(e.target)) keyPopOpen(false); },true);
 })();
 
+/* ----- SE-7c: the chord strip (one block per chord over the loop, in sync with playback), the chord fixer, and the song card
+   on an audio track that was listened to (key, tempo, chords; nothing changes until you tap) ----- */
+const CARDHIDE=new Set(), CARDBASS=new Set();
+const CL={blocks:[],now:-1,open:-1,draft:null};
+const CQ_BTNS=[['maj','Major'],['min','Minor'],['sus4','Sus'],['7','7'],['none','None']];
+const CQ_WORDS={maj:'major',min:'minor','7':'seven',m7:'minor seven',maj7:'major seven',sus4:'sus four',sus2:'sus two',dim:'diminished','5':'power chord'};
+const cqGroup=q=>q==='m7'?'min':q==='maj7'?'maj':q==='sus2'?'sus4':q;
+const chordNotes=c=>chordPcs(c).map(pc=>PC_NAMES[pc]).join(' ');
+const chordSay=c=>!c||c.root==null||c.q==='none'?'no chord':PC_NAMES[c.root]+' '+(CQ_WORDS[c.q]||'major')+(c.bass!=null&&c.bass!==c.root?' over '+PC_NAMES[c.bass]:'');
+const hasOwnChords=()=>Array.isArray(PROJ.chords)&&PROJ.chords.length>0;
+function chordLaneOn(){ return !songOn()&&PROJ.tracks.length>0&&(hasOwnChords()||chordFollowers().length>0); }
+function chordSpanText(c){ const bar=Math.floor(c.b/4+1e-6)+1, off=c.b-(bar-1)*4, endBar=Math.floor((c.b+c.d)/4-1e-6)+1;
+  if(off>1e-6) return `Bar ${bar}, beat ${+(off+1).toFixed(2)}`; if(c.d<4-1e-6) return `Bar ${bar}, beats 1-${+c.d.toFixed(2)}`; return endBar>bar?`Bars ${bar}-${endBar}`:`Bar ${bar}`; }
+function renderChordLane(){
+  const lane=$('#chordLane'); if(!lane) return; const on=chordLaneOn(); lane.hidden=!on;
+  if(!on){ CL.blocks=[]; CL.now=-1; chordPopOpen(-1); return; }
+  const L=PROJ.bars*4, bl=chordBlocks().filter(c=>c.d>0&&c.b<L-1e-6); CL.blocks=bl; CL.now=-1;
+  const own=hasOwnChords(), song=own&&PROJ.chords.some(c=>c.from==='audio'), fixed=own&&PROJ.chords.some(c=>c.from==='user');
+  const ct=[...PROJ.tracks].reverse().find(t=>t.fromSong&&t.role==='chords'), sn=ct&&(PROJ.tracks.find(x=>x.id===ct.fromSong)||{}).name;
+  $('#chordSrc').textContent=song?(sn?`from “${sn}”`:'from the song')+(fixed?' · fixed':''):own?'fixed by you':'Keys’ chords';
+  $('#chordReset').hidden=!own;
+  const s=$('#chordStrip'); s.style.setProperty('--bars',PROJ.bars);
+  s.innerHTML=bl.map((c,i)=>{ const unsure=c.conf!=null&&c.conf<0.5, none=c.root==null||c.q==='none', nm=chordName(c)+(unsure&&!none?'?':'');
+    return `<button type="button" class="cb${unsure?' unsure':''}${none?' none':''}${c.from==='user'?' mine':''}" data-cb="${i}" style="left:${(c.b/L*100).toFixed(3)}%;width:${(Math.min(c.d,L-c.b)/L*100).toFixed(3)}%;--o:${(c.conf==null?1:0.45+0.55*clamp(c.conf,0,1)).toFixed(2)}" tabindex="${i===0?0:-1}" aria-haspopup="dialog" aria-expanded="false" aria-label="${chordSpanText(c)}: ${chordSay(c)}${unsure?', unsure':''}. Click to fix it." title="${esc(chordName(c))}${none?'':' · '+chordNotes(c)}${unsure?' · unsure':''} · click to fix"><b>${esc(nm)}</b><span>${none?'rest':chordNotes(c)}</span></button>`; }).join('');
+  if(CL.open>=0) chordPopOpen(-1);
+}
+/* the playhead's chord, lit while the loop plays (called every frame; touches the DOM only when the chord changes) */
+function chordLaneTick(beat){ if(!CL.blocks.length&&CL.now<0) return; let i=-1;
+  if(beat!=null&&beat>=0) i=CL.blocks.findIndex(c=>c.b<=beat+1e-6&&beat<c.b+c.d-1e-6); if(i===CL.now) return;
+  const s=$('#chordStrip'); if(!s) return; const o=s.querySelector('.cb.now'); if(o) o.classList.remove('now'); const n=i>=0&&s.querySelector(`[data-cb="${i}"]`); if(n) n.classList.add('now'); CL.now=i; }
+/* "Hear it": the chord on the song's chord sound (or the piano), with its bass note */
+function hearChord(c){ const ctx=ensureAudio(); if(!ctx||!c) return; const pcs=chordPcs(c); if(!pcs.length) return;
+  const ct=PROJ.tracks.find(t=>t.kind==='notes'&&t.role==='chords'&&t.gen)||PROJ.tracks.find(t=>t.kind==='notes'&&t.role==='chords');
+  let I=ct&&INST.get(ct.inst); if(!I||I.percussive||I.drums) I=INST.get('piano')||zoneInst('keys'); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{});
+  const now=ctx.currentTime+0.01, ns=voice(pcs,57).concat([nearestAbove(c.bass!=null?c.bass:c.root,40)]);
+  ns.forEach(n=>{ try{ const v=I.play(ctx,zoneDest('keys'),n,0.68,now); if(v&&!v.oneShot) v.release(now+1.4); }catch(e){} }); }
+/* fix one block exactly where it is (whole bars, from a beat, or an odd span), one undo step; returns the reply text */
+function fixChordBlock(i,chord){
+  const c=CL.blocks[i], p=parseChord(chord); if(!c||!p) return null;
+  const bar=Math.floor(c.b/4+1e-6)+1, off=c.b-(bar-1)*4, whole=Math.abs(c.d/4-Math.round(c.d/4))<1e-6;
+  let r=null;
+  if(off<1e-6&&whole) r=setChord(bar,p,{bars:Math.round(c.d/4)});
+  else if(off>1e-6&&c.b+c.d<=bar*4+1e-6) r=setChord(bar,p,{beat:off+1});
+  if(r) return r.text;
+  const list=chordBlocks().map(x=>{ if(Math.abs(x.b-c.b)>1e-6) return x; const o=Object.assign({},x,{root:p.root,q:p.q,conf:1,from:'user'}); delete o.alt; delete o.bass; if(p.bass!=null) o.bass=p.bass; return o; });
+  const moved=setChords(list); if(!moved) return null;
+  return `${chordSpanText(c)} is now ${chordName(p)}${moved.length?'; '+moved.join(', ')+' follow'+(moved.length===1?'s':''):''}`; }
+function chordPopOpen(i){
+  const p=$('#chordPop'); if(!p) return; const prev=CL.open>=0&&document.querySelector(`[data-cb="${CL.open}"]`);
+  if(prev) prev.setAttribute('aria-expanded','false');
+  if(i==null||i<0||!CL.blocks[i]){ CL.open=-1; p.hidden=true; return; }
+  const c=CL.blocks[i]; CL.open=i; CL.draft={root:c.root==null?projectKey().tonic:c.root,q:c.root==null?'none':c.q,bass:c.bass};
+  renderChordPop(); p.hidden=false; const b=document.querySelector(`[data-cb="${i}"]`); if(b) b.setAttribute('aria-expanded','true');
+  /* under the block, kept inside the playlist (a phone shows it as a sheet at the bottom: see the CSS) */
+  const pl=$('#playlist').getBoundingClientRect(), br=b?b.getBoundingClientRect():pl, pw=p.offsetWidth;
+  p.style.left=Math.max(0,Math.min(br.left-pl.left,pl.width-pw))+'px'; p.style.top=(br.bottom-pl.top+6)+'px';
+  const f=p.querySelector('[data-capply]:not([disabled])')||p.querySelector('[data-cq][aria-pressed="true"]')||p.querySelector('button'); if(f) try{ f.focus({preventScroll:true}); }catch(e){}
+}
+function renderChordPop(){
+  const p=$('#chordPop'), c=CL.blocks[CL.open], d=CL.draft; if(!c||!d) return;
+  const same=d.q===(c.root==null?'none':c.q)&&(d.q==='none'||d.root===c.root)&&d.bass===c.bass, dn=chordName(d), none=d.q==='none';
+  const sure=c.from==='audio'?(c.conf>=0.75?'heard in the song, sure':c.conf>=0.5?'heard in the song, fairly sure':'heard in the song, unsure'):c.from==='user'?'fixed by you':'Keys’ chord';
+  const alt=c.alt&&c.alt.root!=null&&!(c.alt.root===c.root&&c.alt.q===c.q)?c.alt:null;
+  p.innerHTML=`<div class="cp-top"><b>${chordSpanText(c)} · ${esc(chordName(c))}</b><span class="cp-notes">${c.root==null||c.q==='none'?'no chord':chordNotes(c)}</span><span class="cp-sure">${sure}</span></div>
+    <div class="cp-roots" role="group" aria-label="Root note">${PC_NAMES.map((n,pc)=>`<button type="button" data-croot="${pc}" aria-pressed="${!none&&d.root===pc}">${n}</button>`).join('')}</div>
+    <span class="seg cp-q" role="group" aria-label="Chord type">${CQ_BTNS.map(([q,l])=>`<button type="button" data-cq="${q}" aria-pressed="${q==='none'?none:!none&&cqGroup(d.q)===q}">${l}</button>`).join('')}</span>
+    <div class="cp-now"><b>${esc(dn)}</b><span>${none?'the parts Keys made rest here':chordNotes(d)}</span></div>
+    <div class="cp-act"><button class="btn small" type="button" data-chear${none?' disabled':''} title="Play the chord">▶ Hear it</button><button class="btn small primary" type="button" data-capply${same?' disabled':''}>Use ${esc(dn)}</button>${alt?`<button class="btn small" type="button" data-calt title="The second guess from the song">or ${esc(chordName(alt))}</button>`:''}</div>
+    <label class="cp-type"><span>Or type one</span><input class="input inline" type="text" data-ctype placeholder="F♯m7, B♭/D, N.C." aria-label="Type a chord" autocomplete="off" spellcheck="false"></label>
+    <div class="hint">${hasOwnChords()?'The bass, chords and melody Keys made follow. Your own parts stay. Ctrl+Z undoes it.':'The bass, chords and melody Keys made follow; your own parts stay. From now on these chords stay as they are (they stop bending towards melodies you play). Ctrl+Z undoes it.'}</div>`;
+}
+function chordApply(chord){ const i=CL.open, b0=CL.blocks[i]&&CL.blocks[i].b; const txt=fixChordBlock(i,chord); chordPopOpen(-1);
+  if(!txt){ toast('I couldn’t read that chord. Try “Bm”, “F♯7”, “B♭/D” or “N.C.”'); return; } toast(txt);
+  const k=CL.blocks.findIndex(x=>Math.abs(x.b-b0)<1e-6), el=document.querySelector(`[data-cb="${k<0?0:k}"]`); if(el){ chordFocus(el); } }
+function chordFocus(el){ const s=$('#chordStrip'); s.querySelectorAll('.cb').forEach(x=>x.tabIndex=-1); el.tabIndex=0; try{ el.focus({preventScroll:true}); }catch(e){} }
+(function(){ const s=$('#chordStrip'), p=$('#chordPop'); if(!s||!p) return;
+  s.addEventListener('click',e=>{ const b=e.target.closest('[data-cb]'); if(!b) return; const i=+b.dataset.cb; chordFocus(b); chordPopOpen(CL.open===i?-1:i); });
+  s.addEventListener('keydown',e=>{ const b=e.target.closest('[data-cb]'); if(!b) return; const n=CL.blocks.length, i=+b.dataset.cb;
+    const j=e.key==='ArrowRight'?Math.min(n-1,i+1):e.key==='ArrowLeft'?Math.max(0,i-1):e.key==='Home'?0:e.key==='End'?n-1:null;
+    if(j==null) return; e.preventDefault(); e.stopPropagation(); const el=s.querySelector(`[data-cb="${j}"]`); if(el){ chordFocus(el); if(CL.open>=0) chordPopOpen(j); } });
+  $('#chordReset').addEventListener('click',()=>{ const moved=clearChords(); toast(`Back to Keys’ chords${moved&&moved.length?'; '+moved.join(', ')+' follow':''}. Ctrl+Z brings yours back.`); });
+  p.addEventListener('click',e=>{ const d=CL.draft; if(!d) return; const r=e.target.closest('[data-croot]'), q=e.target.closest('[data-cq]');
+    if(r||q){ if(r){ d.root=+r.dataset.croot; if(d.q==='none'){ const k=projectKey(), deg=scaleOf(k).indexOf(d.root); const tq=deg>=0?triadQ(triad(k,deg)):'maj'; d.q=tq==='dim'?'min':tq; } }
+      else { d.q=q.dataset.cq; if(d.q!=='none'&&d.root==null) d.root=projectKey().tonic; }
+      delete d.bass; const key=r?`[data-croot="${r.dataset.croot}"]`:`[data-cq="${q.dataset.cq}"]`; renderChordPop(); const f=p.querySelector(key); if(f) f.focus();
+      if(!TR.running&&d.q!=='none') hearChord(d); return; }
+    if(e.target.closest('[data-chear]')){ hearChord(d); return; }
+    if(e.target.closest('[data-capply]')){ chordApply(d.bass!=null?{root:d.root,q:d.q,bass:d.bass}:d.q==='none'?'N.C.':{root:d.root,q:d.q}); return; }
+    if(e.target.closest('[data-calt]')){ const a=CL.blocks[CL.open]&&CL.blocks[CL.open].alt; if(a) chordApply({root:a.root,q:a.q}); return; } });
+  p.addEventListener('keydown',e=>{ if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); const i=CL.open; chordPopOpen(-1); const el=s.querySelector(`[data-cb="${i}"]`); if(el) chordFocus(el); return; }
+    const t=e.target.closest('[data-ctype]'); if(t&&e.key==='Enter'){ e.preventDefault(); const c=parseChord(t.value); if(!c){ toast('I couldn’t read that chord. Try “Bm”, “F♯7”, “B♭/D” or “N.C.”'); return; } chordApply(c); } });
+  p.addEventListener('input',e=>{ const t=e.target.closest('[data-ctype]'); if(!t) return; const c=parseChord(t.value), a=p.querySelector('[data-capply]'); if(c&&a){ Object.assign(CL.draft,{root:c.root,q:c.q}); if(c.bass!=null) CL.draft.bass=c.bass; else delete CL.draft.bass;
+    p.querySelectorAll('[data-croot]').forEach(x=>x.setAttribute('aria-pressed',String(c.q!=='none'&&+x.dataset.croot===c.root))); p.querySelectorAll('[data-cq]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.cq==='none'?c.q==='none':c.q!=='none'&&cqGroup(c.q)===x.dataset.cq)));
+    a.disabled=false; a.textContent='Use '+chordName(c); const nw=p.querySelector('.cp-now'); if(nw) nw.innerHTML=`<b>${esc(chordName(c))}</b><span>${c.q==='none'?'the parts Keys made rest here':chordNotes(c)}</span>`; } });
+  document.addEventListener('pointerdown',e=>{ if(!p.hidden&&!p.contains(e.target)&&!e.target.closest('[data-cb]')) chordPopOpen(-1); },true);
+})();
+function anaBtn(t){ const run=typeof ANA_RUN!=='undefined'&&ANA_RUN.has(t.id), shown=t.ana&&!CARDHIDE.has(t.id);
+  return `<button class="lk ana-l" type="button" data-ana="${t.id}"${t.ana?` aria-pressed="${!!shown}"`:''}${run?' disabled':''} title="${t.ana?'Show or hide what I heard in this song: key, tempo and chords':'Listen to this recording for its key, tempo and chords'}">${run?'Listening…':t.ana?'♪ Key &amp; chords':'♪ Find key'}</button>`; }
+function songCardHTML(t){
+  if(t.kind!=='audio') return '';
+  if(typeof ANA_RUN!=='undefined'&&ANA_RUN.has(t.id)) return `<div class="songcard busy" role="status"><span class="hint">Listening to “${esc(t.name)}” for its key, tempo and chords…</span></div>`;
+  const a=t.ana; if(!a||CARDHIDE.has(t.id)) return '';
+  const key=a.key?{tonic:a.key.tonic,mode:a.key.mode}:null, st=keyStatus(), mine=st.key, hard=KEY_HARD.includes(st.from);
+  const lc=chordsFromAna(a,{to:'song'}), has=lc.some(c=>c.root!=null), bass=CARDBASS.has(t.id), shift=has&&key&&mine?keyShift(key,mine):0;
+  const unsureT=a.bpm&&a.bpmConf!=null&&a.bpmConf<0.15;
+  const head=(key?`<b>${keyName(key)}</b><span>${KEY_WORDS[a.key.level]||''}</span>${a.key.alt?`<span>or ${keyName(a.key.alt)}</span>`:''}<span class="mono">DJ key ${esc(a.djKey||djKey(key))}</span>`:`<b>No key in this clip</b>`)
+    +(a.bpm?`<span class="mono">${a.bpm} BPM${a.bpmAlt?` (or ${a.bpmAlt})`:''}</span>${unsureT?'<span>tempo unsure</span>':''}`:'');
+  const chordsLine=has?`<div class="sc-ch"><span class="sc-k">Chords${a.loop?` · ${a.loop.bars}-bar loop`:''}</span> ${esc(chordsText(lc.slice(0,8)))}${lc.length>8?' …':''}</div>`
+    +`<div class="hint">${shift?`On your song they go in your key, ${keyName(mine)} (${shiftWords(shift)}): ${esc(chordsText(fitChordsToKey(lc.slice(0,8),key,mine)))}.`:mine?`They fit your key, ${keyName(mine)}.`:`Your song has no key yet, so it takes the song’s key.`}</div>`
+    :`<div class="hint">${key?'I couldn’t hear clear chords in this clip.':'A drum loop or a short clip: no key or chords to use.'}</div>`;
+  const keyBtn=key?(mine&&sameKey(mine,key)&&hard?`<button class="btn small" type="button" disabled>Your key is ${keyName(key)} ✓</button>`:`<button class="btn small" type="button" data-sckey="${t.id}" title="Your song takes the song’s key; parts Keys and you made move to fit">Set my key to ${keyName(key)}</button>`):'';
+  const bpmBtn=a.bpm?(Math.abs(CTRL.bpm-a.bpm)<0.05?`<button class="btn small" type="button" disabled>${a.bpm} BPM ✓</button>`:`<button class="btn small" type="button" data-scbpm="${t.id}" data-bpm="${a.bpm}">Use ${a.bpm} BPM</button>`)
+    +(a.bpmAlt&&Math.abs(CTRL.bpm-a.bpmAlt)>=0.05?`<button class="lk" type="button" data-scbpm="${t.id}" data-bpm="${a.bpmAlt}">or ${a.bpmAlt}</button>`:''):'';
+  return `<div class="songcard" data-card="${t.id}" role="group" aria-label="What I heard in ${esc(t.name)}">
+    <div class="sc-head">${head}<span class="spacer"></span><button class="lk" type="button" data-schide="${t.id}" title="Hide this card (Key &amp; chords brings it back)">Hide</button></div>
+    ${a.key&&a.key.why?`<div class="sc-why">${esc(a.key.why)}</div>`:''}${chordsLine}
+    <div class="sc-act">${has?`<button class="btn small primary" type="button" data-scput="${t.id}" title="A new Chords track: Keys’ own sound and rhythm on these chords, never the song’s audio">Put these chords on my song</button><button class="btn small sc-tog" type="button" data-scbass="${t.id}" aria-pressed="${bass}" title="Also make the bassline follow the song’s bass notes">${bass?'✓ ':''}Bass movement too</button>`:''}${keyBtn}${bpmBtn}</div>
+    <div class="hint">Nothing in your song changes until you tap. Keys plays the chords with its own sound, never the song’s audio.</div></div>`;
+}
+$('#tracks').addEventListener('click',e=>{ const g=n=>{ const el=e.target.closest(`[data-${n}]`); return el?{el,t:PROJ.tracks.find(x=>x.id===el.dataset[n.replace(/-./g,m=>m[1].toUpperCase())])}:null; };
+  let h=g('ana'); if(h){ const t=h.t; if(!t||ANA_RUN.has(t.id)) return; if(!t.ana) listenToSong(t); else { CARDHIDE.has(t.id)?CARDHIDE.delete(t.id):CARDHIDE.add(t.id); renderTracks(); } return; }
+  if((h=g('schide'))){ CARDHIDE.add(h.el.dataset.schide); renderTracks(); const b=document.querySelector(`[data-ana="${h.el.dataset.schide}"]`); if(b) b.focus(); return; }
+  if((h=g('scbass'))){ const id=h.el.dataset.scbass; CARDBASS.has(id)?CARDBASS.delete(id):CARDBASS.add(id); renderTracks(); const b=document.querySelector(`[data-scbass="${id}"]`); if(b) b.focus(); return; }
+  if((h=g('scput'))&&h.t){ const r=addSongChords(h.t,{to:'mine',bass:CARDBASS.has(h.t.id)}); toast(r?r.text+'. Ctrl+Z undoes it.':'I couldn’t hear chords to use in that song.'); return; }
+  if((h=g('sckey'))&&h.t&&h.t.ana&&h.t.ana.key){ const k={tonic:h.t.ana.key.tonic,mode:h.t.ana.key.mode}, st=keyStatus();
+    const parts=PROJ.tracks.some(x=>x.kind==='notes'&&x.events.length&&!(INST.get(x.inst)||{}).percussive), d=st.key&&parts?keyShift(st.key,k):0;
+    setKey(k,'song',{shift:d}); toast(`Key set to ${keyName(k)}, the song’s key${d?`; your parts moved ${shiftWords(d)} to fit`:''}. Ctrl+Z undoes it.`); return; }
+  if((h=g('scbpm'))){ const b=+h.el.dataset.bpm; if(b){ setTempo(b); saveProject(); renderTracks(); toast(`Tempo ${b} BPM, the song’s tempo. Ctrl+Z undoes it.`); } return; }
+});
+$('#bpm').addEventListener('change',()=>drawRolls());
+
 /* ----- track list ----- */
 let instOpts='';
 function instOptions(){ if(!instOpts){ instOpts=CAT_ORDER.concat(['Mine']).map(cat=>{ const l=ORDER.map(id=>INST.get(id)).filter(i=>i.cat===cat); return l.length?`<optgroup label="${cat}">${l.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('')}</optgroup>`:''; }).join(''); } return instOpts; }
 function renderTracks(){
   instOpts=''; songUI(); const songFk=songFocusKey(), song=songOn();
-  renderKeyChip(); /* first: it also brings a song saved before SE-7 up to date (migrateKey) */
+  if(typeof anaRestore==='function') anaRestore();
+  renderKeyChip(); renderChordLane(); /* first: it also brings a song saved before SE-7 up to date (migrateKey) */
   $('#projName').value=PROJ.name; $('#barsSel').value=String(PROJ.bars); $('#keySel').value=PROJ.key&&KEY_HARD.includes(PROJ.key.from||'you')?`${PROJ.key.tonic}:${PROJ.key.mode}`:'';
   const box=$('#tracks');
   if(!PROJ.tracks.length){ box.innerHTML='<div class="custom-empty big">No tracks yet. Ask the assistant (“Keys, give me a house beat at 124”), hum a melody, press Record and play, or use the + buttons.</div>'; closeEditor(); drawRuler(); renderFaders(); songRender(); return; }
@@ -5094,10 +5290,10 @@ function renderTracks(){
       <div class="th2">${t.kind==='notes'?`<select class="select inline tinst" data-tinst="${t.id}" aria-label="Instrument for ${esc(t.name)}">${instOptions()}</select>`:`<select class="select inline tinst" data-tonotes="${t.id}" aria-label="Turn ${esc(t.name)} into notes"><option value="">♪ Turn into notes…</option><option value="melody">Melody</option><option value="bass">Bassline</option><option value="chords">Chords</option></select>`}
         <input class="tvol" type="range" min="0" max="100" value="${Math.round(t.vol*100)}" data-vol="${t.id}" aria-label="${esc(t.name)} volume" title="Volume"></div>
       <div class="th3"><span class="trole">${ROLE_NAME[t.role]||'Part'} · ${t.kind==='audio'?'audio':t.events.length+' notes'}</span>
-        <span class="row" style="gap:4px">${t.kind==='notes'?`<button class="lk ed-l" type="button" data-edit="${t.id}">✎ Edit notes</button>`:''}<button class="lk" type="button" data-dup="${t.id}" title="Duplicate track">Copy</button><button class="lk del-l" type="button" data-tdel="${t.id}">Delete</button></span></div>
+        <span class="row" style="gap:4px">${t.kind==='notes'?`<button class="lk ed-l" type="button" data-edit="${t.id}">✎ Edit notes</button>`:anaBtn(t)}<button class="lk" type="button" data-dup="${t.id}" title="Duplicate track">Copy</button><button class="lk del-l" type="button" data-tdel="${t.id}">Delete</button></span></div>
     </div>
     ${song?songLaneHTML(t):`<canvas class="troll" data-roll="${t.id}" aria-label="${esc(t.name)} clip" title="${t.kind==='audio'?'Drag to move · Shift+drag to trim the start':'Click to edit notes'}"></canvas>`}
-    ${FXOPEN.has(t.id)?fxPanel(t):''}
+    ${FXOPEN.has(t.id)?fxPanel(t):''}${songCardHTML(t)}
   </div>`).join('');
   PROJ.tracks.forEach(t=>{ const s=box.querySelector(`[data-tinst="${t.id}"]`); if(s) s.value=t.inst; });
   if(ED.tid && !PROJ.tracks.find(t=>t.id===ED.tid)) closeEditor();
@@ -5115,7 +5311,14 @@ function drawRolls(){
       const d=buf.getChannelData(0), sr=buf.sampleRate, pxPerSec=w/(L*spb()), x0=(t.start||0)/L*w, off=Math.floor((t.trim||0)*sr), per=Math.max(1,Math.floor(sr/pxPerSec)), secW=(buf.duration-(t.trim||0))*pxPerSec;
       g.fillStyle=t.color+'22'; g.fillRect(x0,2,Math.min(w-x0,secW),h-4); g.fillStyle=t.color;
       for(let x=0;x<Math.min(w-x0,secW);x++){ let m=0; for(let i=off+x*per;i<off+(x+1)*per&&i<d.length;i+=4) m=Math.max(m,Math.abs(d[i])); g.fillRect(x0+x,h/2-m*h*0.45,1,Math.max(1,m*h*0.9)); }
-      g.fillStyle=cssVar('--ink'); g.fillRect(x0,2,2,h-4); return; }
+      g.fillStyle=cssVar('--ink'); g.fillRect(x0,2,2,h-4);
+      if(t.ana&&t.ana.chords&&typeof anaSongChords==='function'){ /* SE-7c: the song's chords where they sound, at the tempo now */
+        g.font='600 10.5px '+cssVar('--body'); g.textBaseline='middle'; const bg=cssVar('--t2'), ink=cssVar('--ink');
+        anaSongChords(t).forEach(c=>{ if(c.b>=L||c.root==null||c.q==='none') return; const x=c.b/L*w, cw=Math.min(w-x,c.d/L*w); if(cw<3) return; const cf=c.conf==null?0.6:clamp(c.conf,0,1);
+          g.globalAlpha=0.88; g.fillStyle=bg; g.fillRect(x+1,3,cw-2,15); g.globalAlpha=0.4+0.6*cf; g.fillStyle=t.color; g.fillRect(x+1,3,2,15);
+          const nm=chordName(c)+(cf<0.5?'?':''); if(cw>g.measureText(nm).width+9){ g.fillStyle=ink; g.fillText(nm,x+6,11); } });
+        g.globalAlpha=1; g.textBaseline='alphabetic'; }
+      return; }
     if(!t.events.length){ g.fillStyle=mut; g.font='11px '+cssVar('--body'); g.fillText('Empty · click to add notes',8,h/2+4); return; }
     const ns=t.events.map(e=>e.n), lo=Math.min(...ns), hi=Math.max(...ns), rngN=Math.max(6,hi-lo);
     t.events.forEach(e=>{ const x=mod(e.b,L)/L*w, y=h-5-((e.n-lo)/rngN)*(h-12); g.globalAlpha=0.45+0.55*e.v; g.fillRect(x,y-2,Math.max(2,e.d/L*w-1),4); }); g.globalAlpha=1; });
@@ -5331,9 +5534,9 @@ function renderMixerView(){
   if(songOn()){ songAnim(); return; }
   const ph=$('#playhead'), first=document.querySelector('.troll'), pos=$('#posDisp');
   if(pos) pos.classList.toggle('cnt',LOOP.state==='counting');
-  if(!TR.running||!LOOP.L||LOOP.state==='counting'){ ph.style.display='none'; if(pos) pos.textContent=LOOP.state==='counting'?'Count-in':'1 . 1'; return; }
-  const beat=mod(LOOP.rawBeat(),LOOP.L); if(pos) pos.textContent=`${Math.floor(beat/4)+1} . ${Math.floor(beat%4)+1}`;
-  if(first && VIEW==='playlist'){ const r=first.getBoundingClientRect(), pr=$('#playlist').getBoundingClientRect(); ph.style.display='block'; ph.style.left=(r.left-pr.left+beat/LOOP.L*r.width)+'px'; ph.style.top=(r.top-pr.top-22)+'px'; ph.style.height=($('#tracks').getBoundingClientRect().bottom-r.top+22)+'px'; } else ph.style.display='none';
+  if(!TR.running||!LOOP.L||LOOP.state==='counting'){ ph.style.display='none'; if(pos) pos.textContent=LOOP.state==='counting'?'Count-in':'1 . 1'; chordLaneTick(-1); return; }
+  const beat=mod(LOOP.rawBeat(),LOOP.L); chordLaneTick(beat); if(pos) pos.textContent=`${Math.floor(beat/4)+1} . ${Math.floor(beat%4)+1}`;
+  if(first && VIEW==='playlist'){ const r=first.getBoundingClientRect(), pr=$('#playlist').getBoundingClientRect(); ph.style.display='block'; ph.style.left=(r.left-pr.left+beat/LOOP.L*r.width)+'px'; const cl=$('#chordLane'), top=cl&&!cl.hidden?$('#chordStrip').getBoundingClientRect().top:r.top-22; ph.style.top=(top-pr.top)+'px'; ph.style.height=($('#tracks').getBoundingClientRect().bottom-top)+'px'; } else ph.style.display='none';
   const ec=$('#edCanvas'), t=edTrack(); if(t && ED.tid && !$('#editor').hidden){ const G=edGeom(); const x=G.drum?G.K+beat*4*G.cw:G.K+beat*G.bw; const m=$('#edPlay'); m.style.left=x+'px'; m.style.height=G.gh+'px'; m.style.display='block'; }
 })();
 
@@ -5983,6 +6186,28 @@ async function importFile(f){
   const over=buf.duration>PROJ.bars*4*spb()+0.05;
   toast(`Added “${base}” (${buf.duration.toFixed(1)} s)${over?`. Only the first ${PROJ.bars} bars play; add bars to hear more`:''}. Use “Turn into notes” to play it on an instrument.`);
   ASSIST.say(`Added “${base}”. Drag it left or right to line it up, or say “${ASSIST.name}, turn ${base.length<20?base:'it'} into a bassline” to play it on an instrument.`,{speak:false});
+  if(buf.duration>=6) setTimeout(()=>listenToSong(t),400); /* SE-7c: key, tempo and chords, in the background (never blocks the import) */
+}
+/* ----- SE-7c: listen to a song on an audio track (key, tempo, chords) and keep the result on the track (t.ana) -----
+   It runs in a Worker (analyse.js), with a progress toast. Storing the result is not an undo step: undo never "forgets" what a
+   song was heard as (ANA_MEM brings it back onto a track an undo restored without it). */
+const ANA_RUN=new Set(), ANA_MEM=new Map();
+const anaSummary=a=>[a.key?keyName(a.key):'no key in this clip',a.bpm?a.bpm+' BPM':''].filter(Boolean).join(' · ');
+function anaRestore(){ PROJ.tracks.forEach(t=>{ if(t.kind==='audio'&&!t.ana&&ANA_MEM.has(t.id)) t.ana=ANA_MEM.get(t.id); }); }
+function anaStore(t,ana){ t.ana=ana; ANA_MEM.set(t.id,ana);
+  try{ const o=JSON.parse(UNDO.last), x=o&&o.p&&(o.p.tracks||[]).find(y=>y.id===t.id); if(x){ x.ana=ana; UNDO.last=JSON.stringify(o); } }catch(e){}
+  _saveProject(); }
+async function listenToSong(t,o={}){
+  if(!t||t.kind!=='audio'||ANA_RUN.has(t.id)||typeof analyseAudio!=='function') return null;
+  const buf=AUD.get(t.id); if(!buf){ if(!o.quiet) toast('That audio isn’t loaded yet. Try again in a moment.'); return null; }
+  const hit=anaCached(t,buf); if(hit&&!o.again){ anaStore(t,hit); renderTracks(); return hit; }
+  ANA_RUN.add(t.id); renderTracks(); const nm=t.name.length>28?t.name.slice(0,27)+'…':t.name; let last=-1;
+  toast(`Listening to ${nm}…`);
+  try{ const res=await analyseAudio(buf,{onProgress:p=>{ const pc=Math.min(99,Math.floor(p*10)*10); if(pc>last){ last=pc; toast(`Listening to ${nm}… ${pc}%`); } }});
+    ANA_RUN.delete(t.id); const live=PROJ.tracks.find(x=>x.id===t.id); if(!live){ return null; } /* deleted, or another song opened */
+    const c=anaCache(res,buf); anaStore(live,c); CARDHIDE.delete(live.id); renderTracks();
+    toast(`${nm}: ${anaSummary(c)}. Its key and chords are on the track.`); return c; }
+  catch(e){ ANA_RUN.delete(t.id); renderTracks(); toast(`I couldn’t listen to ${nm}: ${e.message}`); return null; }
 }
 $('#importBtn').onclick=()=>$('#importFile').click();
 $('#importFile').addEventListener('change',async e=>{ for(const f of e.target.files) await importFile(f); e.target.value=''; });
