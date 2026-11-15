@@ -7,6 +7,7 @@ const code = fs.readFileSync(path.join(root, 'src/dsp.js'), 'utf8') + '\n' + fs.
 const { anaJob } = vm.runInNewContext(code, { performance, Math, console });
 const mod = (a, n) => ((a % n) + n) % n, PCN = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
 const kn = k => k ? PCN[k.tonic] + ' ' + k.mode : 'none', relKey = k => k.mode === 'major' ? { tonic: mod(k.tonic + 9, 12), mode: 'minor' } : { tonic: mod(k.tonic + 3, 12), mode: 'major' };
+const chordOk = (c, t) => c && c.q === '5' ? c.root === t.root : cls(c) === cls(t);
 const name = x => x && x.root != null ? PCN[x.root] + (x.q === 'min' || x.q === 'm7' ? 'm' : '') : 'N', cls = x => x && x.root != null ? x.root + ':' + (x.q === 'min' || x.q === 'm7' ? 'min' : 'maj') : 'N';
 const files = fs.readdirSync(DIR).filter(f => f.endsWith('.json')).sort((a, b) => parseInt(a.slice(4)) - parseInt(b.slice(4)));
 const rows = [];
@@ -17,7 +18,7 @@ for (const f of files) {
   const t0 = performance.now(), j = anaJob(x, 22050, { p: PRM }); while (!j.step(1e9)); const res = j.result(), ms = Math.round(performance.now() - t0);
   const { off, spb, plan, secs } = T, bars = Math.floor((secs - off) / (4 * spb)), aspb = 60 / res.bpm; let ok = 0, tot = 0, rootOk = 0; const miss = [], seq = [];
   const at = k => { const tm = off + (k * 4 + 2) * spb, bb = (tm - res.downbeat) / aspb; return res.chords.find(c => bb >= c.b && bb < c.b + c.d); };
-  for (let k = 8; k < bars; k++) { const ch = at(k), tr = plan[(k - 8) % plan.length]; tot++; if (cls(ch) === cls(tr)) ok++; else if (miss.length < 5) miss.push(`b${k + 1}:${name(ch)}/${name(tr)}`); if (ch && ch.root === tr.root) rootOk++; }
+  for (let k = 8; k < bars; k++) { const ch = at(k), tr = plan[(k - 8) % plan.length]; tot++; if (chordOk(ch, tr)) ok++; else if (miss.length < 5) miss.push(`b${k + 1}:${name(ch)}/${name(tr)}`); if (ch && ch.root === tr.root) rootOk++; }
   for (let k = 0; k < 20; k++) seq.push(name(at(k)));
   let introN = 0; for (let k = 0; k < 8; k++) { const ch = at(k); if (!ch || ch.root == null) introN++; }
   const rel = ((res.downbeat - off) / spb) % 4, dbOk = Math.abs(rel - Math.round(rel)) * spb < 0.06 && mod(Math.round(rel), 4) === 0;

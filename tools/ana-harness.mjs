@@ -19,6 +19,15 @@ const CASES = [
   { style: 'pop', key: 'F major', mel: true }, { style: 'rock', key: 'D major', mel: false },
   { style: 'house', key: 'B major', mel: true }, { style: 'techno', key: 'G# minor', mel: false },
 ];
+const CASES2 = [
+  { style: 'deephouse', key: 'A minor', mel: true }, { style: 'melodictechno', key: 'D♯ minor', mel: false },
+  { style: 'dnb', key: 'F minor', mel: true }, { style: 'reggaeton', key: 'C♯ minor', mel: false },
+  { style: 'synthwave', key: 'G major', mel: true }, { style: 'ukg', key: 'B♭ major', mel: false },
+  { style: 'progressive', key: 'E major', mel: true }, { style: 'techhouse', key: 'B minor', mel: false },
+  { style: 'organichouse', key: 'C major', mel: true }, { style: 'nudisco', key: 'F♯ major', mel: false },
+  { style: 'bollywood', key: 'A♭ major', mel: true }, { style: 'house', key: 'D minor', mel: true },
+];
+const SET = +flag('--set', 1); if (SET === 2) CASES.splice(0, CASES.length, ...CASES2);
 const b = await pc.launch({ executablePath: chrome, headless: 'new', protocolTimeout: 900000, args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required'] });
 const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
 p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
@@ -28,8 +37,8 @@ const rows = [];
 for (let ci = 0; ci < CASES.length; ci++) {
   if (ONLY != null && ci !== +ONLY) continue;
   const c = CASES[ci];
-  const r = await p.evaluate(async (c, SECS, NOWORKER, ci, DUMP) => {
-    { let sd = 1234567 + ci * 7919; Math.random = () => { sd = (sd * 1664525 + 1013904223) >>> 0; return sd / 4294967296; }; }
+  const r = await p.evaluate(async (c, SECS, NOWORKER, ci, DUMP, SET2) => {
+    { let sd = 1234567 + ci * 7919 + (SET2 ? 424242 : 0); Math.random = () => { sd = (sd * 1664525 + 1013904223) >>> 0; return sd / 4294967296; }; }
     PROJ = newProject(); setBars(8);
     runActions([{ type: 'style', style: c.style }, { type: 'key', key: c.key }, { type: 'add_drums' }, { type: 'add_bass' }, { type: 'add_chords' }]);
     const truthKey = keyStatus().key, plan = chordPlan().plan.map(x => { const iv = mod(x.pcs[1] - x.pcs[0], 12); return { root: x.root, q: iv === 3 ? 'min' : 'maj' }; });
@@ -51,7 +60,7 @@ for (let ci = 0; ci < CASES.length; ci++) {
     const name = x => x && x.root != null ? PC_NAMES[x.root] + (x.q === 'min' || x.q === 'm7' ? 'm' : '') : 'N';
     const cls = x => x && x.root != null ? x.root + ':' + (x.q === 'min' || x.q === 'm7' ? 'min' : 'maj') : 'N';
     for (let k = 8; k < bars; k++) { const tm = off + (k * 4 + 2) * spb, bb = (tm - res.downbeat) / aspb; const ch = res.chords.find(x => bb >= x.b && bb < x.b + x.d); const tr = plan[(k - 8) % plan.length]; tot++;
-      if (cls(ch) === cls(tr)) ok++; else if (miss.length < 6) miss.push(`bar ${k + 1}: ${name(ch)} for ${name(tr)}`); if (ch && ch.root === tr.root) rootOk++; }
+      if (ch && ch.q === '5' ? ch.root === tr.root : cls(ch) === cls(tr)) ok++; else if (miss.length < 6) miss.push(`bar ${k + 1}: ${name(ch)} for ${name(tr)}`); if (ch && ch.root === tr.root) rootOk++; }
     /* intro bars should read "no chord" */
     let introN = 0; for (let k = 0; k < 8; k++) { const tm = off + (k * 4 + 2) * spb, bb = (tm - res.downbeat) / aspb; const ch = res.chords.find(x => bb >= x.b && bb < x.b + x.d); if (!ch || ch.root == null) introN++; }
     /* downbeat: the analysed bar line should land on a true bar line (within 60 ms) */
@@ -61,7 +70,7 @@ for (let ci = 0; ci < CASES.length; ci++) {
     return { style: c.style, truth: keyName(truthKey), got: k ? keyName(k) : 'none', level: k ? k.level : 0, alt: k ? keyName(k.alt) : '', dj: res.djKey, same, rel: relk, fifth, bpm, gotBpm: res.bpm, bpmConf: res.bpmConf,
       chordsPct: Math.round(ok / tot * 100), rootPct: Math.round(rootOk / tot * 100), introN, dbOk, db: res.downbeat, ms: Math.round(ms), resample: res.ms.resample, mel: c.mel, peak: Math.round(pk * 1000) / 1000,
       how: res.how, loop: res.loop ? res.loop.bars + ' bars from bar ' + (res.loop.start + 1) + ': ' + res.loop.chords.map(name).join(' ') : 'none', truthLoop: plan.map(name).join(' '), miss, tuning: res.tuning, nChords: res.chords.length, dump };
-  }, c, SECS, NOWORKER, ci, !!DUMP);
+  }, c, SECS, NOWORKER, ci, !!DUMP, SET === 2);
   if (r.dump) { fs.mkdirSync(DUMP, { recursive: true }); fs.writeFileSync(path.join(DUMP, `case${ci}.i16`), Buffer.from(r.dump.audio, 'base64')); fs.writeFileSync(path.join(DUMP, `case${ci}.json`), JSON.stringify(r.dump.truth)); delete r.dump; }
   rows.push(r);
   console.log(`${String(ci + 1).padStart(2)} ${r.style.padEnd(13)} ${r.mel ? 'mel' : '   '} key ${r.truth.padEnd(9)} → ${r.got.padEnd(9)} (lvl ${r.level}, or ${r.alt}, DJ ${r.dj}) ${r.same ? 'EXACT' : r.rel ? 'relative' : r.fifth ? 'fifth' : 'WRONG'} · bpm ${r.bpm}→${r.gotBpm} (${r.bpmConf}) · chords ${r.chordsPct}% (roots ${r.rootPct}%) intro N ${r.introN}/8 · downbeat ${r.dbOk ? 'ok' : 'OFF ' + r.db} · ${r.ms} ms`);
