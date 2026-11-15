@@ -2,14 +2,15 @@
 // offline renderer, lays each out as a ~3-minute song (a short silence, an 8-bar drums-only intro, then the full loop
 // repeated) and runs analyseAudio on it. Reports exact key, chords correct per bar (root + major/minor), BPM error,
 // downbeat and time per song. Dev only (qa-tester turns it into tests/keys.mjs).
-// Usage: SK_NODE_MODULES=/tmp/sk-test/node_modules node tools/ana-harness.mjs [index.html] [--secs 180] [--only 3] [--noworker] [--json out.json]
+// Usage: SK_NODE_MODULES=/tmp/sk-test/node_modules node tools/ana-harness.mjs [index.html] [--secs 180] [--only 3] [--set 2] [--noworker] [--json out.json] [--dump DIR] [--check]
+// --check: exit 1 unless exact key >= 10/12 with the rest relative or a fifth away, chords >= 80% of bars, BPM exact, under 3 s a song.
 import { createRequire } from 'module'; import fs from 'fs'; import path from 'path';
 const require = createRequire(process.env.SK_NODE_MODULES ? path.join(process.env.SK_NODE_MODULES, 'x.js') : import.meta.url);
 const pc = require('puppeteer-core');
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const args = process.argv.slice(2), flag = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
 const target = args[0] && !args[0].startsWith('--') ? args[0] : 'file://' + path.join(root, 'index.html');
-const DUMP = flag('--dump', null), SECS = +flag('--secs', 180), ONLY = flag('--only', null), NOWORKER = args.includes('--noworker'), JSON_OUT = flag('--json', null);
+const CHECK = args.includes('--check'), DUMP = flag('--dump', null), SECS = +flag('--secs', 180), ONLY = flag('--only', null), NOWORKER = args.includes('--noworker'), JSON_OUT = flag('--json', null);
 const chrome = [process.env.CHROME, '/usr/bin/google-chrome', '/usr/bin/chromium'].filter(Boolean).find(p => fs.existsSync(p));
 const CASES = [
   { style: 'house', key: 'C minor', mel: false }, { style: 'techno', key: 'F# minor', mel: true },
@@ -82,3 +83,6 @@ console.log(`\nSUMMARY key exact ${exact}/${n}, relative or fifth ${near}, wrong
 if (errs.length) console.log('PAGE ERRORS', errs.slice(0, 5).join(' | '));
 if (JSON_OUT) fs.writeFileSync(JSON_OUT, JSON.stringify(rows, null, 1));
 await b.close();
+if (CHECK) { const fails = []; if (exact < Math.min(10, n)) fails.push(`exact key ${exact}/${n}`); if (n - exact - near > 0) fails.push(`${n - exact - near} keys neither relative nor a fifth away`);
+  if (avgCh < 80) fails.push(`chords ${avgCh}%`); if (bpmErr > 0.5) fails.push(`BPM off by ${bpmErr}`); if (maxMs > 3000) fails.push(`${maxMs} ms for a song`); if (errs.filter(e => !/ERR_TUNNEL|net::/.test(e)).length) fails.push('page errors');
+  console.log(fails.length ? 'FAIL keys: ' + fails.join(', ') : 'PASS keys'); process.exit(fails.length ? 1 : 0); }

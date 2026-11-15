@@ -5,12 +5,14 @@
    b and d are in beats counted from the first downbeat (b 0 = bar 1); root is a pitch class 0-11 (null with q 'none');
    q is 'maj' | 'min' | '7' | 'm7' | 'maj7' | 'sus4' | '5' (root and fifth, no third) | 'none'.
    How it listens (all plain JS, our own makeFFT, nothing downloaded):
-   - mono at 22,050 Hz (OfflineAudioContext); FFT 8192 / hop 2048 between 40 Hz and 2 kHz; spectral peaks with a tuning
+   - mono at 22,050 Hz (OfflineAudioContext); FFT 8192 / hop 2048 between 40 Hz and 2 kHz (two frames per FFT); spectral peaks with a tuning
      offset (circular mean of the peaks' cents); overtones of a stronger lower peak (3rd, 5th, 6th, 7th) count less;
-     65 Hz-2 kHz chroma for harmony and 40-160 Hz bass chroma for roots, log(1+100x) compressed; frames with little tonal
-     energy (drum-only bars) are gated out.
-   - tempo: autocorrelation of an onset curve (FFT 1024 / hop 256), 70-180 BPM with a pull towards 118-132, refined by
-     folding the onset curve on the beat; a steady beat grid; the downbeat is where harmony and bass change most.
+     130 Hz-2 kHz chroma for harmony (above the kick) and 40-250 Hz bass chroma for roots (the kick's steady pitch taken
+     away), log(1+100x) compressed; beats with little steady pitch between 200 Hz and 1 kHz (drum-only bars) are gated out.
+   - tempo: autocorrelation of an onset curve (FFT 1024 / hop 512, two frames per FFT), 70-180 BPM with a pull towards
+     118-132 (half or double time is offered as bpmAlt), refined by folding the onset curve on the beat; a steady beat
+     grid whose phase comes from one bar of kick-band and snare-band onsets matched to a kick on 1 and 3 and a backbeat on
+     2 and 4 (four even kicks a bar win on their own); the downbeat is where harmony and bass change most, plus the kick.
    - key: the gated chroma against major/minor profiles shaped for dance music (after the observations in Faraldo, Jordà
      and Herrera, "A Multi-Profile Method for Key Estimation in EDM", AES Semantic Audio 2017, CC BY 4.0: tonic and fifth
      strongest, the major profile nearly empty on flat 2, flat 3, sharp 4 and flat 6, the minor profile flatter; the
@@ -18,7 +20,9 @@
      between a key and its relative.
    - chords: chroma averaged per beat, 24 major/minor templates plus "no chord", a bass-root bonus, Viterbi smoothing
      (stay p 0.9 per beat, chords of the key favoured), at least 2 beats per chord, changes on the bar or half bar, then a
-     7th / sus4 check per chord; the main 4- or 8-bar loop.
+     7th / maj7 / sus4 / power-chord check per chord (a near tie between major and minor goes to the key); when the key
+     decision lands on a key with other notes, the chords are heard again with it; the main 4- or 8-bar loop.
+   Accuracy on 24 of our own renders (tools/ana-harness.mjs, tools/ana-node.mjs): see .claude/work/reports/SE-7b-build.md.
    It runs in a Worker made from a Blob URL (works opened as a local file), else in ~40 ms slices on the main thread. */
 const ANA_SR=22050, ANA_VER=1;
 function anaJob(x,sr,opt){
