@@ -219,7 +219,7 @@ try {
   // (sing.wav never sings the same note twice in a row, and its own gaps are 100 ms of silence)
   await E(() => newSong('Smoke takes')); await W(300);
   await E(() => { runActions([{ type: 'add_drums', style: 'house' }]); setBars(2); loopStop(); window.__tk = [];
-    window.__a2n = audioToNotes; window.audioToNotes = function (buf) { const r = window.__a2n(buf), x = buf.getChannelData(0), sr = buf.sampleRate; let holes = 0;
+    window.__a2n = audioToNotes; window.audioToNotes = function (buf, o) { const r = window.__a2n(buf, o), x = buf.getChannelData(0), sr = buf.sampleRate; let holes = 0;
       for (let i = 1; i < x.length; i++) { if (x[i] !== 0 || x[i - 1] === 0) continue; let j = i; while (j < x.length && x[j] === 0) j++; const mid = (i + j) / 2 / sr;
         if (j < x.length && j - i >= 0.002 * sr && j - i < 0.06 * sr && r.some(n => mid > n.t0 && mid < n.t1)) holes++; i = j; }
       window.__tk.push({ holes }); return r; };

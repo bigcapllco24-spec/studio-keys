@@ -41,16 +41,16 @@ ACT.undo=()=>undo()?'Undid the last change':null;
 ACT.redo=()=>redo()?'Redid it':null;
 
 /* ----- audio → notes (offline pitch tracking of a recorded or imported clip) ----- */
-function audioToNotes(buf){
+function audioToNotes(buf,o){
   const sr=buf.sampleRate, x=buf.getChannelData(0), N=2048, hop=512, det=makePitchDetector(N,sr,55,1200), frames=[];
   for(let i=0;i+N<=x.length;i+=hop){ const r=det(x,i); frames.push({t:(i+N/2)/sr,f:r.f,clar:r.clar,rms:r.rms}); }
   if(!frames.length) return [];
   const rs=frames.map(f=>f.rms).sort((a,b)=>a-b), gate=Math.max(0.006,rs[Math.floor(rs.length*0.2)]*3,rs[Math.floor(rs.length*0.97)]*0.07);
-  /* holes: short runs of exact zeros between sound (1.5-60 ms; a recording glitch, never a voice). The level dip around a
-     hole is not a new attack, so a held note isn't split in two (UX-10) */
-  const hole=new Uint8Array(frames.length), hmin=Math.round(0.0015*sr), hmax=Math.round(0.06*sr);
-  for(let i=1;i<x.length;i++){ if(x[i]!==0||x[i-1]===0) continue; let j=i; while(j<x.length&&x[j]===0) j++;
-    if(j<x.length&&j-i>=hmin&&j-i<=hmax) for(let k=Math.max(0,Math.floor((i-N)/hop)+1);k<frames.length&&k*hop<j;k++) hole[k]=1; i=j; }
+  /* holes: sample ranges [i,j) the take recorder marked as never arrived and patched (o.holes, UX-10). The level dip around a
+     patched hole is not a new attack, so a held note isn't split in two. Only takes pass holes: an imported file has none, so
+     short silences in it (a gated synth, staccato notes) always end a note (UX-10 fix 1) */
+  const hole=new Uint8Array(frames.length);
+  for(const [i,j] of (o&&o.holes)||[]) for(let k=Math.max(0,Math.floor((i-N)/hop)+1);k<frames.length&&k*hop<j;k++) hole[k]=1;
   const notes=[]; let cur=null, med=[], cand=null, candN=0, silent=0, sinceHole=99; const env=[];
   for(let fi=0;fi<frames.length;fi++){ const fr=frames[fi];
     const voiced=fr.f>0&&fr.clar>0.85&&fr.rms>gate; env.push(fr.rms); if(env.length>8) env.shift(); sinceHole=hole[fi]?0:sinceHole+1;
