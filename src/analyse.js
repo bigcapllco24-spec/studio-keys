@@ -384,7 +384,31 @@ function anaSongChords(t,ana){ ana=ana||(t&&t.ana); if(!ana||!ana.bpm||!ana.chor
    bass: true adds the song's bass notes (ana.bassRoots) under the chords as slash chords ("C/E"), so the bassline follows
        the song's bass movement; a chord is split at a bar line where the bass moves.
    align: true (with track, at 'loop') starts the loop where the clip is in it, so the chords line up with the clip in Song mode.
-   Pure: changes nothing. [] when the analysis has no chords. */
+   Pure: changes nothing. [] when the analysis has no chords. At 'loop' the loop is heard in every repeat (anaLoopVote), so
+   one misheard bar in one pass does not end up on your song. */
+/* the main loop's chords voted over all its repeats: each half bar takes the chord most passes agree on (by root and
+   major/minor, then the commonest full name, e.g. Em7). Passes that are mostly "no chord" (a breakdown, the drum intro) do
+   not vote. Returns chords like ana.chords over one pass at [loop.start*4, +loop.bars*4) in analysed beats, or null. */
+function anaLoopVote(ana){
+  const L=ana&&ana.loop; if(!L||!L.bars||!Array.isArray(ana.chords)||!ana.chords.length) return null;
+  const LL=L.bars*4, l0=L.start*4, end=ana.chords.reduce((m,c)=>Math.max(m,c.b+c.d),0), S=LL/2;
+  const at=(a,z)=>{ let best=null, ov=0; ana.chords.forEach(c=>{ const o2=Math.min(z,c.b+c.d)-Math.max(a,c.b); if(o2>ov+1e-6){ ov=o2; best=c; } }); return ov>=1-1e-6?best:null; };
+  const passes=[]; for(let p0=l0-Math.floor(l0/LL)*LL;p0+LL<=end+1e-6;p0+=LL){ const slots=[]; let nN=0;
+    for(let k=0;k<S;k++){ const c=at(p0+2*k,p0+2*k+2); slots.push(c); if(!c||c.root==null) nN++; }
+    if(nN<=S/2){ slots.p0=p0; passes.push(slots); } }
+  if(!passes.length) return null;
+  const cls=c=>!c||c.root==null?'N':c.root+':'+(c.q==='min'||c.q==='m7'?'min':'maj');
+  const out=[]; for(let k=0;k<S;k++){ const n={}; passes.forEach(ps=>{ const key=cls(ps[k]); n[key]=(n[key]||0)+1; });
+    /* most votes; a tie goes to the main loop's own pass (the one the analysis picked), then to the earlier pass */
+    const main=passes.find(ps=>Math.abs(ps.p0-l0)<1e-6)||passes[0], mainCls=cls(main[k]);
+    let win=null; Object.keys(n).forEach(key=>{ if(!win||n[key]>n[win]||(n[key]===n[win]&&key===mainCls)) win=key; });
+    const pick=passes.map(ps=>ps[k]).filter(c=>cls(c)===win);
+    let x; if(win==='N') x={root:null,q:'none',conf:0.9,alt:null};
+    else { const qn={}; pick.forEach(c=>{ qn[c.q]=(qn[c.q]||0)+1; }); const q=Object.keys(qn).sort((a,b)=>qn[b]-qn[a])[0], hi=pick.filter(c=>c.q===q).sort((a,b)=>(b.conf||0)-(a.conf||0))[0];
+      x={root:hi.root,q,conf:Math.round(pick.reduce((a,c)=>a+(c.conf!=null?c.conf:0.5),0)/pick.length*Math.min(1,n[win]/passes.length+0.25)*100)/100,alt:hi.alt||null}; }
+    x.b=l0+2*k; x.d=2; const pv=out[out.length-1]; if(pv&&pv.root===x.root&&pv.q===x.q){ pv.d+=2; pv.conf=Math.min(pv.conf,x.conf); } else out.push(x); }
+  return out;
+}
 function chordsFromAna(ana,o={}){
   if(!ana||!Array.isArray(ana.chords)||!ana.chords.length) return [];
   const at=o.at==='clip'||!ana.loop?'clip':'loop', t=o.track||null, rnd=x=>Math.round(x*4)/4;
@@ -394,7 +418,8 @@ function chordsFromAna(ana,o={}){
   else { off=rnd(anaClipOffset(t,ana)); win0=-off; len=(Math.round(+o.bars)||PROJ.bars)*4; }
   const bars=Math.max(1,Math.round(+o.bars)||Math.round(len/4)), N=bars*4;
   /* one pass over [win0, win0+len) in analysed beats, wrapping inside the loop window so a rotated loop stays whole */
-  const piece=(lo,hi,shift)=>ana.chords.filter(c=>c.b<hi-1e-6&&c.b+c.d>lo+1e-6).map(c=>{ const b=Math.max(lo,c.b), e=Math.min(hi,c.b+c.d);
+  const src=at==='loop'?(anaLoopVote(ana)||ana.chords):ana.chords;
+  const piece=(lo,hi,shift)=>src.filter(c=>c.b<hi-1e-6&&c.b+c.d>lo+1e-6).map(c=>{ const b=Math.max(lo,c.b), e=Math.min(hi,c.b+c.d);
     const x={b:rnd(b+shift),d:rnd(e-b),root:c.root==null?null:c.root,q:c.root==null?'none':(c.q||'maj'),conf:c.conf!=null?c.conf:0.5,from:'audio'}; if(c.alt&&c.alt.root!=null) x.alt={root:c.alt.root,q:c.alt.q}; return x; });
   let one;
   if(at==='loop'){ const l0=ana.loop.start*4, l1=l0+len, r0=win0; one=piece(r0,l1,-r0).concat(r0>l0?piece(l0,r0,l1-r0-l0):[]); }
