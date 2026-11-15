@@ -80,20 +80,33 @@ function findWake(text){
 }
 function startListening(){
   if(!SRc){ ASSIST.say('Talking needs Chrome or Edge. You can still type here.',{speak:false}); return; }
-  ensureAudio(); ASSIST.listening=true; $('#asListen').checked=true;
+  ensureAudio(); dropRec(); ASSIST.listening=true; $('#asListen').checked=true;
   const rec=new SRc(); ASSIST.rec=rec; rec.continuous=true; rec.interimResults=true; rec.lang=navigator.language||'en-IN';
-  rec.onresult=e=>{ let interim='', heard='';
+  rec.onresult=e=>{ if(ASSIST.rec!==rec) return; let interim='', heard='';
     for(let i=e.resultIndex;i<e.results.length;i++){ const r=e.results[i], txt=r[0].transcript; heard+=txt+' '; if(r.isFinal){ if(LOOP.state!=='take'||findWake(txt)!==null) onFinal(txt); } else interim+=txt; }
     if(isSpeechy(heard)) ASSIST.speechAt=performance.now()/1000;
     if(interim && isSpeechy(interim) && !ASSIST.speaking && !ASSIST.busy && LOOP.state!=='take') $('#asStatus').textContent='Hearing: '+interim; };
-  rec.onerror=e=>{ if(e.error==='not-allowed'||e.error==='service-not-allowed'){ stopListening(); ASSIST.say('I need microphone permission to listen. Allow it from the icon left of the address bar.',{speak:false}); }
+  rec.onerror=e=>{ if(ASSIST.rec!==rec) return; if(e.error==='not-allowed'||e.error==='service-not-allowed'){ stopListening(); ASSIST.say('I need microphone permission to listen. Allow it from the icon left of the address bar.',{speak:false}); }
     else if(e.error==='network'){ stopListening(); ASSIST.say('Voice recognition needs an internet connection. You can type instead.',{speak:false}); } };
-  rec.onend=()=>{ if(ASSIST.listening) setTimeout(()=>{ try{ rec.start(); }catch(_){} },250); };
+  /* Chrome ends continuous recognition every so often: restart only the recogniser that is still current */
+  rec.onend=()=>{ if(ASSIST.listening&&ASSIST.rec===rec) setTimeout(()=>{ if(ASSIST.listening&&ASSIST.rec===rec) try{ rec.start(); }catch(_){} },250); };
   try{ rec.start(); }catch(e){}
-  if(ASSIST.hum && !MIC.on) micStart();
+  if(ASSIST.hum && !MIC.on){ ASSIST.micByListen=true; micStart(); }
   setOrb('listening',idleText()); store.set('asListen',true);
 }
-function stopListening(){ ASSIST.listening=false; $('#asListen').checked=false; try{ ASSIST.rec&&ASSIST.rec.stop(); }catch(e){} ASSIST.rec=null; setOrb('idle',idleText()); store.set('asListen',false); }
+/* switch off a recogniser for good: no restart, no late results */
+function killRec(r){ if(!r) return; r.onresult=r.onerror=r.onend=null; try{ r.abort(); }catch(e){ try{ r.stop(); }catch(_){} } }
+function dropRec(){ const r=ASSIST.rec; ASSIST.rec=null; killRec(r); }
+/* close the microphone listening opened for humming. Not one the user opened with the Mic button;
+   during a sung take it stays open and the take closes it when it ends. */
+function releaseListenMic(){
+  const byListen=ASSIST.micByListen; ASSIST.micByListen=false;
+  if(MIC.byUser) return;
+  if(LOOP.state==='take'||LOOP.state==='counting'){ if(MIC.on) TAKE.micByTake=true; return; }
+  if(MIC.on||(MIC.pending&&byListen)) micStop();
+}
+function stopListening(){ ASSIST.listening=false; $('#asListen').checked=false; dropRec(); const t=ASSIST.tapRec; ASSIST.tapRec=null; killRec(t);
+  ASSIST.awakeUntil=0; ASSIST.humNotes=[]; releaseListenMic(); if(!ASSIST.speaking&&!ASSIST.busy) setOrb('idle',idleText()); store.set('asListen',false); }
 function onFinal(txt){
   if(ASSIST.speaking||!isSpeechy(txt)&&findWake(txt)===null&&performance.now()>ASSIST.awakeUntil) return; const now=performance.now();
   const cmd=findWake(txt);
@@ -105,11 +118,11 @@ function onFinal(txt){
 $('#asOrb').addEventListener('click',()=>{
   ensureAudio(); if(!SRc){ $('#asIn').focus(); return; }
   if(ASSIST.listening){ ASSIST.awakeUntil=performance.now()+9000; setOrb('listening','Go ahead, I’m listening…'); return; }
-  const rec=new SRc(); rec.lang=navigator.language||'en-IN'; rec.interimResults=true; rec.continuous=false;
+  const rec=new SRc(); ASSIST.tapRec=rec; rec.lang=navigator.language||'en-IN'; rec.interimResults=true; rec.continuous=false;
   setOrb('listening','Go ahead, I’m listening…');
   rec.onresult=e=>{ let t=''; for(const r of e.results) t+=r[0].transcript; $('#asStatus').textContent='Hearing: '+t; if(e.results[e.results.length-1].isFinal){ const w=findWake(t); handleRequest(w!==null&&w.length>1?w:t); } };
   rec.onerror=e=>{ setOrb('idle',e.error==='no-speech'?'I didn’t hear anything. Tap the orb and try again.':e.error==='network'?'Voice recognition needs an internet connection. Type instead.':'Voice stopped ('+e.error+'). You can type instead.'); };
-  rec.onend=()=>{ if(!ASSIST.busy && !ASSIST.speaking) setOrb('idle',idleText()); };
+  rec.onend=()=>{ if(ASSIST.tapRec===rec) ASSIST.tapRec=null; if(!ASSIST.busy && !ASSIST.speaking) setOrb('idle',idleText()); };
   try{ rec.start(); }catch(e){}
 });
 /* ---- humming becomes a track: when the song is stopped, a hummed phrase (3+ notes, no words) lands on a new layer ---- */
@@ -145,10 +158,12 @@ setInterval(()=>{
 },400);
 /* ---- controls ---- */
 $('#asForm').addEventListener('submit',e=>{ e.preventDefault(); const v=$('#asIn').value.trim(); if(v){ $('#asIn').value=''; handleRequest(v); } });
-$('#asListen').addEventListener('change',e=>e.target.checked?startListening():stopListening());
+/* listening always starts off after a reload (the browser may restore the old tick, so clear it) */
+$('#asListen').checked=false; $('#asListen').addEventListener('change',e=>e.target.checked?startListening():stopListening());
 $('#asName').value=ASSIST.name; $('#asName').addEventListener('change',e=>{ ASSIST.name=e.target.value.trim()||'Keys'; store.set('asName',ASSIST.name); $('#asNameLbl').textContent=ASSIST.name; setOrb(ASSIST.listening?'listening':'idle',idleText()); });
 $('#asVoice').checked=ASSIST.voice; $('#asVoice').addEventListener('change',e=>{ ASSIST.voice=e.target.checked; store.set('asVoice',ASSIST.voice); if(!ASSIST.voice) try{ speechSynthesis.cancel(); }catch(_){} });
-$('#asHum').checked=ASSIST.hum; $('#asHum').addEventListener('change',e=>{ ASSIST.hum=e.target.checked; store.set('asHum',ASSIST.hum); if(ASSIST.hum&&ASSIST.listening&&!MIC.on) micStart(); });
+$('#asHum').checked=ASSIST.hum; $('#asHum').addEventListener('change',e=>{ ASSIST.hum=e.target.checked; store.set('asHum',ASSIST.hum);
+  if(ASSIST.hum&&ASSIST.listening&&!MIC.on){ ASSIST.micByListen=true; micStart(); } else if(!ASSIST.hum&&ASSIST.listening) releaseListenMic(); });
 document.addEventListener('click',e=>{ const c=e.target.closest('[data-say]'); if(c && !c.dataset.add) handleRequest(c.dataset.say); });
 $('#asNameLbl').textContent=ASSIST.name;
 setOrb('idle',idleText());

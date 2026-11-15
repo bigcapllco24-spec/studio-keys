@@ -5,28 +5,35 @@
    you sing the same note again ("da da da"). */
 const MIC={on:false,stream:null,src:null,an:null,buf:null,det:null,active:null,cand:null,candN:0,silent:0,hist:[],trace:[],t0:performance.now(),raf:0,vel:90,med:[],floor:0,calib:0,env:[]};
 function micGate(){ const user=0.004+(1-(+$('#micSens').value)/100)*0.045; return Math.max(user,MIC.floor*3); }
-async function micStart(){
+/* micStart(byUser): one opening at a time (a second call waits for the first); MIC.byUser marks a mic the user opened with the Mic button,
+   which the assistant never closes. micStop() while permission is still pending cancels the opening. */
+function micStart(byUser){ if(MIC.on){ if(byUser) MIC.byUser=true; return Promise.resolve(); } if(byUser) MIC.wantUser=true;
+  MIC.cancel=false; /* a new request outranks an earlier stop */
+  if(!MIC.pending){ MIC.pending=micOpen().finally(()=>{ MIC.pending=null; MIC.wantUser=false; }); } return MIC.pending; }
+async function micOpen(){
   const c=ensureAudio(); if(!c) return;
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ $('#micStatus').textContent='This browser can’t use a microphone here. Open the page in Chrome.'; return; }
   $('#micStatus').textContent='Asking for microphone permission…';
   try{ MIC.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}}); }
   catch(e){ let framed=false; try{ framed=window.self!==window.top; }catch(_){ framed=true; }
     $('#micStatus').textContent=e.name==='NotAllowedError'?(framed?'Microphone is blocked in this embedded view. Open the downloaded HTML file in Chrome and try again.':'Microphone permission was declined. Allow it from the icon left of the address bar, then try again.'):'Couldn’t open the microphone ('+e.name+').'; return; }
+  if(MIC.cancel){ MIC.cancel=false; MIC.stream.getTracks().forEach(t=>t.stop()); MIC.stream=null; $('#micStatus').textContent='Microphone off.'; return; }
   MIC.src=c.createMediaStreamSource(MIC.stream);
   MIC.hp=filt(c,'highpass',60,0.7); MIC.an=c.createAnalyser(); MIC.an.fftSize=2048; MIC.src.connect(MIC.hp).connect(MIC.an);
   MIC.buf=new Float32Array(2048); MIC.det=makePitchDetector(2048,c.sampleRate,65,1200);
-  MIC.on=true; MIC.floor=0; MIC.calib=0; MIC.med=[]; MIC.env=[];
+  MIC.on=true; MIC.byUser=!!MIC.wantUser; MIC.floor=0; MIC.calib=0; MIC.med=[]; MIC.env=[];
   $('#micBtn').textContent='Stop microphone'; $('#micStatus').textContent='Listening. Stay quiet for a moment while it measures the room, then sing one note at a time.';
   micLoop();
 }
 function micStop(){
-  MIC.on=false; cancelAnimationFrame(MIC.raf);
+  if(MIC.pending) MIC.cancel=true;
+  MIC.on=false; MIC.byUser=false; cancelAnimationFrame(MIC.raf);
   if(MIC.active!=null) micNoteOff();
   if(MIC.stream) MIC.stream.getTracks().forEach(t=>t.stop()); MIC.stream=null;
   try{ MIC.src&&MIC.src.disconnect(); }catch(e){}
   $('#micBtn').textContent='Start microphone'; $('#micStatus').textContent='Microphone off.'; $('#micLevel').style.width='0';
 }
-$('#micBtn').onclick=()=>MIC.on?micStop():micStart();
+$('#micBtn').onclick=()=>MIC.on?micStop():micStart(true);
 function micNoteOn(n){
   const zone=(ASSIST.listening||LOOP.state==='take'||LOOP.state==='counting')?'none':$('#micZone').value; MIC.active=n; MIC.activeT=performance.now(); MIC.zone=zone; ASSIST.onMicNote(n,true);
   MIC.hist.push({n,t0:(performance.now()-MIC.t0)/1000,t1:null}); if(MIC.hist.length>300) MIC.hist.shift();
