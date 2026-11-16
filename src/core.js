@@ -42,9 +42,10 @@ function makeImpulse(c,dur,decay){ const len=Math.floor(c.sampleRate*dur), b=c.c
 
 /* ---------- master ceiling: the last stage before the speakers and every render (SE-9) ----------
    A look-ahead true-peak limiter (AudioWorklet) that holds the output under CEIL_DB dBTP whatever the knobs do.
-   Below the ceiling it passes the sound untouched (gain exactly 1); it only adds CEIL_LA samples of delay, which renders take back out.
-   Where AudioWorklet is missing or fails, a soft clipper with the same ceiling stands in. */
-const CEIL_DB=-0.3, CEIL=Math.pow(10,CEIL_DB/20), CEIL_LA=72;
+   Below the ceiling it passes the sound untouched (gain exactly 1); it only adds CEIL_LOOK samples of delay, which renders take back out.
+   Where AudioWorklet is missing or fails, a soft clipper with the same ceiling stands in (its real delay is measured, renders take that out too).
+   CEIL_LA is the most delay any ceiling path may add: renders leave that much room at the end. */
+const CEIL_DB=-0.3, CEIL=Math.pow(10,CEIL_DB/20), CEIL_LOOK=72, CEIL_LA=512;
 const CEIL_SRC=`class SKCeiling extends AudioWorkletProcessor{
   constructor(o){ super(); const p=o.processorOptions||{}; this.c=p.ceil||0.966; this.D=p.la||72; this.B=this.D-8; this.Hw=this.D+1;
     this.rel=1-Math.exp(-1/(0.08*sampleRate)); this.N=256; this.buf=[new Float32Array(this.N),new Float32Array(this.N)]; this.tg=new Float32Array(this.N); this.rb=new Float64Array(this.N);
@@ -75,16 +76,34 @@ function ceilingReady(c){ let p=ceilMods.get(c);
       if(!ceilURL) ceilURL=URL.createObjectURL(new Blob([CEIL_SRC],{type:'text/javascript'})); await c.audioWorklet.addModule(ceilURL); return true; })().catch(e=>{ console.warn('master ceiling: soft clip fallback',e); return false; }); ceilMods.set(c,p); }
   return p; }
 const CEIL_CURVE=(()=>{ const n=4097, cv=new Float32Array(n), r=4, top=CEIL*0.98, k=0.9*top, d=top-k; /* a little under the ceiling: the 4x resampling filters overshoot */ for(let i=0;i<n;i++){ const x=(i/(n-1)*2-1)*r, a=Math.abs(x); cv[i]=Math.sign(x)*(a<=k?a:k+d*Math.tanh((a-k)/d)); } return cv; })();
+/* the soft clip on its own: oversampled 4x (cleaner, but the browser's resampling filters delay it: 192 samples in Chrome) or not at all (no delay) */
+function softClip(c,os){ const pre=gainN(c,1/4), sh=c.createWaveShaper(), post=gainN(c,1); sh.curve=CEIL_CURVE; sh.oversample=os; pre.connect(sh).connect(post); return {node:pre,out:post}; }
+/* the 4x soft clip's real delay at this sample rate, measured once with an impulse (browsers differ); null if it can't be measured */
+const softDelays=new Map();
+function softDelay(sr){ let p=softDelays.get(sr);
+  if(!p){ p=new Promise(res=>{ try{ const OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext, N=2048, at=64, oc=new OAC(1,N,sr), b=oc.createBuffer(1,N,sr); b.getChannelData(0)[at]=0.25;
+        const src=oc.createBufferSource(); src.buffer=b; const sc=softClip(oc,'4x'); src.connect(sc.node); sc.out.connect(oc.destination); src.start(0);
+        const done=buf=>{ const y=buf.getChannelData(0); let k=0; for(let i=1;i<N;i++) if(Math.abs(y[i])>Math.abs(y[k])) k=i; const d=k-at; res(Math.abs(y[k])>0.1&&d>=0&&d<=CEIL_LA?d:null); };
+        oc.oncomplete=e=>done(e.renderedBuffer); const r=oc.startRendering(); if(r&&r.then) r.then(done,()=>res(null)); }catch(e){ res(null); } });
+    softDelays.set(sr,p); }
+  return p; }
 function ceilingNode(c,worklet){
-  if(worklet){ try{ return {node:new AudioWorkletNode(c,'sk-ceiling',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2],channelCount:2,channelCountMode:'explicit',processorOptions:{ceil:CEIL,la:CEIL_LA}}),latency:CEIL_LA}; }catch(e){ console.warn('master ceiling',e); } }
-  /* soft clip: the curve covers ±4 (+12 dBFS) of input, scaled in and out */
-  const pre=gainN(c,1/4), sh=c.createWaveShaper(), post=gainN(c,1); sh.curve=CEIL_CURVE; sh.oversample='4x'; pre.connect(sh).connect(post);
-  return {node:pre,out:post,latency:0}; }
-/* live: protected by the soft clip from the first sound, then the limiter takes over once its module loads */
-function liveCeiling(c,from,to){ let cur=ceilingNode(c,false); from.connect(cur.node); (cur.out||cur.node).connect(to); A.ceil=cur;
-  ceilingReady(c).then(ok=>{ if(!ok) return; const nx=ceilingNode(c,true); if(!nx.latency) return; nx.node.connect(to); from.connect(nx.node); try{ from.disconnect(cur.node); }catch(e){} A.ceil=nx; }); }
-/* offline renders: the same ceiling, its delay reported so the caller can cut it back out */
-async function renderCeiling(oc,from,to){ const cur=ceilingNode(oc,await ceilingReady(oc)); from.connect(cur.node); (cur.out||cur.node).connect(to); return cur.latency; }
+  if(worklet){ try{ return {node:new AudioWorkletNode(c,'sk-ceiling',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2],channelCount:2,channelCountMode:'explicit',processorOptions:{ceil:CEIL,la:CEIL_LOOK}}),latency:CEIL_LOOK,worklet:true}; }catch(e){ console.warn('master ceiling',e); } }
+  return null; }
+/* live: protected by the soft clip from the first sound, then the limiter takes over once its module loads.
+   The live soft clip isn't oversampled and waits CEIL_LOOK samples, so it lines up sample for sample with the limiter,
+   and the hand-over is a 6 ms crossfade that starts once the limiter's look-ahead buffer is full (no click, no gap). */
+function liveCeiling(c,from,to){ const sc=softClip(c,'none'), dl=c.createDelay(0.05), fo=gainN(c,1); dl.delayTime.value=CEIL_LOOK/c.sampleRate;
+  from.connect(sc.node); sc.out.connect(dl).connect(fo).connect(to); A.ceil={node:sc.node,out:fo,latency:CEIL_LOOK,worklet:false};
+  ceilingReady(c).then(ok=>{ if(!ok) return; const nx=ceilingNode(c,true); if(!nx) return; const fi=gainN(c,0); from.connect(nx.node); nx.node.connect(fi).connect(to);
+    const t=c.currentTime+0.04, X=0.006; fi.gain.setValueAtTime(0,t); fi.gain.linearRampToValueAtTime(1,t+X); fo.gain.setValueAtTime(1,t); fo.gain.linearRampToValueAtTime(0,t+X);
+    A.ceil=Object.assign(nx,{out:fi});
+    setTimeout(()=>{ try{ from.disconnect(sc.node); }catch(e){} try{ fo.disconnect(); }catch(e){} },(0.04+X)*1000+250); }); }
+/* offline renders: the same ceiling, its delay reported so the caller can cut it back out (lag 0 against the grid on every path) */
+async function renderCeiling(oc,from,to){ let cur=ceilingNode(oc,await ceilingReady(oc)), lat;
+  if(cur) lat=cur.latency;
+  else{ const d=await softDelay(oc.sampleRate); cur=softClip(oc,d==null?'none':'4x'); lat=d==null?0:d; }
+  from.connect(cur.node); (cur.out||cur.node).connect(to); return lat; }
 
 function ensureAudio(){
   if(!A.ctx){
