@@ -216,6 +216,12 @@ try {
   const tb = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); await newSong('Smoke tempo box'); runActions([{ type: 'add_drums', style: 'house', seed: 5180 }]); await W(150); runActions([{ type: 'tempo', bpm: 88 }]); await W(150); runActions([{ type: 'add_chords', seed: 5181 }]); await W(150);
     const s0 = UNDO.stack.length, el = $('#bpm'); el.value = '96'; el.dispatchEvent(new Event('change')); const steps = UNDO.stack.length - s0; undo(); const u = [CTRL.bpm, PROJ.tracks.length]; redo(); return { steps, u, r: [CTRL.bpm, PROJ.tracks.length] }; });
   ok('BPM box change is one undo step', tb.steps === 1 && tb.u.join() === '88,2' && tb.r.join() === '96,2', JSON.stringify(tb));
+  // UX-12 fix 1: Save after deleting the open song saves it again (autosave keeps skipping it)
+  const sd = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)), has = async () => !!(await IDB.get(PROJ.id, 'projects'));
+    await newSong('Smoke gone'); runActions([{ type: 'add_drums', style: 'house', seed: 5190 }]); await saveNamed(true); const k = PROJ.id;
+    await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
+    await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
+  ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

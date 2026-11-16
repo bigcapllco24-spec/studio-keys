@@ -4620,14 +4620,17 @@ async function keepLastSong(){ const L=LAST_PROJ, cur=PROJ, gone=store.get('deta
    until you change something; DETACH (declared in studio.js) remembers it, also across a reload (store 'detached') */
 const detachedNow=()=>!!DETACH&&PROJ.id===DETACH.id&&snapState()===DETACH.snap;
 function detachCheck(){ if(DETACH&&!detachedNow()){ DETACH=null; store.set('detached',null); } }
+/* returns true when the song was written; SAVE_FAIL keeps the last error so the assistant never says "Saved" when this browser can't save */
+let SAVE_FAIL='';
 async function saveNamed(quiet){
-  if(detachedNow()){ $('#saveState').textContent='Not saved'; return; }
+  if(detachedNow()){ if(quiet){ $('#saveState').textContent='Not saved'; return false; }
+    DETACH=null; store.set('detached',null); } /* Save after deleting the open song puts it back (QA, 16 Nov); quiet saves keep skipping */
   /* the record is taken now, before any wait, so it can't pick up a song opened or copied meanwhile */
   const key=PROJ.id, rec={key,name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,song:songArranged()?songLenText():null,tracks:PROJ.tracks.length,savedAt:Date.now(),proj:Object.assign(serialize(PROJ),{bpm:CTRL.bpm})};
-  if(quiet&&!rec.tracks){ let ex=null; try{ ex=await IDB.get(key,'projects'); }catch(e){} if(!ex) return; } /* an untouched new song doesn't go into the list */
-  try{ await IDB.put(key,rec,'projects'); if(PROJ.id!==key) return;
-    $('#saveState').textContent='Saved '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); if(!quiet) toast(`Saved “${PROJ.name}”`); }
-  catch(e){ $('#saveState').textContent='Not saved'; if(!quiet) toast('Couldn’t save in this browser: '+e.message); }
+  if(quiet&&!rec.tracks){ let ex=null; try{ ex=await IDB.get(key,'projects'); }catch(e){} if(!ex) return false; } /* an untouched new song doesn't go into the list */
+  try{ await IDB.put(key,rec,'projects'); SAVE_FAIL=''; if(PROJ.id!==key) return true;
+    $('#saveState').textContent='Saved '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); if(!quiet) toast(`Saved “${rec.name}”`); return true; }
+  catch(e){ SAVE_FAIL=(e&&e.message)||'storage is blocked'; if(PROJ.id===key) $('#saveState').textContent='Not saved'; if(!quiet) toast('Couldn’t save in this browser: '+SAVE_FAIL); return false; }
 }
 async function loadAudioFor(p){ for(const t of p.tracks){ if(t.kind==='audio' && !AUD.has(t.id)){ try{ const r=await IDB.get('aud:'+t.id,'audio'); if(r) AUD.set(t.id,makeBuf(r.data,r.sr)); }catch(e){} } } }
 async function loadNamed(key){ clearTimeout(projAutoT); await saveNamed(true); /* keep the last edits of the song you leave */ let r=null; try{ r=await IDB.get(key,'projects'); }catch(e){} if(!r) return; loopStop(); PREVIEW=null; closeEditor(); PROJ=migrateSong(dropTakeVoices(Object.assign(newProject(),r.proj))); songViewLoad(); SONG.ver++; if(r.proj.bpm) setTempo(r.proj.bpm); await loadAudioFor(PROJ); preloadTracks(); LOOP.state=PROJ.tracks.length?'stopped':'empty'; store.set('project',serialize(PROJ)); renderTracks(); uiLoop();
@@ -4961,7 +4964,9 @@ const ACT={
     if(!PROJ.tracks.length) return; if(/zip|stem|ableton|wav/.test(fmt)){ exportZip(); return 'Packing the Ableton zip (WAV mix, stems and MIDI)'; } if(/mid/.test(fmt)){ exportMidiOnly(); return 'Downloading the MIDI file'; }
     if(len) { const sel=$('#mp3Len'); if(sel && [...sel.options].some(o=>+o.value===len)) sel.value=String(len); }
     exportMp3(len); return 'Making your MP3, the download starts in a few seconds'; },
-  save(a){ if(a.name) PROJ.name=String(a.name).slice(0,60); saveNamed(); return `Saved “${PROJ.name}”`; },
+  save(a){ if(a.name) PROJ.name=String(a.name).slice(0,60); if(typeof indexedDB==='undefined') return `Couldn’t save “${PROJ.name}”: this browser can’t keep songs`;
+    const fail=SAVE_FAIL; saveNamed(false); /* the real result also shows as a toast */
+    return fail?`Trying to save “${PROJ.name}” again: last time this browser couldn’t (${fail})`:`Saved “${PROJ.name}”`; },
   new_project(a){ newSong(a.name); return 'New song'; },
   rename(a){ if(!a.name) return; PROJ.name=String(a.name).slice(0,60); saveProject(); return `Song renamed to “${PROJ.name}”`; }
 };
