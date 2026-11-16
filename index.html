@@ -3760,7 +3760,8 @@ async function renderAudio(tracks,bpm,L,opts={}){
     const I=INST.get(tr.inst); if(!I) continue; if(I.set) await loadSet(I.set,loadOpts(I.set)).catch(()=>{});
     for(let cyc=0;cyc<2;cyc++) for(const e of tr.events){ const t=(cyc*L+e.b)*s; if(t>=2*len) continue; const v=I.play(oc,st.inp,e.n,e.v,t); if(v && !v.oneShot) v.release(t+e.d*s); } }
   const buf=await oc.startRendering(), a=Math.round(len*sr)+lat, n=Math.round(len*sr);
-  return [buf.getChannelData(0).slice(a,a+n),buf.getChannelData(1).slice(a,a+n)];
+  /* SE-9: the last 256 samples fade into what really came before the loop's first sample, so the wrap is seamless (no step for random-phase synths, no inter-sample over) */
+  return [0,1].map(ch=>{ const d=buf.getChannelData(ch), y=d.slice(a,a+n), K=256; for(let i=0;i<K;i++){ const w=(i+1)/K; y[n-K+i]=y[n-K+i]*(1-w)+d[a-K+i]*w; } return y; });
 }
 /* one stretch [from,to) of the song in beats, with a run-up so reverb, echo and held notes carry over the joins */
 const yieldMain=()=>new Promise(r=>setTimeout(r,0));
