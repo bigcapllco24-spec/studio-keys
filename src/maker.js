@@ -90,7 +90,7 @@ function brainCore(raw,sws){
       /* each effect reads the half of the sentence about it ("set the reverb on the chords to 20% and add some delay": reverb 20, delay a step up).
          A number sets it exactly; remove/kill/take off/no turns it off; less/more step it; "add some X" never lowers X (42% stays 42% + a step, QA 16 Nov) */
       fxs.forEach(w=>{ const k=fxKey(w); if(seen.has(k||w)) return; seen.add(k||w);
-        const c=(k&&fxClause(t,k))||t, off=/\b(remove|no|off|kill|without|lose|drop|get rid of|take out)\b/.test(c)||!!fxOffSaid(c);
+        const c=(k&&fxClause(t,k,T))||t, off=/\b(remove|no|off|kill|without|lose|drop|get rid of|take out)\b/.test(c)||!!fxOffSaid(c);
         if(w==='effects'||w==='fx'){ if(off) A.push({type:'track_fx',track:tr==='drums'?'drums':tr,effect:'all',remove:true}); return; }
         const num=c.match(/(?:\b(?:to|at|of|by|is|on|reverb|delay|echo|drive|width|sidechain|compression|compressor|saturation|distortion|cut)\s+(?:about |around |like |maybe )?)(\d{1,5})\s*(%|percent|hz|khz|k)?(?![\d/])|\b(\d{1,5})\s*(%|percent|hz|khz)/), unitHz=k&&TFX_DEF[k]&&TFX_DEF[k].unit==='Hz';
         const less=/\b(less|reduce|lower|down|too much|too wet|drier|dry|tone down|kam)\b/.test(c), more=/\b(more|boost|increase|extra|wetter|zyada|jyada)\b/.test(c);

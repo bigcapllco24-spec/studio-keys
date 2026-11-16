@@ -288,6 +288,18 @@ try {
       R.save = localBrain('save the song').actions.map(a => a.type).join();
       return R; } finally { ASSIST.engine = eng; } });
   ok('Basic mode: "add a bassline and give me another one" varies the bass, "mute everything but the drums" mutes the rest, "save the song" saves', f8.another === 'add_bass:,vary:bass' && f8.but && f8.save === 'save', JSON.stringify(f8));
+  // AI-8 fix 2: an explicit number beats the "add some never lowers" guard (AI path), "add some reverb" still raises, "remove the reverb from the chords" keeps the part
+  const g8 = await E(async () => { const eng = ASSIST.engine, R = {};
+    try { ASSIST.engine = null;
+      await newSong('Smoke AI-8 fix 2'); runActions([{ type: 'add_drums', style: 'house', seed: 5200 }, { type: 'add_chords', seed: 5201 }]); loopStop();
+      const ch = () => PROJ.tracks.find(t => t.role === 'chords'), rv = () => Math.round(((ch() || {}).fx || {}).rev * 100);
+      const ai = (text, acts) => { LAST_TEXT.text = text; try { runActions(acts); } finally { LAST_TEXT.text = ''; } };
+      ch().fx.rev = 0.42; ai('set the chords reverb to 20 and add some delay', [{ type: 'track_fx', track: 'chords', effect: 'reverb', amount: 20 }, { type: 'track_fx', track: 'chords', effect: 'delay', amount: 30 }]); R.set = rv();
+      ch().fx.rev = 0.42; ai('add some reverb to the chords', [{ type: 'track_fx', track: 'chords', effect: 'reverb', amount: 40 }]); R.add = rv();
+      ch().fx.rev = 0.42; await handleRequest('set the reverb on the chords to 20%'); R.basic = rv();
+      await handleRequest('remove the reverb from the chords'); R.kept = !!ch(); R.off = ch() ? ch().fx.rev == null : null;
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('"set the chords reverb to 20 and add some delay" gives 20%, "add some reverb" still raises it, "remove the reverb from the chords" keeps the chords', g8.set === 20 && g8.add === 52 && g8.basic === 20 && g8.kept && g8.off, JSON.stringify(g8));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

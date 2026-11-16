@@ -4738,7 +4738,7 @@ function brainCore(raw,sws){
       /* each effect reads the half of the sentence about it ("set the reverb on the chords to 20% and add some delay": reverb 20, delay a step up).
          A number sets it exactly; remove/kill/take off/no turns it off; less/more step it; "add some X" never lowers X (42% stays 42% + a step, QA 16 Nov) */
       fxs.forEach(w=>{ const k=fxKey(w); if(seen.has(k||w)) return; seen.add(k||w);
-        const c=(k&&fxClause(t,k))||t, off=/\b(remove|no|off|kill|without|lose|drop|get rid of|take out)\b/.test(c)||!!fxOffSaid(c);
+        const c=(k&&fxClause(t,k,T))||t, off=/\b(remove|no|off|kill|without|lose|drop|get rid of|take out)\b/.test(c)||!!fxOffSaid(c);
         if(w==='effects'||w==='fx'){ if(off) A.push({type:'track_fx',track:tr==='drums'?'drums':tr,effect:'all',remove:true}); return; }
         const num=c.match(/(?:\b(?:to|at|of|by|is|on|reverb|delay|echo|drive|width|sidechain|compression|compressor|saturation|distortion|cut)\s+(?:about |around |like |maybe )?)(\d{1,5})\s*(%|percent|hz|khz|k)?(?![\d/])|\b(\d{1,5})\s*(%|percent|hz|khz)/), unitHz=k&&TFX_DEF[k]&&TFX_DEF[k].unit==='Hz';
         const less=/\b(less|reduce|lower|down|too much|too wet|drier|dry|tone down|kam)\b/.test(c), more=/\b(more|boost|increase|extra|wetter|zyada|jyada)\b/.test(c);
@@ -5324,7 +5324,7 @@ const ACT={
     else { const cur=t.fx[k]||0; let nv=clamp(v==null?cur+(+a.change)/100:v/100,0,1);
       /* "add some reverb" / "more delay" never lowers it, even when the AI sends an amount under what the track has (QA, 16 Nov) */
       /* only when the add/more is about THIS effect and no number, set, less or too wet was said for it (QA, 16 Nov: "set the chords reverb to 20 and add some delay" kept 20) */
-      if(nv<cur&&fxAddOnly(fxClause(LAST_TEXT.text,k))) nv=clamp(cur+0.1,0,1); t.fx[k]=nv; }
+      if(nv<cur&&fxAddOnly(fxClause(LAST_TEXT.text,k,t))) nv=clamp(cur+0.1,0,1); t.fx[k]=nv; }
     if(FXOPEN) FXOPEN.add(t.id); refreshTrackGains();
     return `${d.name} on ${t.name}: ${fxShow(k,t.fx[k])}`; },
   export(a){ const fmt=String(a.format||a.value||'mp3').toLowerCase(); const len=a.minutes?Math.round(+a.minutes*60):a.seconds?+a.seconds:a.loops?Math.min(16,+a.loops):undefined;
@@ -5339,10 +5339,13 @@ const ACT={
    A half without a verb of its own ("…and delay to the chords") reads with the half before it. null when the effect isn't named. */
 const FX_WORDS={hp:/\b(low ?cut|high ?pass|rumble)\b/,lp:/\b(high ?cut|low ?pass)\b/,rev:/\b(reverb|verb|room|hall|space|wet|wetter|dry|drier)\b/,dly:/\b(delay|echo(es)?)\b/,duck:/\b(sidechain|side chain|pump\w*|duck\w*)\b/,drive:/\b(drive|saturat\w*|distort\w*|grit\w*|warm\w*)\b/,comp:/\b(compress\w*|glue|punch\w*)\b/,width:/\b(width|wide\w*|stereo|spread)\b/};
 const FX_VERB=/\d|\b(add|more|some|set|make|put|turn|give|less|lower|reduce|raise|boost|increase|cut|remove|kill|drop|take|no|too|bring|push|pull|want|need|use|dry|wet)\b/;
-function fxClause(text,k){ const re=FX_WORDS[k]; if(!re) return null; const s=String(text||'').toLowerCase().replace(/\bmor\b/g,'more');
+function fxClause(text,k,tr){ const re=FX_WORDS[k]; if(!re) return null; const s=String(text||'').toLowerCase().replace(/\bmor\b/g,'more');
   const parts=s.split(/\s*(?:[,;.]|\band then\b|\bthen\b|\band\b|\bbut\b|\bplus\b|\balso\b)\s*/).filter(x=>x.trim());
-  for(let i=0;i<parts.length;i++) if(re.test(parts[i])){ let c=parts[i]; for(let j=i-1;j>=0&&!FX_VERB.test(c.replace(re,' '));j--) c=parts[j]+' '+c; return c; }
-  return null; }
+  /* "more reverb on the chords and less on the melody": the melody's half is the one that names the melody */
+  const RW=typeof ROLE_WORDS!=='undefined'?ROLE_WORDS:[], rre=tr&&(RW.find(([r])=>r===tr.role)||[])[1], nm=tr&&tr.name&&tr.name.length>2?tr.name.toLowerCase():null;
+  const names=c=>!!tr&&(rre&&rre.test(' '+c+' ')||!!nm&&c.includes(nm)), pick=i=>{ let c=parts[i]; for(let j=i-1;j>=0&&!FX_VERB.test(c.replace(re,' '));j--) c=parts[j]+' '+c; return c; };
+  let i=parts.findIndex(c=>re.test(c)&&names(c)); if(i<0&&tr) i=parts.findIndex(c=>names(c)&&FX_VERB.test(c)&&!Object.values(FX_WORDS).some(r=>r!==re&&r.test(c)));
+  if(i<0) i=parts.findIndex(c=>re.test(c)); return i<0?null:pick(i); }
 /* "add some reverb" / "more delay": raise it, never lower it. Not when a number, set, less, too wet or dry was said for it. */
 function fxAddOnly(c){ return !!c&&/\b(add|more|some|extra|boost|increase|zyada|jyada)\b/.test(c)&&!/\d|\b(set|less|lower|reduce|down|remove|no|cut|kam|too|dry|drier|off|kill|drop)\b/.test(c); }
 /* "remove the reverb from the chords", "take the delay off the bass", "kill the reverb", "no reverb on the chords": the effect word, else null */
