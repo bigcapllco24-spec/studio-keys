@@ -301,7 +301,7 @@ async function renderGraph(oc,bpm,all){
   const bus=oc.createGain(), out=oc.createGain();
   const glue=oc.createDynamicsCompressor(); glue.threshold.value=-16; glue.knee.value=10; glue.ratio.value=2; glue.attack.value=0.02; glue.release.value=0.25;
   const lim=oc.createDynamicsCompressor(); lim.threshold.value=-3; lim.knee.value=0; lim.ratio.value=20; lim.attack.value=0.001; lim.release.value=0.08;
-  out.gain.value=Math.pow(CTRL.volume/100,2); out.connect(glue).connect(lim).connect(oc.destination);
+  out.gain.value=Math.pow(CTRL.volume/100,2); out.connect(glue).connect(lim); const lat=await renderCeiling(oc,lim,oc.destination); /* SE-9: the master ceiling; lat = its delay in samples */
   const ms=makeStrip(oc,out); applyStrip(ms,MIX.master,oc,true,true);
   FX.build(oc,bus,ms.inp,FX.slots,{noRepeat:true,bpm});
   const sends=makeSends(oc,ms.inp,bpm);
@@ -309,11 +309,11 @@ async function renderGraph(oc,bpm,all){
   const strips=new Map();
   for(const tr of all){ const st=makeStrip(oc,bus,sends); applyStrip(st,tr,oc,true,true); strips.set(tr.id,st); }
   const ducks=all.filter(x=>x.fx&&x.fx.duck>0).map(x=>[strips.get(x.id),x.fx.duck]);
-  return {bus,sends,strips,ducks};
+  return {bus,sends,strips,ducks,lat};
 }
 async function renderAudio(tracks,bpm,L,opts={}){
-  const sr=44100, s=60/bpm, len=L*s, OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext, oc=new OAC(2,Math.ceil(sr*len*2),sr);
-  const all=opts.context||tracks, {bus,sends,strips,ducks}=await renderGraph(oc,bpm,all);
+  const sr=44100, s=60/bpm, len=L*s, OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext, oc=new OAC(2,Math.ceil(sr*len*2)+CEIL_LA,sr);
+  const all=opts.context||tracks, {bus,sends,strips,ducks,lat}=await renderGraph(oc,bpm,all);
   const kicks=[]; all.forEach(tr=>{ if(tr.kind==='notes') tr.events.forEach(e=>{ if(isKick(tr,e.n)) kicks.push(e.b); }); });
   for(let cyc=0;cyc<2;cyc++) kicks.forEach(b=>{ const t=(cyc*L+b)*s; if(t<2*len&&ducks.length) duckAt(oc,ducks,t,bpm); });
   for(const tr of tracks){ const st=strips.get(tr.id)||makeStrip(oc,bus,sends);
@@ -321,7 +321,7 @@ async function renderAudio(tracks,bpm,L,opts={}){
       for(let cyc=0;cyc<2;cyc++){ const src=oc.createBufferSource(); src.buffer=buf; src.connect(st.inp); src.start(cyc*len+st0,off,dur); } continue; }
     const I=INST.get(tr.inst); if(!I) continue; if(I.set) await loadSet(I.set,loadOpts(I.set)).catch(()=>{});
     for(let cyc=0;cyc<2;cyc++) for(const e of tr.events){ const t=(cyc*L+e.b)*s; if(t>=2*len) continue; const v=I.play(oc,st.inp,e.n,e.v,t); if(v && !v.oneShot) v.release(t+e.d*s); } }
-  const buf=await oc.startRendering(), a=Math.round(len*sr), n=Math.round(len*sr);
+  const buf=await oc.startRendering(), a=Math.round(len*sr)+lat, n=Math.round(len*sr);
   return [buf.getChannelData(0).slice(a,a+n),buf.getChannelData(1).slice(a,a+n)];
 }
 /* one stretch [from,to) of the song in beats, with a run-up so reverb, echo and held notes carry over the joins */
@@ -331,7 +331,7 @@ async function renderSongSpan(tracks,bpm,from,to,o={}){
   let preB=from>0?4/s:0; /* at least 4 s, longer when a note still sounding at `from` started earlier (up to 16 s) */
   if(from>0) for(const tr of tracks) if(tr.kind==='notes'){ const fl=songFlat(tr); for(let i=songLB(fl,from-16/s);i<fl.length&&fl[i].B<from;i++){ const e=fl[i]; if(e.B+e.d>from) preB=Math.max(preB,from-e.B); } }
   preB=Math.min(preB,from,16/s); const pre=preB*s, span=(to-from)*s, tail=o.tail||0, b0=from-preB, at=B=>(B-b0)*s;
-  const OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext, oc=new OAC(2,Math.ceil(sr*(pre+span+tail))+2,sr), G=await renderGraph(oc,bpm,all);
+  const OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext, oc=new OAC(2,Math.ceil(sr*(pre+span+tail))+2+CEIL_LA,sr), G=await renderGraph(oc,bpm,all);
   if(G.ducks.length) for(const tr of all) if(tr.kind==='notes'){ const fl=songFlat(tr); for(let i=songLB(fl,b0);i<fl.length&&fl[i].B<to;i++) if(isKick(tr,fl[i].n)) duckAt(oc,G.ducks,at(fl[i].B),bpm); }
   let tk=performance.now();
   for(const tr of tracks){ const st=G.strips.get(tr.id)||makeStrip(oc,G.bus,G.sends);
@@ -341,7 +341,7 @@ async function renderSongSpan(tracks,bpm,from,to,o={}){
     const I=INST.get(tr.inst); if(!I) continue; if(I.set) await loadSet(I.set,loadOpts(I.set)).catch(()=>{});
     const fl=songFlat(tr); for(let i=songLB(fl,b0);i<fl.length&&fl[i].B<to;i++){ const e=fl[i], t=at(e.B), v=I.play(oc,st.inp,e.n,e.v,t); if(v&&!v.oneShot) v.release(t+e.d*s);
       if(performance.now()-tk>20){ await yieldMain(); tk=performance.now(); } } }
-  const buf=await oc.startRendering(), a=Math.round(pre*sr), n=o.samples||Math.round((span+tail)*sr);
+  const buf=await oc.startRendering(), a=Math.round(pre*sr)+G.lat, n=o.samples||Math.round((span+tail)*sr);
   return [buf.getChannelData(0).subarray(a,a+n),buf.getChannelData(1).subarray(a,a+n)];
 }
 /* the whole song as laid out, rendered 16 bars at a time and kept as 16-bit audio (6 dB headroom) until it's encoded */
