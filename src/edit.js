@@ -21,17 +21,22 @@ saveProject=function(){ if(typeof songSync==='function') songSync(); undoNote();
 function applyState(j){
   const wasArr=typeof songArranged==='function'&&songArranged();
   UNDO.busy=true; const o=JSON.parse(j);
-  PROJ=migrateSong(Object.assign(newProject(),o.p)); SONG.ver++; if(o.bpm&&o.bpm!==CTRL.bpm) setTempo(o.bpm);
+  /* Undo restores the song's content, never which song it is: a step can't carry another song's id (and name) back in,
+     so autosave always writes to the song you are in (QA, 16 Nov: Undo after Save a copy overwrote the original) */
+  const keep={id:PROJ.id}; if(o.p&&o.p.id!==PROJ.id) keep.name=PROJ.name;
+  PROJ=migrateSong(Object.assign(newProject(),o.p,keep)); SONG.ver++; if(o.bpm&&o.bpm!==CTRL.bpm) setTempo(o.bpm);
   if(ED.tid&&!PROJ.tracks.find(t=>t.id===ED.tid)) closeEditor(); ED.sel=new Set();
   if(!PROJ.tracks.length&&LOOP.state!=='empty'){ loopStop(); LOOP.state='empty'; } else if(PROJ.tracks.length&&LOOP.state==='empty') LOOP.state='stopped';
-  loadAudioFor(PROJ).then(()=>drawRolls()); refreshTrackGains(); renderTracks(); uiLoop(); _saveProject(); UNDO.last=j; UNDO.busy=false; undoButtons();
+  loadAudioFor(PROJ).then(()=>drawRolls()); refreshTrackGains(); renderTracks(); uiLoop(); _saveProject(); UNDO.last=snapState(); UNDO.busy=false; undoButtons();
   if(typeof songChipHide==='function') songChipHide();
   if(typeof songArranged!=='function') return; const nowArr=songArranged();
   if(wasArr&&!nowArr&&songOn()){ songMode('loop',{force:true}); UNDO.leftSong=true; toast('Back to the plain loop (Loop mode). Redo brings the song back.'); }
   else if(!wasArr&&nowArr&&UNDO.leftSong&&!songOn()){ UNDO.leftSong=false; songMode('song',{force:true}); songChip('Song layout back · Song mode',{undo:false}); }
 }
-function undo(){ if(!UNDO.stack.length){ toast('Nothing to undo'); return false; } UNDO.redo.push(UNDO.last); applyState(UNDO.stack.pop()); return true; }
-function redo(){ if(!UNDO.redo.length){ toast('Nothing to redo'); return false; } UNDO.stack.push(UNDO.last); applyState(UNDO.redo.pop()); return true; }
+/* a Tap tempo still settling becomes its own step first, so Undo/Redo never lose it */
+const undoFlush=()=>{ if(typeof tempoFlush==='function') tempoFlush(); };
+function undo(){ undoFlush(); if(!UNDO.stack.length){ toast('Nothing to undo'); return false; } UNDO.redo.push(UNDO.last); applyState(UNDO.stack.pop()); return true; }
+function redo(){ undoFlush(); if(!UNDO.redo.length){ toast('Nothing to redo'); return false; } UNDO.stack.push(UNDO.last); applyState(UNDO.redo.pop()); return true; }
 function undoButtons(){ const u=$('#undoBtn'), r=$('#redoBtn'); if(u) u.disabled=!UNDO.stack.length; if(r) r.disabled=!UNDO.redo.length; }
 $('#undoBtn').onclick=undo; $('#redoBtn').onclick=redo;
 document.addEventListener('keydown',e=>{ const tg=e.target; if(tg&&/INPUT|SELECT|TEXTAREA/.test(tg.tagName)) return; if(!(e.ctrlKey||e.metaKey)) return; const k=e.key.toLowerCase();
