@@ -193,7 +193,10 @@ const ACT={
     return `${chName(id)}: ${out.join(', ')||'unchanged'}`; },
   fx(a){ const want=String(a.effect||'').toLowerCase().replace(/[-_]/g,' '); const type=Object.keys(FX_LIB).find(k=>FX_LIB[k].name.toLowerCase()===want||k===want.replace(/ /g,''))||Object.keys(FX_LIB).find(k=>FX_LIB[k].name.toLowerCase().includes(want)||want.includes(k));
     if(!type) return; let i=FX.slots.findIndex(s=>s.type===type); if(i<0){ i=7; FX.setType(i,type); } FX.set(i,clamp((+a.amount)/100,0,1)); return `${FX_LIB[type].name} ${Math.round(FX.slots[i].amount*100)}%`; },
-  remove(a){ const t=findTrack(a.track||a.value); if(!t) return; removeTrack(t.id); return `Removed ${t.name}`; },
+  remove(a){ const t=findTrack(a.track||a.value); if(!t) return;
+    /* "remove the reverb from the chords" turns the reverb off; the part stays (QA, 16 Nov: the AI or the parser deleted the track) */
+    const fw=fxOffSaid(LAST_TEXT.text,t); if(fw) return ACT.track_fx({track:t.id,effect:fw,remove:true});
+    removeTrack(t.id); return `Removed ${t.name}`; },
   quantize(a){ const t=findTrack(a.track); if(!t||t.kind==='audio'||!t.events) return; const q=gridBeats(a.grid), L=L_(); let moved=0;
     t.events.forEach(e=>{ let b=Math.round(e.b/q)*q; if(b>=L&&e.b<L) b=0; if(Math.abs(b-e.b)>1e-6) moved++; e.b=b; e.d=Math.max(q,Math.round(e.d/q)*q); });
     return `Quantized ${t.name} to ${gridName(q)} (${moved} of ${t.events.length} notes moved)`; },
@@ -206,6 +209,8 @@ const ACT={
     return `${t.name} on ${INST.get(t.inst).name}`; },
   again(a){ const p=LAST_TAKE.part; if(!p) return; BATCH.take=p; return `Again: sing the ${p} after the count-in`; },
   track_fx(a){ const t=findTrack(a.track); if(!t) return; const w=String(a.effect||'').toLowerCase();
+    /* "remove the effects from the chords": every effect off, the part stays */
+    if(/^(all|effects?|fx|all effects)$/.test(w.trim())&&(a.remove||a.amount===0)){ t.fx={}; refreshTrackGains(); return `Effects off on ${t.name}`; }
     /* the AI sometimes sends EQ as an effect ({effect:"eq",amount:{high:-3}}): that is a relative EQ step on the mixer */
     if(/^(eq|equali[sz](er|ation)?)$/.test(w.trim())){ const eq=a.eq||(a.amount&&typeof a.amount==='object'?a.amount:null)||(a.band&&isFinite(+(a.change??a.amount))?{[String(a.band).toLowerCase()]:+(a.change??a.amount)}:null); return eq?ACT.mix({track:t.id,eq}):undefined; }
     const k=/rev|room|hall|space/.test(w)?'rev':/delay|echo/.test(w)?'dly':/side|pump|duck/.test(w)?'duck':/low ?cut|high ?pass|hp|rumble/.test(w)?'hp':/high ?cut|low ?pass|lp|dark|muffle/.test(w)?'lp':/drive|satur|distort|warm|grit/.test(w)?'drive':/comp|glue|punch/.test(w)?'comp':/wid|stereo|spread/.test(w)?'width':/pan/.test(w)?'pan':/preset|default|studio/.test(w)?'preset':null;
@@ -220,7 +225,8 @@ const ACT={
     else if(k==='pan'){ t.fx.pan=clamp((num(a.amount)?+a.amount:0)/100,-1,1); }
     else { const cur=t.fx[k]||0; let nv=clamp(v==null?cur+(+a.change)/100:v/100,0,1);
       /* "add some reverb" / "more delay" never lowers it, even when the AI sends an amount under what the track has (QA, 16 Nov) */
-      const said=String(LAST_TEXT.text||'').toLowerCase(); if(nv<cur&&/\b(add|more|some|bit more)\b/.test(said)&&!/\b(less|lower|reduce|down|remove|no|cut|kam)\b/.test(said)) nv=clamp(cur+0.1,0,1); t.fx[k]=nv; }
+      /* only when the add/more is about THIS effect and no number, set, less or too wet was said for it (QA, 16 Nov: "set the chords reverb to 20 and add some delay" kept 20) */
+      if(nv<cur&&fxAddOnly(fxClause(LAST_TEXT.text,k))) nv=clamp(cur+0.1,0,1); t.fx[k]=nv; }
     if(FXOPEN) FXOPEN.add(t.id); refreshTrackGains();
     return `${d.name} on ${t.name}: ${fxShow(k,t.fx[k])}`; },
   export(a){ const fmt=String(a.format||a.value||'mp3').toLowerCase(); const len=a.minutes?Math.round(+a.minutes*60):a.seconds?+a.seconds:a.loops?Math.min(16,+a.loops):undefined;
@@ -231,13 +237,32 @@ const ACT={
   new_project(a){ newSong(a.name); return 'New song'; },
   rename(a){ if(!a.name) return; PROJ.name=String(a.name).slice(0,60); saveProject(); return `Song renamed to “${PROJ.name}”`; }
 };
+/* which part of what the user said is about effect k: "set the chords reverb to 20 and add some delay" → "add some delay" for the delay.
+   A half without a verb of its own ("…and delay to the chords") reads with the half before it. null when the effect isn't named. */
+const FX_WORDS={hp:/\b(low ?cut|high ?pass|rumble)\b/,lp:/\b(high ?cut|low ?pass)\b/,rev:/\b(reverb|verb|room|hall|space|wet|wetter|dry|drier)\b/,dly:/\b(delay|echo(es)?)\b/,duck:/\b(sidechain|side chain|pump\w*|duck\w*)\b/,drive:/\b(drive|saturat\w*|distort\w*|grit\w*|warm\w*)\b/,comp:/\b(compress\w*|glue|punch\w*)\b/,width:/\b(width|wide\w*|stereo|spread)\b/};
+const FX_VERB=/\d|\b(add|more|some|set|make|put|turn|give|less|lower|reduce|raise|boost|increase|cut|remove|kill|drop|take|no|too|bring|push|pull|want|need|use|dry|wet)\b/;
+function fxClause(text,k){ const re=FX_WORDS[k]; if(!re) return null; const s=String(text||'').toLowerCase().replace(/\bmor\b/g,'more');
+  const parts=s.split(/\s*(?:[,;.]|\band then\b|\bthen\b|\band\b|\bbut\b|\bplus\b|\balso\b)\s*/).filter(x=>x.trim());
+  for(let i=0;i<parts.length;i++) if(re.test(parts[i])){ let c=parts[i]; for(let j=i-1;j>=0&&!FX_VERB.test(c.replace(re,' '));j--) c=parts[j]+' '+c; return c; }
+  return null; }
+/* "add some reverb" / "more delay": raise it, never lower it. Not when a number, set, less, too wet or dry was said for it. */
+function fxAddOnly(c){ return !!c&&/\b(add|more|some|extra|boost|increase|zyada|jyada)\b/.test(c)&&!/\d|\b(set|less|lower|reduce|down|remove|no|cut|kam|too|dry|drier|off|kill|drop)\b/.test(c); }
+/* "remove the reverb from the chords", "take the delay off the bass", "kill the reverb", "no reverb on the chords": the effect word, else null */
+function fxOffSaid(text,t){ const FXW='reverb|verb|delay|echo|sidechain|side chain|compression|compressor|drive|saturation|distortion|width|low ?cut|high ?cut|effects?|fx';
+  const R1=new RegExp('\\b(?:remove|take off|take out|kill|lose|drop|get rid of|turn off|switch off|delete|no|without)(?: the| any| all the| all| my| that)? ('+FXW+')\\b'), R2=new RegExp('\\btake (?:the |all the |that )?('+FXW+') (?:off|out)\\b');
+  const RW=typeof ROLE_WORDS!=='undefined'?ROLE_WORDS:[], part=c=>RW.find(([k,re])=>re.test(c));
+  for(const c of String(text||'').toLowerCase().split(/\s*(?:[,;.]|\band then\b|\bthen\b|\band\b|\bbut\b|\balso\b)\s*/)){ const m=(' '+c+' ').match(R1)||(' '+c+' ').match(R2); if(!m) continue;
+    /* the clause names this part, or no part at all ("remove the reverb"); "remove the drums and no reverb on the bass" still removes the drums */
+    const p=part(' '+c+' '); if(!t||!p||p[0]===t.role||(t.name&&c.includes(t.name.toLowerCase()))) return m[1]==='verb'?'reverb':m[1]; }
+  return null; }
 function runActions(list){
   const done=[]; let changed=false; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
   /* done.segs[i]: which half of a two-part sentence each result came from (offline "mute the drums and solo the bass") */
-  done.segs=[]; const u0=typeof UNDO!=='undefined'?UNDO.stack.length:-1;
+  done.segs=[]; const u0=typeof UNDO!=='undefined'?(UNDO.pushes||0):-1;
   for(const raw of list||[]){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; try{ const r=ACT[a.type](a); if(r){ done.push(r); done.segs.push(a.seg); changed=true; } }catch(e){ console.warn('action failed',a,e); } }
   if(changed){ saveProject(); renderTracks(); uiLoop(); }
-  /* one request is one Undo step, even when a slow machine saves the parts more than 120 ms apart (QA, 16 Nov: "add a melody" left 2 steps) */
-  if(u0>=0&&UNDO.stack.length>u0+1){ UNDO.stack.splice(u0+1); if(typeof undoButtons==='function') undoButtons(); }
+  /* one request is one Undo step, even when a slow machine saves the parts more than 120 ms apart (QA, 16 Nov: "add a melody" left 2 steps).
+     Count the steps this request pushed (the history drops its oldest step at 120, so its length can stay the same): keep the first, drop the rest. */
+  const n=u0>=0?(UNDO.pushes||0)-u0:0; if(n>1&&UNDO.stack.length>1){ UNDO.stack.splice(Math.max(1,UNDO.stack.length-(n-1))); if(typeof undoButtons==='function') undoButtons(); }
   return done;
 }

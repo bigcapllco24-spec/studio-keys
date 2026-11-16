@@ -85,12 +85,19 @@ function brainCore(raw,sws){
   { const tc=audioConvert(t); if(tc) return tc; }
   { const ms=muteSoloFix(t); if(ms) return ms; }
   { const q=quantizeFix(t); if(q) return q; }
-  { const FXRE=/\b(reverb|delay|echo|sidechain|side chain|pump|compress(?:ion|or)?|drive|saturation|distortion|width|wider|stereo|low ?cut|high ?cut)\b/g, fxs=[...t.matchAll(FXRE)].map(m=>m[1]), tr=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
-    if(fxs.length&&tr&&/\b(add|put|more|less|on|to|give|use|some|turn)\b/.test(t)){ const less=/\b(less|reduce|lower|down|remove|no)\b/.test(t), more=/\bmore\b/.test(t), T=findTrack(tr), A=[], seen=new Set();
-      /* "add some reverb and delay to the chords": each effect; "add some/more X" never lowers X (42% stays 42% + a step, QA 16 Nov) */
-      fxs.forEach(w=>{ const k=fxKey(w); if(seen.has(k||w)) return; seen.add(k||w); let change=less?-20:more?20:undefined;
-        if(change===undefined&&!/\b(remove|no|off)\b/.test(t)&&k&&T&&TFX_DEF[k]&&TFX_DEF[k].unit!=='Hz'&&((T.fx||{})[k]||0)>=TFX_DEF[k].def-1e-6) change=10;
-        A.push({type:'track_fx',track:tr==='drums'?'drums':tr,effect:w,change,remove:/\b(remove|no|off)\b/.test(t)}); });
+  { const FXRE=/\b(reverb|delay|echo|sidechain|side chain|pump|compress(?:ion|or)?|drive|saturation|distortion|width|wider|stereo|low ?cut|high ?cut|effects|fx)\b/g, fxs=[...t.matchAll(FXRE)].map(m=>m[1]), tr=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
+    if(fxs.length&&tr&&/\b(add|put|more|less|on|to|give|use|some|turn|set|at|make|from|off|remove|kill|take|rid|drop|lose|no|without)\b/.test(t)){ const T=findTrack(tr), A=[], seen=new Set();
+      /* each effect reads the half of the sentence about it ("set the reverb on the chords to 20% and add some delay": reverb 20, delay a step up).
+         A number sets it exactly; remove/kill/take off/no turns it off; less/more step it; "add some X" never lowers X (42% stays 42% + a step, QA 16 Nov) */
+      fxs.forEach(w=>{ const k=fxKey(w); if(seen.has(k||w)) return; seen.add(k||w);
+        const c=(k&&fxClause(t,k))||t, off=/\b(remove|no|off|kill|without|lose|drop|get rid of|take out)\b/.test(c)||!!fxOffSaid(c);
+        if(w==='effects'||w==='fx'){ if(off) A.push({type:'track_fx',track:tr==='drums'?'drums':tr,effect:'all',remove:true}); return; }
+        const num=c.match(/(?:\b(?:to|at|of|by|is|on|reverb|delay|echo|drive|width|sidechain|compression|compressor|saturation|distortion|cut)\s+(?:about |around |like |maybe )?)(\d{1,5})\s*(%|percent|hz|khz|k)?(?![\d/])|\b(\d{1,5})\s*(%|percent|hz|khz)/), unitHz=k&&TFX_DEF[k]&&TFX_DEF[k].unit==='Hz';
+        const less=/\b(less|reduce|lower|down|too much|too wet|drier|dry|tone down|kam)\b/.test(c), more=/\b(more|boost|increase|extra|wetter|zyada|jyada)\b/.test(c);
+        let change=less?-20:more?20:undefined, amount;
+        if(!off&&num&&!/\b(bpm|bars?|beats?)\b/.test(c.slice(num.index,num.index+num[0].length+8))){ let v=+(num[1]||num[3]); if(unitHz&&/^k(hz)?$/.test(num[2]||num[4]||'')) v*=1000; if(unitHz||v<=100){ amount=v; change=undefined; } }
+        if(amount===undefined&&change===undefined&&!off&&k&&T&&TFX_DEF[k]&&!unitHz&&((T.fx||{})[k]||0)>=TFX_DEF[k].def-1e-6) change=10;
+        A.push({type:'track_fx',track:tr==='drums'?'drums':tr,effect:w,amount,change,remove:off}); });
       return {actions:A}; } }
   { const tone=toneFix(t); if(tone) return tone; }
   { const lv=levelFix(t); if(lv) return lv; }
@@ -397,6 +404,10 @@ function bringBackFix(t){ const m=t.match(BRING_BACK); if(!m) return null; const
   return {actions:A,reply:`Brought back ${what2}${muted.length?` (unmuted${role?'':' '+muted.map(x=>x.name).join(', ')})`:''}${so?(muted.length?', and ':': ')+so+', so every part plays again':''}.`}; }
 function muteSoloFix(t){
   { const ex=muteExceptFix(t); if(ex) return ex; }
+  /* "mute everything", "mute all the tracks": every part muted (QA, 16 Nov: not understood offline) */
+  if(/^\s*(?:(?:please|ok|okay|now|can you|could you|just)\s+)*mute (?:everything|it all|all(?: the| of the)?(?: tracks| parts)?|all of it|every (?:track|part|thing)|the whole (?:song|mix|track|thing))(?: please| now| for a sec(?:ond)?)?\s*$/.test(t)){
+    if(!PROJ.tracks.length) return {actions:[],reply:'There’s nothing in the song yet. Say “make a house beat” to start.'};
+    const on=PROJ.tracks.filter(x=>!x.mute); return {actions:on.map(x=>({type:'mix',track:x.id,mute:true})),reply:on.length?'Muted everything. Say “unmute everything” to bring it all back.':'Everything is already muted. Say “unmute everything” to bring it back.'}; }
   const us=UNSOLO.test(t), um=UNMUTE.test(t); if(!us&&!um) return bringBackFix(t);
   const all=/\b(all|everything|every (track|part|thing)|whole (song|mix))\b/.test(t), t2=t.replace(/\b(un)?(solo|mute)(s|d|ed|ing)?\b/g,' ');
   const role=all?null:(ROLE_WORDS.find(([k,re])=>re.test(t2))||[])[0], named=all||role?[]:PROJ.tracks.filter(x=>x.name&&x.name.length>2&&t2.includes(' '+x.name.toLowerCase()+' '));
