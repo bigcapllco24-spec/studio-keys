@@ -55,7 +55,9 @@ function dbTxt(x){ const r=Math.round(Math.abs(+x||0)*10)/10; return r%1?r.toFix
 function faderDb(v0,db){ const v1=clamp(v0*Math.pow(10,clamp(+db,-24,12)/40),0,1); return v0>0&&v1>0?40*Math.log10(v1/v0):0; }
 /* the whole song moves every part by the same dB; going up stops when the loudest part reaches full volume */
 function songDbStep(db){ db=clamp(+db||0,-24,12); if(db<=0) return db; const top=Math.max(0,...PROJ.tracks.map(t=>t.vol>0?t.vol:0)); return top>0?Math.min(db,40*Math.log10(1/top)):0; }
-const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
+/* genre names the AI sometimes joins up ("afrohouse", "ukgarage"), mapped to the studio's styles */
+const STYLE_ALIAS={afrohouse:'afro',afrotech:'afro',afrobeat:'afro',afrobeats:'afro',ukgarage:'ukg',garage:'ukg',ukg:'ukg',lofihiphop:'lofi',lofihouse:'deephouse',chillhouse:'deephouse',deeptech:'techhouse',minimalhouse:'techhouse',minimaltechno:'techno',drumandbass:'dnb',drumnbass:'dnb',melodic:'melodichouse',boombap:'boombap',hiphop:'hiphop'};
+const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; if(STYLE_ALIAS[k]) return STYLE_ALIAS[k]; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
 let BATCH={}; const LAST_TEXT={text:''}; const LAST_TAKE={part:null};
 const newSeed=()=>1+Math.floor(Math.random()*2e9);
 function tasteArtist(){ const p=TASTE.profile; if(!p||!p.artists) return null; for(const a of p.artists){ const A=findArtist(a); if(A) return artistAs(A,a); } return null; }

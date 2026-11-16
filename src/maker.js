@@ -326,8 +326,8 @@ function localBrain(raw){
     return out.join(' '); };
   return {actions,reply,parts:R.length}; }
 /* ---- unsolo / unmute: "unsolo the bass", "remove the solo", "clear all solos", "un-mute the drums", "unmute everything" ---- */
-const UNSOLO=/\bunsolo(ed)?\b|\b(remove|clear|cancel|reset|kill|undo|lose|drop|turn off|switch off|take off|get rid of|no more|release)( the| all| all the| every| any| my| that)? solo(s|ed|ing)?\b|\bsolos? off\b|\b(stop|end) solo(ing)?\b|\btake (?:[a-z]+ ){1,3}(off|out of) solo\b|\bout of solo\b|\bno (more )?solo\b/;
-const UNMUTE=/\bunmute(d)?\b|\b(remove|clear|cancel|reset|undo|turn off|switch off|take off|get rid of|release)( the| all| all the| every| any| my| that)? mutes?\b|\bmutes? off\b|\btake (?:[a-z]+ ){1,3}off mute\b/;
+const UNSOLO=/\bunsolo(ed)?\b|\b(remove|clear|cancel|reset|kill|undo|lose|drop|turn off|switch off|take off|get rid of|no more|release)( the| all| all the| every| any| my| that)? solo(s|ed|ing)?\b|\bsolos? off\b|\b(stop|end) solo(ing)?\b|\btake (?:[a-z]+ ){1,3}(off|out of) solo\b|\bout of solo\b|\bno (more )?solo\b|\bsolo (hatao|hata do|hatado|band karo|band kar do|nikalo|off karo)\b/; /* Hinglish: "bass ka solo hatao" */
+const UNMUTE=/\bunmute(d)?\b|\b(remove|clear|cancel|reset|undo|turn off|switch off|take off|get rid of|release)( the| all| all the| every| any| my| that)? mutes?\b|\bmutes? off\b|\btake (?:[a-z]+ ){1,3}off mute\b|\bmute (hatao|hata do|hatado|band karo|nikalo|off karo)\b|\bunmute (karo|kar do|kardo)\b/;
 function muteSoloFix(t){
   const us=UNSOLO.test(t), um=UNMUTE.test(t); if(!us&&!um) return null;
   const all=/\b(all|everything|every (track|part|thing)|whole (song|mix))\b/.test(t), t2=t.replace(/\b(un)?(solo|mute)(s|d|ed|ing)?\b/g,' ');
@@ -366,4 +366,5 @@ function quantizeFix(t){
   else { const mine=notes.filter(x=>!x.gen); list=[open||one||mine[mine.length-1]||notes[notes.length-1]].filter(Boolean); }
   const aud=list.filter(x=>x.kind==='audio'); list=list.filter(x=>x.kind!=='audio');
   if(!list.length) return {actions:[],reply:aud.length?`${aud[0].name} is a recording, so it has no notes to quantize. Say “turn ${aud[0].name} into a melody” first.`:'There are no notes to quantize yet.'};
-  return {actions:list.map(x=>({type:'quantize',track:x.id,grid}))}; }
+  const A=list.map(x=>({type:'quantize',track:x.id,grid}));
+  return list.length>1?{actions:A,reply:`Quantized all ${list.length} note parts to ${grid?grid.replace(/t$/,' triplets'):'1/16'}${grid&&!/t$/.test(grid)?' notes':''}.`}:{actions:A}; }

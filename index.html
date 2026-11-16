@@ -4974,8 +4974,8 @@ function localBrain(raw){
     return out.join(' '); };
   return {actions,reply,parts:R.length}; }
 /* ---- unsolo / unmute: "unsolo the bass", "remove the solo", "clear all solos", "un-mute the drums", "unmute everything" ---- */
-const UNSOLO=/\bunsolo(ed)?\b|\b(remove|clear|cancel|reset|kill|undo|lose|drop|turn off|switch off|take off|get rid of|no more|release)( the| all| all the| every| any| my| that)? solo(s|ed|ing)?\b|\bsolos? off\b|\b(stop|end) solo(ing)?\b|\btake (?:[a-z]+ ){1,3}(off|out of) solo\b|\bout of solo\b|\bno (more )?solo\b/;
-const UNMUTE=/\bunmute(d)?\b|\b(remove|clear|cancel|reset|undo|turn off|switch off|take off|get rid of|release)( the| all| all the| every| any| my| that)? mutes?\b|\bmutes? off\b|\btake (?:[a-z]+ ){1,3}off mute\b/;
+const UNSOLO=/\bunsolo(ed)?\b|\b(remove|clear|cancel|reset|kill|undo|lose|drop|turn off|switch off|take off|get rid of|no more|release)( the| all| all the| every| any| my| that)? solo(s|ed|ing)?\b|\bsolos? off\b|\b(stop|end) solo(ing)?\b|\btake (?:[a-z]+ ){1,3}(off|out of) solo\b|\bout of solo\b|\bno (more )?solo\b|\bsolo (hatao|hata do|hatado|band karo|band kar do|nikalo|off karo)\b/; /* Hinglish: "bass ka solo hatao" */
+const UNMUTE=/\bunmute(d)?\b|\b(remove|clear|cancel|reset|undo|turn off|switch off|take off|get rid of|release)( the| all| all the| every| any| my| that)? mutes?\b|\bmutes? off\b|\btake (?:[a-z]+ ){1,3}off mute\b|\bmute (hatao|hata do|hatado|band karo|nikalo|off karo)\b|\bunmute (karo|kar do|kardo)\b/;
 function muteSoloFix(t){
   const us=UNSOLO.test(t), um=UNMUTE.test(t); if(!us&&!um) return null;
   const all=/\b(all|everything|every (track|part|thing)|whole (song|mix))\b/.test(t), t2=t.replace(/\b(un)?(solo|mute)(s|d|ed|ing)?\b/g,' ');
@@ -5014,7 +5014,8 @@ function quantizeFix(t){
   else { const mine=notes.filter(x=>!x.gen); list=[open||one||mine[mine.length-1]||notes[notes.length-1]].filter(Boolean); }
   const aud=list.filter(x=>x.kind==='audio'); list=list.filter(x=>x.kind!=='audio');
   if(!list.length) return {actions:[],reply:aud.length?`${aud[0].name} is a recording, so it has no notes to quantize. Say “turn ${aud[0].name} into a melody” first.`:'There are no notes to quantize yet.'};
-  return {actions:list.map(x=>({type:'quantize',track:x.id,grid}))}; }
+  const A=list.map(x=>({type:'quantize',track:x.id,grid}));
+  return list.length>1?{actions:A,reply:`Quantized all ${list.length} note parts to ${grid?grid.replace(/t$/,' triplets'):'1/16'}${grid&&!/t$/.test(grid)?' notes':''}.`}:{actions:A}; }
 
 
 /* ---------- song actions: the single place where the assistant (AI or offline) changes the song ---------- */
@@ -5073,7 +5074,9 @@ function dbTxt(x){ const r=Math.round(Math.abs(+x||0)*10)/10; return r%1?r.toFix
 function faderDb(v0,db){ const v1=clamp(v0*Math.pow(10,clamp(+db,-24,12)/40),0,1); return v0>0&&v1>0?40*Math.log10(v1/v0):0; }
 /* the whole song moves every part by the same dB; going up stops when the loudest part reaches full volume */
 function songDbStep(db){ db=clamp(+db||0,-24,12); if(db<=0) return db; const top=Math.max(0,...PROJ.tracks.map(t=>t.vol>0?t.vol:0)); return top>0?Math.min(db,40*Math.log10(1/top)):0; }
-const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
+/* genre names the AI sometimes joins up ("afrohouse", "ukgarage"), mapped to the studio's styles */
+const STYLE_ALIAS={afrohouse:'afro',afrotech:'afro',afrobeat:'afro',afrobeats:'afro',ukgarage:'ukg',garage:'ukg',ukg:'ukg',lofihiphop:'lofi',lofihouse:'deephouse',chillhouse:'deephouse',deeptech:'techhouse',minimalhouse:'techhouse',minimaltechno:'techno',drumandbass:'dnb',drumnbass:'dnb',melodic:'melodichouse',boombap:'boombap',hiphop:'hiphop'};
+const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; if(STYLE_ALIAS[k]) return STYLE_ALIAS[k]; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
 let BATCH={}; const LAST_TEXT={text:''}; const LAST_TAKE={part:null};
 const newSeed=()=>1+Math.floor(Math.random()*2e9);
 function tasteArtist(){ const p=TASTE.profile; if(!p||!p.artists) return null; for(const a of p.artists){ const A=findArtist(a); if(A) return artistAs(A,a); } return null; }
@@ -5537,7 +5540,7 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
   return `Shape it with effects (“more reverb on the chords”), mix it, or download the MP3.`; }
 function projectState(){
   return {name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:PROJ.key?keyName(PROJ.key):`auto (${keyName(projectKey())})`,style:PROJ.style||null,playing:TR.running,
-    tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute})),
+    tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute,soloed:!!t.solo,generated:!!t.gen})),
     taste:TASTE.profile?{artists:(TASTE.profile.artists||[]).slice(0,12),styles:(TASTE.profile.styles||[]).map(s=>s.style),playlists:(TASTE.profile.playlists||[]).map(p=>p.name+(p.style?' ('+p.style+')':'')).slice(0,8)}:null,
     vibe:PROJ.ref||null,
     keysSound:zoneInst('keys').name,padsSound:zoneInst('pads').name,effects:FX.slots.map(s=>`${FX_LIB[s.type].name} ${Math.round(s.amount*100)}%`)};
