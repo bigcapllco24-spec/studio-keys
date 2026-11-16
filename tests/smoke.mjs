@@ -259,6 +259,25 @@ try {
         const bpm0 = CTRL.bpm; await handleRequest(s); loopStop(); R[s] = { bpm: CTRL.bpm - bpm0, back: drums().recipe.back }; }
       return R; } finally { ASSIST.engine = eng; } });
   ok('"faster" about a part keeps the tempo, "add a snare roll" keeps the clap', n23['make the bass faster'].bpm === 0 && n23['faster chords'].bpm === 0 && n23['make it faster'].bpm === 5 && n23['add a snare roll'].back !== 'snare' && n23['add a snare'].back === 'snare', JSON.stringify(n23));
+  // AI-8: Basic mode: compound genres, unsolo/unmute, quantize, two requests in one sentence, the artist the user named
+  const a8 = await E(async () => { const eng = ASSIST.engine, R = {};
+    try { ASSIST.engine = null;
+      await newSong('Smoke AI-8 afro'); PROJ.style = null; await handleRequest('afro house beat'); loopStop(); R.afro = PROJ.style;
+      await newSong('Smoke AI-8 lofi'); PROJ.ref = undefined; PROJ.style = null; await handleRequest('lofi hip hop beat'); loopStop(); R.lofi = PROJ.style + '/' + (PROJ.ref || '');
+      await newSong('Smoke AI-8 ref'); PROJ.ref = undefined; await handleRequest('drums like Black Coffee'); loopStop(); R.ref = PROJ.ref;
+      await newSong('Smoke AI-8 mix'); runActions([{ type: 'add_drums', style: 'house', seed: 5180 }, { type: 'add_bass', seed: 5181 }, { type: 'add_chords', seed: 5182 }, { type: 'add_melody', seed: 5183 }]); loopStop();
+      const tr = r => PROJ.tracks.find(t => t.role === r), n0 = PROJ.tracks.length;
+      await handleRequest('solo the bass'); await handleRequest('unsolo the bass'); R.unsolo = !tr('bass').solo && PROJ.tracks.length === n0;
+      await handleRequest('un-mute the drums'); R.unmute = !tr('drums').mute;
+      await handleRequest('mute the drums and solo the bass'); R.both = tr('drums').mute && tr('bass').solo; await handleRequest('remove the solo'); await handleRequest('unmute everything'); R.clear = !PROJ.tracks.some(t => t.solo || t.mute);
+      const rc = (tr('chords').fx || {}).rev || 0, rm = (tr('melody').fx || {}).rev || 0, u0 = UNDO.stack.length;
+      await handleRequest('more reverb on the chords and less on the melody'); R.fx = tr('chords').fx.rev > rc && ((tr('melody').fx || {}).rev || 0) <= rm; R.undo1 = UNDO.stack.length - u0;
+      const p = addTrack({ role: 'melody', inst: 'piano', name: 'Played keys', events: [{ b: 0.07, d: 0.4, n: 60, v: .8 }, { b: 1.12, d: 0.3, n: 64, v: .8 }] }); saveProject();
+      await handleRequest('quantize my melody to 1/8'); R.q = p.events.map(e => e.b).join() + '/' + PROJ.tracks.length;
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('Basic mode: afro house is afro, lofi hip hop is lo-fi with no artist, "like Black Coffee" stays Black Coffee', a8.afro === 'afro' && a8.lofi === 'lofi/' && a8.ref === 'Black Coffee', `${a8.afro}, ${a8.lofi}, ${a8.ref}`);
+  ok('Basic mode: unsolo / un-mute / "remove the solo" / "unmute everything"; two requests in one sentence both run (one Undo)', a8.unsolo && a8.unmute && a8.both && a8.clear && a8.fx && a8.undo1 === 1, JSON.stringify(a8));
+  ok('Basic mode: "quantize my melody to 1/8" snaps your own part to 1/8 and adds no track', a8.q === '0,1/5', a8.q);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

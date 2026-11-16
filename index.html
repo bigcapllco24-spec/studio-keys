@@ -4960,7 +4960,9 @@ function localBrain(raw){
   /* a new song wipes what the rest would change: start it, and ask for the rest again */
   const np=R.findIndex(r=>r.L.actions.some(a=>a.type==='new_project'));
   if(np>=0) return {actions:[{type:'new_project'}],reply:`Started a new song. Your last one is saved. Now say “${R.filter((r,i)=>i!==np).map(r=>r.said.trim()).join(', then ')}” again and I’ll do it.`};
-  const actions=[]; R.forEach((r,i)=>r.L.actions.forEach(a=>actions.push(Object.assign({},a,{seg:i}))));
+  const actions=[], tempoSaid=R.some(r=>r.L.actions.some(a=>a.type==='tempo'));
+  /* "set the tempo to 128 and make a house beat": the genre half keeps the tempo the other half set */
+  R.forEach((r,i)=>r.L.actions.forEach(a=>actions.push(Object.assign({},a,{seg:i},a.type==='style'&&tempoSaid?{keepTempo:true}:{}))));
   const custom=R.some(r=>r.L.reply), skipped=R.filter(r=>!r.L.actions.length&&!r.L.reply);
   if(!custom&&!skipped.length) return {actions,parts:R.length};
   /* the reply names each half: its own words, what it did, or that it was skipped */
