@@ -206,6 +206,14 @@ try {
         const bpm0 = CTRL.bpm; await handleRequest(s); loopStop(); R[s] = { bpm: CTRL.bpm - bpm0, back: drums().recipe.back }; }
       return R; } finally { ASSIST.engine = eng; } });
   ok('"faster" about a part keeps the tempo, "add a snare roll" keeps the clap', n23['make the bass faster'].bpm === 0 && n23['faster chords'].bpm === 0 && n23['make it faster'].bpm === 5 && n23['add a snare roll'].back !== 'snare' && n23['add a snare'].back === 'snare', JSON.stringify(n23));
+  // SE-9: extreme boosts (faders 100, EQ +15, master Low +15, max drive/comp/reverb/delay) stay under the -0.3 dBTP master ceiling, and the Mix.wav path saves no clipped samples
+  const ce = await E(async () => { const m0 = JSON.stringify(MIX.master); try { await newSong('Smoke ceiling'); runActions([{ type: 'add_drums', style: 'techno', seed: 909 }, { type: 'add_bass', seed: 910 }]); loopStop(); setBars(1);
+      PROJ.tracks.forEach(t => { t.vol = 1; t.lo = 15; t.hi = 15; t.fx = Object.assign({}, t.fx, { rev: 1, dly: 1, drive: 1, comp: 1 }); }); Object.assign(MIX.master, { lo: 15, hi: 15 });
+      const [l, r] = await renderAudio(PROJ.tracks, CTRL.bpm, 4), H = [0.0017089843750, 0.0109863281250, -0.0196533203125, 0.0332031250000, -0.0594482421875, 0.1373291015625, 0.9721679687500, -0.1022949218750, 0.0476074218750, -0.0266113281250, 0.0148925781250, -0.0083007812500, -0.0291748046875, 0.0292968750000, -0.0517578125000, 0.0891113281250, -0.1665039062500, 0.4650878906250, 0.7797851562500, -0.2003173828125, 0.1015625000000, -0.0582275390625, 0.0330810546875, -0.0189208984375];
+      let pk = 0, tp = 0; for (const x of [l, r]) { const n = x.length; for (let i = 0; i < n; i++) { const a = Math.abs(x[i]); if (a > pk) pk = a; if (a < 0.8) continue; for (let ph = 0; ph < 4; ph++) { let s = 0; for (let k = 0; k < 12; k++) s += x[(i - k + 6 + n) % n] * (ph === 0 ? H[k] : ph === 1 ? H[12 + k] : ph === 2 ? H[23 - k] : H[11 - k]); if (Math.abs(s) > tp) tp = Math.abs(s); } } }
+      const w = wavBytes([l, r], 44100), dv = new DataView(w.buffer); let full = 0; for (let o = 44; o < w.length; o += 2) { const v = dv.getInt16(o, true); if (v === 32767 || v === -32768) full++; }
+      return { pk: 20 * Math.log10(pk), tp: 20 * Math.log10(Math.max(tp, pk)), full, worklet: !!(A.ceil && A.ceil.latency) }; } finally { Object.assign(MIX.master, JSON.parse(m0)); } });
+  ok('master ceiling: extreme boosts stay under -0.3 dBTP, no clipped samples in Mix.wav', ce.tp <= -0.25 && ce.pk <= -0.29 && ce.full === 0, `peak ${ce.pk.toFixed(2)} dBFS, true peak ${ce.tp.toFixed(2)} dBTP, ${ce.full} full-scale samples, live limiter ${ce.worklet ? 'on' : 'soft clip'}`);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

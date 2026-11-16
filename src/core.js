@@ -69,10 +69,12 @@ const CEIL_SRC=`class SKCeiling extends AudioWorkletProcessor{
 registerProcessor('sk-ceiling',SKCeiling);`;
 let ceilURL=null; const ceilMods=new WeakMap();
 function ceilingReady(c){ let p=ceilMods.get(c);
-  if(!p){ p=(async()=>{ if(!c.audioWorklet||typeof AudioWorkletNode==='undefined') return false; if(!ceilURL) ceilURL=URL.createObjectURL(new Blob([CEIL_SRC],{type:'application/javascript'}));
-      await c.audioWorklet.addModule(ceilURL); return true; })().catch(e=>{ console.warn('master ceiling: soft clip fallback',e); return false; }); ceilMods.set(c,p); }
+  if(!p){ p=(async()=>{ if(!c.audioWorklet||typeof AudioWorkletNode==='undefined') return false;
+      /* a data: URL loads from a file:// page too (blob: URLs don't there); blob: is the second try */
+      try{ await c.audioWorklet.addModule('data:text/javascript;charset=utf-8,'+encodeURIComponent(CEIL_SRC)); return true; }catch(e){}
+      if(!ceilURL) ceilURL=URL.createObjectURL(new Blob([CEIL_SRC],{type:'text/javascript'})); await c.audioWorklet.addModule(ceilURL); return true; })().catch(e=>{ console.warn('master ceiling: soft clip fallback',e); return false; }); ceilMods.set(c,p); }
   return p; }
-const CEIL_CURVE=(()=>{ const n=4097, cv=new Float32Array(n), r=4, k=0.9*CEIL, d=CEIL-k; for(let i=0;i<n;i++){ const x=(i/(n-1)*2-1)*r, a=Math.abs(x); cv[i]=Math.sign(x)*(a<=k?a:k+d*Math.tanh((a-k)/d)); } return cv; })();
+const CEIL_CURVE=(()=>{ const n=4097, cv=new Float32Array(n), r=4, top=CEIL*0.98, k=0.9*top, d=top-k; /* a little under the ceiling: the 4x resampling filters overshoot */ for(let i=0;i<n;i++){ const x=(i/(n-1)*2-1)*r, a=Math.abs(x); cv[i]=Math.sign(x)*(a<=k?a:k+d*Math.tanh((a-k)/d)); } return cv; })();
 function ceilingNode(c,worklet){
   if(worklet){ try{ return {node:new AudioWorkletNode(c,'sk-ceiling',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2],channelCount:2,channelCountMode:'explicit',processorOptions:{ceil:CEIL,la:CEIL_LA}}),latency:CEIL_LA}; }catch(e){ console.warn('master ceiling',e); } }
   /* soft clip: the curve covers ±4 (+12 dBFS) of input, scaled in and out */
