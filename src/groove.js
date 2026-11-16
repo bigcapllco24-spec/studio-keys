@@ -66,7 +66,7 @@ const ARTISTS=[
   ['Yotto','melodichouse',122,'G minor',{energy:3,perc:2},{kit:'kitMelodic',bass:'rollbass',chords:'darkpad',lead:'mhpluck'},'airy melodic house with bouncy bass and dreamy arps'],
   ['Tale Of Us|tale of us','melodictechno',123,'D minor',{energy:3,perc:1},{kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'strings'},'cinematic, slow-burning melodic techno'],
   ['Anyma','melodictechno',124,'F minor',{energy:4},{kit:'kitDeepTechno',bass:'rollbass',chords:'supersaw',lead:'lead'},'big, futuristic melodic techno with huge synth leads'],
-  ['Afterlife|massano|argy|innellea|kevin de vries|adriatique|mathame|colyn','melodictechno',124,'A minor',{energy:4},{kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'mhpluck'},'Afterlife-style melodic techno: dark, driving and euphoric'],
+  ['Afterlife|Massano|Argy|Innellea|Kevin de Vries|kevin de vries|Adriatique|Mathame|Colyn','melodictechno',124,'A minor',{energy:4},{kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'mhpluck'},'Afterlife-style melodic techno: dark, driving and euphoric'],
   ['Rüfüs Du Sol|rufus du sol|rufus','melodichouse',120,'A minor',{energy:3,perc:1},{kit:'kitMelodic',bass:'moog',chords:'darkpad',lead:'mhpluck'},'moody, live-feel melodic house'],
   ['Monolink|Nora En Pure|nora en pure','melodichouse',120,'D minor',{energy:2,perc:2},{kit:'kitMelodic',bass:'subbass',chords:'pad',lead:'mhpluck'},'deep, organic melodic house'],
   ['Keinemusik|&ME|andme|Adam Port|adam port|Rampa|Black Coffee|black coffee','afro',120,'A minor',{energy:3,perc:3},{kit:'kitBongos',bass:'subbass',chords:'kalimba',lead:'flute'},'afro house: rolling percussion, shakers and a hypnotic bass'],
@@ -86,7 +86,7 @@ const ARTISTS=[
   ['Pendulum|Chase & Status|chase and status|Sub Focus|sub focus|Wilkinson','dnb',174,'D minor',{energy:5},{kit:'kitStark',bass:'reese',chords:'supersaw',lead:'lead'},'high-energy drum & bass'],
   ['Netsky|Calibre|LTJ Bukem|ltj bukem|Hybrid Minds|hybrid minds','liquid',172,'F minor',{energy:3},{kit:'kitKit3',bass:'subbass',chords:'epiano',lead:'pad'},'smooth liquid drum & bass'],
   ['J Dilla|j dilla|Nujabes|Madlib|MF DOOM|mf doom|Pete Rock|pete rock','boombap',88,'D minor',{energy:2,swing:0.22,ghost:0.35},{kit:'kitKit8',bass:'acbass',chords:'epiano',lead:'sax'},'dusty boom bap with lazy swing'],
-  ['Lofi Girl|lofi|lo-fi','lofi',78,'C major',{energy:1},{kit:'kitKit8',bass:'acbass',chords:'epiano',lead:'vibes'},'mellow lo-fi with swung drums'],
+  ['Lofi Girl|lofi girl','lofi',78,'C major',{energy:1},{kit:'kitKit8',bass:'acbass',chords:'epiano',lead:'vibes'},'mellow lo-fi with swung drums'],
   ['Metro Boomin|metro boomin|Travis Scott|travis scott|Future|21 Savage|21 savage|Southside','trap',142,'C minor',{energy:3},{kit:'kitTrap',bass:'bass808',chords:'pad',lead:'flute'},'dark trap: long 808s and rolling hats'],
   ['Central Cee|central cee|Pop Smoke|pop smoke|Headie One|headie one','drill',142,'F minor',{energy:3},{kit:'kitTrap',bass:'bass808',chords:'strings',lead:'flute'},'drill: sliding 808s and syncopated snares'],
   ['Kendrick Lamar|kendrick|Drake|Kanye|J Cole|j cole','hiphop',92,'E minor',{energy:2},{kit:'kitKit8',bass:'bass808',chords:'piano',lead:'epiano'},'modern hip-hop with a laid-back groove'],
@@ -99,6 +99,13 @@ const ARTISTS=[
   ['Coldplay|Imagine Dragons|imagine dragons|Arctic Monkeys|arctic monkeys','rock',116,'E minor',{energy:4},{kit:'kitAcoustic',bass:'bass',chords:'eguitar',lead:'piano'},'anthemic band sound']
 ].map(([names,style,bpm,key,mods,sounds,desc])=>({names:names.split('|'),name:names.split('|')[0],style,bpm,key,mods,sounds,desc}));
 const normName=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9& ]+/g,' ').replace(/\s+/g,' ').trim();
+/* the name a person used for a table row: "Black Coffee" (not the row's first name, Keinemusik), "Massano". A lower-case alias is a
+   spelling of the capitalised name before it ("bohmer" → Ben Böhmer). Null if the text names none of the row's artists. */
+function artistAlias(A,text){ if(!A||!text) return null; const n=' '+normName(text)+' '; let bi=-1, bl=0;
+  A.names.forEach((nm,i)=>{ const k=normName(nm); if(k.length>=3&&k.length>bl&&n.includes(' '+k+' ')){ bi=i; bl=k.length; } });
+  if(bi<0) return null; for(let i=bi;i>=0;i--) if(/[A-Z&]/.test(A.names[i])) return A.names[i]; return A.name; }
+/* the row under the name said in the first text that names one of its artists */
+function artistAs(A,...texts){ if(!A) return A; for(const x of texts){ const nm=artistAlias(A,x); if(nm) return nm===A.name?A:Object.assign({},A,{name:nm}); } return A; }
 function findArtist(ref){
   if(!ref) return null; const r=normName(ref); if(!r) return null;
   let best=null;

@@ -1,9 +1,12 @@
 
 /* ---------- offline brain: turns common phrases into song actions when the AI isn't reachable ---------- */
-const STYLE_WORDS=[['melodictechno',/\b(melodic techno|afterlife)\b/],['melodichouse',/\b(melodic house|emotional house)\b/],['progressive',/\b(progressive( house)?|big room)\b/],['organichouse',/\b(organic house|organic)\b/],['deephouse',/\b(deep house)\b/],['techhouse',/\b(tech house)\b/],
-  ['liquid',/\b(liquid)\b/],['dnb',/\b(dnb|jungle)\b/],['ukg',/\b(garage|ukg|2 ?step|two ?step)\b/],['drill',/\bdrill\b/],['boombap',/\bboom ?bap\b/],['hiphop',/\b(hiphop|rap)\b/],['lofi',/\blofi\b/],['trap',/\btrap\b/],
+/* compound genres come before the plain ones they contain: "afro house" is afro (not house), "lofi hip hop" is lofi (not hip-hop),
+   "deep tech" and "minimal house" are tech house, "lofi house" and "chill house" are deep house, "melodic techno" before techno (QA, 16 Nov) */
+const STYLE_WORDS=[['afro',/\b(afro|afrobeats?)\b/],['melodictechno',/\b(melodic techno|afterlife)\b/],['melodichouse',/\b(melodic house|emotional house)\b/],['progressive',/\b(progressive( house)?|big room)\b/],['organichouse',/\b(organic house|organic)\b/],
+  ['deephouse',/\b(deep house|lofi house|chill house)\b/],['techhouse',/\b(tech house|deep tech|minimal (house|tech))\b/],['lofi',/\blofi\b/],
+  ['liquid',/\b(liquid)\b/],['dnb',/\b(dnb|jungle)\b/],['ukg',/\b(garage|ukg|2 ?step|two ?step)\b/],['drill',/\bdrill\b/],['boombap',/\bboom ?bap\b/],['hiphop',/\b(hiphop|rap)\b/],['trap',/\btrap\b/],
   ['amapiano',/\bamapiano\b/],['nudisco',/\b(nu ?disco|disco|funk)\b/],['synthwave',/\b(synthwave|retrowave|80s)\b/],['downtempo',/\b(downtempo|chill ?out|chill)\b/],['dubstep',/\b(dubstep|half ?time)\b/],
-  ['house',/\bhouse\b/],['techno',/\btechno\b/],['reggaeton',/\b(reggaeton|dembow|latin)\b/],['afro',/\b(afro|afrobeat|afro house)\b/],['punjabi',/\b(punjabi)\b/],['bhangra',/\b(bhangra|dhol)\b/],['bollywood',/\b(bollywood|filmi|hindi)\b/],['rock',/\brock\b/],['pop',/\bpop\b/]];
+  ['house',/\bhouse\b/],['techno',/\btechno\b/],['reggaeton',/\b(reggaeton|dembow|latin)\b/],['punjabi',/\b(punjabi)\b/],['bhangra',/\b(bhangra|dhol)\b/],['bollywood',/\b(bollywood|filmi|hindi)\b/],['rock',/\brock\b/],['pop',/\bpop\b/]];
 /* an artist named anywhere in the text: "like Ben Böhmer", "Bodzin style" */
 function artistIn(t){ const n=normName(t); let best=null; for(const A of ARTISTS) for(const nm of A.names){ const k=normName(nm); if(k.length<4) continue; if((' '+n+' ').includes(' '+k+' ')&&(!best||k.length>best.k.length)) best={A,k}; } return best&&best.A; }
 const INST_WORDS=[['bass808',/\b808\b/],['reese',/\breese\b/],['moog',/\bmoog\b/],['slapbass',/\bslap\b/],['acbass',/\b(upright|acoustic bass|double bass)\b/],['subbass',/\bsub\b/],['acid',/\bacid\b/],['pluckbass',/\bpluck(y)? bass\b/],['synbass',/\bsynth bass\b/],
@@ -42,7 +45,8 @@ function swingOnly(raw,hasDrums){ let s=' '+String(raw||'').toLowerCase().replac
   if(hasDrums) s=s.replace(/\b(beat|groove|drums?|(hi|high)[ -]?hats?|hihats?|hats?|rhythm)\b/g,' ');
   return !s.replace(/[^a-z0-9]+/g,'').length; }
 const SWING_ADD_PART=/\b(add|adding|bring in|layer|put in|write|create|make|give me|want|need)( me)?( a| an| some| new| another| more)? (?!(?:the|my|it|this|that|its|your) )([a-z]+ )?(bass ?lines?|bass|chords?|pads?|harmony|progression|melody|lead|hook|riff|keys|piano|synths?|arps?)\b/;
-function localBrain(raw){
+/* one request (one command); localBrain splits a sentence with two commands first */
+function brainOne(raw){
   const sws=swingSaid(raw), anyDrums=PROJ.tracks.some(x=>x.role==='drums'), hasDrums=PROJ.tracks.some(x=>x.role==='drums'&&x.recipe);
   if(sws!=null&&swingOnly(raw,hasDrums)){
     if(hasDrums) return {actions:[{type:'groove',track:'drums',swing:sws}]};
@@ -60,10 +64,15 @@ const FASTER_PART=/\b(bass ?line|bass|chords?|pads?|melody|lead|keys|piano|synth
 function plainClapSnare(t){ const m=t.match(/\badd (a |some |the )?(claps?|snares?)\b(.*)$/); if(!m) return false;
   const rest=m[3].replace(/[^a-z0-9 ]+/g,' ').split(/\b(?:and|plus|then|with|also)\b/)[0];
   return !rest.replace(/\b(please|too|as well|instead|back|again|now|on|the|2|two|4|four|backbeat|back ?beat|beat|drums?|groove|to|in|it|of|one|of the)\b/g,' ').trim().length; }
+/* the parser's view of a request: lower case, common spellings joined ("hi-hats" → hats, "lo-fi" → lofi, "un-mute" → unmute),
+   and the commonest typos fixed ("basline", "anothr one", "melodie") */
+function askText(raw){
+  return ' '+String(raw||'').toLowerCase().replace(/hi[\s-]?hats?|high[\s-]?hats?|hihats?/g,'hats').replace(/drum ?(and|&|n|'n') ?bass|d ?& ?b|d n b/g,'dnb').replace(/hip[\s-]?hop/g,'hiphop').replace(/lo[\s-]?fi/g,'lofi').replace(/eighths?|8ths?|8th notes?|eight notes?|8\s*\/\s*8/g,' 8th ').replace(/sixteenths?|16ths?|16 notes?|16\s*\/\s*16/g,' 16th ').replace(/beats per minute|bpm/g,' bpm ')
+    .replace(/\bun[\s-]+(mute|solo)/g,'un$1').replace(/\b(basline|bassine|bassslines?|basslin)\b/g,'bassline').replace(/\b(baslines)\b/g,'basslines').replace(/\b(anothr|anotehr|antoher|anothor|anoter)\b/g,'another').replace(/\b(melodie|melodi|meoldy|mellody|melidy|mleody)\b/g,'melody').replace(/\b(chrods|cords)\b/g,'chords')+' '; }
 function brainCore(raw,sws){
-  const t=' '+raw.toLowerCase().replace(/hi[\s-]?hats?|high[\s-]?hats?|hihats?/g,'hats').replace(/drum ?(and|&|n|'n') ?bass|d ?& ?b|d n b/g,'dnb').replace(/hip[\s-]?hop/g,'hiphop').replace(/lo[\s-]?fi/g,'lofi').replace(/eighths?|8ths?|8th notes?|eight notes?|8\s*\/\s*8/g,' 8th ').replace(/sixteenths?|16ths?|16 notes?|16\s*\/\s*16/g,' 16th ').replace(/beats per minute|bpm/g,' bpm ')+' ';
+  const t=askText(raw);
   const A=[]; let m;
-  const artist=artistIn(raw); let ref=artist?artist.name:undefined;
+  const artist=artistIn(raw); let ref=artist?(artistAlias(artist,raw)||artist.name):undefined; /* "like Black Coffee" keeps Black Coffee, not the entry's first name */
   const plm=raw.match(/\b(?:like|from|vibe of|in the style of)\s+(?:my\s+)?(.+?)\s+playlist\b/i)||raw.match(/\bmy playlist\s+["“]?([^"”,.]+)["”]?/i);
   if(plm&&typeof findPlaylist==='function'&&findPlaylist(plm[1])) ref='playlist '+plm[1];
   const style=(STYLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
@@ -73,6 +82,8 @@ function brainCore(raw,sws){
   if(/\b(download|export)\b.*\b(zip|stems?|ableton)\b/.test(t)) return {actions:[{type:'export',format:'zip'}]};
   /* "turn <audio track> into a bassline": a voice note, an imported recording, or one named ("turn hook idea into chords"). Checked before singing and voice notes. */
   { const tc=audioConvert(t); if(tc) return tc; }
+  { const ms=muteSoloFix(t); if(ms) return ms; }
+  { const q=quantizeFix(t); if(q) return q; }
   { const fxw=t.match(/\b(reverb|delay|echo|sidechain|side chain|pump|compress(?:ion|or)?|drive|saturation|distortion|width|wider|stereo|low ?cut|high ?cut)\b/); const tr=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
     if(fxw&&tr&&/\b(add|put|more|less|on|to|give|use|some|turn)\b/.test(t)){ const less=/\b(less|reduce|lower|down|remove|no)\b/.test(t); return {actions:[{type:'track_fx',track:tr==='drums'?'drums':tr,effect:fxw[1],change:less?-20:(/\bmore\b/.test(t)?20:undefined),remove:/\b(remove|no|off)\b/.test(t)}]}; } }
   { const tone=toneFix(t); if(tone) return tone; }
@@ -106,13 +117,13 @@ function brainCore(raw,sws){
   if(/\bsave\b/.test(t)) A.push({type:'save'});
   if(/\b(stop|pause)\b/.test(t)) A.push({type:'transport',do:'stop'});
   const role=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
-  const mixVerb=(t.match(/\b(louder|turn up|boost|quieter|softer|turn down|lower|mute|unmute|solo|remove|delete|drop)\b/)||[])[1], shapeAsk=LEVEL_CREATE.test(t)||LEVEL_SHAPE.test(t)&&!LEVEL_EXPLICIT.test(t);
+  const mixVerb=(t.match(/\b(louder|turn up|boost|quieter|softer|turn down|lower|mute|unmute|solo|unsolo|remove|delete|drop)\b/)||[])[1], shapeAsk=LEVEL_CREATE.test(t)||LEVEL_SHAPE.test(t)&&!LEVEL_EXPLICIT.test(t);
   const swap=iw && role && /\b(use|change|switch|swap|make|turn)\b/.test(t) && !/\badd\b/.test(t) && PROJ.tracks.some(x=>x.role===role);
   if(mixVerb && role && !(shapeAsk&&/^(louder|turn up|boost|quieter|softer|turn down|lower)$/.test(mixVerb))){
     if(/louder|turn up|boost/.test(mixVerb)) A.push({type:'mix',track:role,change:12});
     else if(/quieter|softer|turn down|lower/.test(mixVerb)) A.push({type:'mix',track:role,change:-12});
     else if(mixVerb==='mute') A.push({type:'mix',track:role,mute:true}); else if(mixVerb==='unmute') A.push({type:'mix',track:role,mute:false});
-    else if(mixVerb==='solo') A.push({type:'mix',track:role,solo:true}); else A.push({type:'remove',track:role});
+    else if(mixVerb==='solo') A.push({type:'mix',track:role,solo:true}); else if(mixVerb==='unsolo') A.push({type:'mix',track:role,solo:false}); else A.push({type:'remove',track:role});
   } else if(swap){ A.push({type:'instrument',track:role,instrument:role==='drums'&&iw==='bass808'?'kit808':iw}); }
   else {
     const hatsKind=/\bhats\b/.test(t)?(/16th/.test(t)?'16th':/\b8th\b/.test(t)?'8th':/off ?-?beat/.test(t)?'offbeat':/\b(roll|rolls|trap)\b/.test(t)?'trap':/\bopen\b/.test(t)?'open':/shaker/.test(t)?'shaker':/quarter/.test(t)?'quarter':(PROJ.tracks.some(x=>x.role==='drums')?'8th':'')):null;
@@ -253,3 +264,104 @@ function toneFix(t){
   const hasD=low.some(x=>x.role==='drums'), hasB=low.some(x=>x.role==='bass');
   return {actions:A,reply:`Fattened the mix: 2 dB more low end on ${hasD&&hasB?'the drums and bass':hasD?'the drums':hasB?'the bass':'every part'}.`+more};
 }
+/* ---- two requests in one sentence: "mute the drums and solo the bass", "set the tempo to 128 and add a shaker",
+   "more reverb on the chords and less on the melody". Split on "and" / "," / "then" only when the next half is a command of
+   its own (it starts with a verb, or it is a level line like "the bass quieter"); a half that only names another part
+   ("and the bass", "and less on the melody") repeats the previous command for that part. Everything else stays one request
+   ("drums with hats and claps", "drum and bass"). All halves run as ONE batch, so one Undo takes the whole sentence back. ---- */
+const ASK_SEP=/(\s*,\s*(?:and then\s+|and\s+|then\s+)?|\s*;\s*|\s+and then\s+|\s+then\s+|\s+and\s+|\s+also\s+|\s+plus\s+)/i;
+const ASK_FILL=/^(?:(?:please|pls|now|then|also|and|just|ok|okay|hey|so|can you|could you|would you|will you|lets|let's|keys)\s+)*/;
+const ASK_HEAD=/^(make|add|put|give|set|change|switch|swap|use|turn|bring|push|pull|mute|unmute|solo|unsolo|remove|delete|drop|take|cut|boost|raise|lower|reduce|quanti[sz]e|tighten|snap|play|stop|pause|start|record|sing|hum|whistle|let me|export|download|save|undo|redo|transpose|shift|speed|slow|double|halve|clear|reset|write|create|generate|build|layer|try|go|straighten|fix|clean|tidy|render|rename|kill|lose|pan|widen|brighten|darken|open|close|show|loop|arrange|new|start over)\b/;
+const ASK_FXW=/\b(reverb|delay|echo|sidechain|side chain|compress(?:ion|or)?|drive|saturation|distortion|width|low ?cut|high ?cut)\b/;
+const ASK_DIR=/\b(more|less|louder|quieter|softer|up|down|higher|lower)\b/;
+const ASK_MIXLIKE=/\b(reverb|delay|echo|sidechain|side chain|compress\w*|drive|saturation|distortion|width|wider|stereo|low ?cut|high ?cut|mute|unmute|solo|unsolo|louder|quieter|softer|turn|bring|push|pull|quanti[sz]e|tighten|remove|delete|volume|lows|mids|highs|low end|eq)\b/;
+function askRole(t){ for(const [k,re] of ROLE_WORDS){ const m=t.match(re); if(m) return {k,m:m[0]}; } return null; }
+function askAlone(seg){ const t=askText(seg), h=t.trim().replace(ASK_FILL,'');
+  if(ASK_HEAD.test(h)) return true;
+  const role=askRole(t)||(DRUM_VOICE.some(([k,re])=>re.test(t))?{k:'drums'}:null);
+  if(role&&(LEVEL_UP.test(t)||LEVEL_DOWN.test(t)||PUNCH.test(t))) return true; /* "the bass quieter", "the chords up a bit" */
+  if(ASK_FXW.test(t)&&/\b(more|less|some|no|add)\b/.test(t)&&role) return true;    /* "more delay on the lead" */
+  return false; }
+/* "and less on the melody" after "more reverb on the chords" → "less reverb on the melody"; "and the bass" after "mute the drums" → "mute the bass" */
+function askCarry(prev,seg){ const s=askText(seg), p=askText(prev); if(!ASK_MIXLIKE.test(p)) return null;
+  if(/\b(add|make|give|write|create|new|another|sing|record)\b/.test(s)) return null;
+  const sr=askRole(s), pr=askRole(p); if(!sr||!pr) return null;
+  const rest=s.replace(sr.m,' ').replace(/\b(the|my|on|to|for|in|of|it|a|bit|little|too|as well|please|one|ones)\b/g,' ').replace(ASK_DIR,' ').trim(); if(rest) return null; /* "the bass sounds great": not a command */
+  let out=p.replace(pr.m,sr.m); const d=s.match(ASK_DIR);
+  if(d){ const pd=out.match(ASK_DIR); out=pd?out.replace(pd[0],d[0]):out+' '+d[0]; }
+  const sm=s.match(/\b(a (?:little |tiny )?bit|a little|slightly|a lot)\b/); if(sm&&!out.includes(sm[0])) out+=' '+sm[0];
+  return out.trim(); }
+function splitAsks(raw){
+  const bits=String(raw||'').split(ASK_SEP); if(bits.length<3) return null;
+  const out=[{text:bits[0],alone:askAlone(bits[0])}];
+  for(let i=2;i<bits.length;i+=2){ const seg=bits[i], last=out[out.length-1]; if(!seg.trim()) continue;
+    if(askAlone(seg)) { out.push({text:seg,alone:true,sep:bits[i-1]}); continue; }
+    const c=askCarry(last.text,seg); if(c){ out.push({text:c,alone:true,said:seg,sep:bits[i-1]}); continue; }
+    last.text+=bits[i-1]+seg; }
+  /* a lead-in without a verb ("hey keys, mute the drums", "drums like Black Coffee, and 120 bpm") belongs to what follows */
+  if(out.length>1&&!out[0].alone){ if(out[1].said) out[0].alone=true; else { out[1].text=out[0].text+out[1].sep+out[1].text; out.shift(); } }
+  return out.length>1?out:null; }
+function localBrain(raw){
+  const segs=splitAsks(raw); if(!segs) return brainOne(raw);
+  const R=[];
+  for(const g of segs){ const L=brainOne(g.text);
+    /* "make a house beat and add a shaker": the shaker needs the beat first, so the two halves read as one request */
+    if(!L.actions.length&&!L.reply&&R.length){ const pr=R[R.length-1], mt=pr.text+' and '+g.text, M=brainOne(mt); if(M.actions.length&&JSON.stringify(M.actions)!==JSON.stringify(pr.L.actions)){ R[R.length-1]={text:mt,L:M,said:pr.said}; continue; } }
+    R.push({text:g.text,said:g.said||g.text,L}); }
+  if(R.length===1) return R[0].L;
+  /* a new song wipes what the rest would change: start it, and ask for the rest again */
+  const np=R.findIndex(r=>r.L.actions.some(a=>a.type==='new_project'));
+  if(np>=0) return {actions:[{type:'new_project'}],reply:`Started a new song. Your last one is saved. Now say “${R.filter((r,i)=>i!==np).map(r=>r.said.trim()).join(', then ')}” again and I’ll do it.`};
+  const actions=[]; R.forEach((r,i)=>r.L.actions.forEach(a=>actions.push(Object.assign({},a,{seg:i}))));
+  const custom=R.some(r=>r.L.reply), skipped=R.filter(r=>!r.L.actions.length&&!r.L.reply);
+  if(!custom&&!skipped.length) return {actions,parts:R.length};
+  /* the reply names each half: its own words, what it did, or that it was skipped */
+  const reply=done=>{ const out=[], segs=done.segs||[];
+    R.forEach((r,i)=>{ const mine=done.filter((x,j)=>segs[j]===i);
+      if(r.L.reply) out.push(r.L.reply);
+      else if(mine.length) out.push('Done: '+mine.join(', ')+'.');
+      else out.push(`I couldn’t do “${r.said.trim()}” in Basic mode, so I left that part out.`); });
+    return out.join(' '); };
+  return {actions,reply,parts:R.length}; }
+/* ---- unsolo / unmute: "unsolo the bass", "remove the solo", "clear all solos", "un-mute the drums", "unmute everything" ---- */
+const UNSOLO=/\bunsolo(ed)?\b|\b(remove|clear|cancel|reset|kill|undo|lose|drop|turn off|switch off|take off|get rid of|no more|release)( the| all| all the| every| any| my| that)? solo(s|ed|ing)?\b|\bsolos? off\b|\b(stop|end) solo(ing)?\b|\btake (?:[a-z]+ ){1,3}(off|out of) solo\b|\bout of solo\b|\bno (more )?solo\b/;
+const UNMUTE=/\bunmute(d)?\b|\b(remove|clear|cancel|reset|undo|turn off|switch off|take off|get rid of|release)( the| all| all the| every| any| my| that)? mutes?\b|\bmutes? off\b|\btake (?:[a-z]+ ){1,3}off mute\b/;
+function muteSoloFix(t){
+  const us=UNSOLO.test(t), um=UNMUTE.test(t); if(!us&&!um) return null;
+  const all=/\b(all|everything|every (track|part|thing)|whole (song|mix))\b/.test(t), t2=t.replace(/\b(un)?(solo|mute)(s|d|ed|ing)?\b/g,' ');
+  const role=all?null:(ROLE_WORDS.find(([k,re])=>re.test(t2))||[])[0], named=all||role?[]:PROJ.tracks.filter(x=>x.name&&x.name.length>2&&t2.includes(' '+x.name.toLowerCase()+' '));
+  const pool=role?PROJ.tracks.filter(x=>x.role===role):named.length?named:PROJ.tracks, which=role?(TONE_PART[role]||'the '+role):named.length?named.map(x=>x.name).join(' and '):null;
+  if(!PROJ.tracks.length) return {actions:[],reply:'There’s nothing in the song yet. Say “make a house beat” to start.'};
+  if(role&&!pool.length) return {actions:[],reply:`There’s no ${which.replace(/^the /,'')} in the song yet.`};
+  const A=[], said=[];
+  if(us){ const on=pool.filter(x=>x.solo); on.forEach(x=>A.push({type:'mix',track:x.id,solo:false}));
+    const left=PROJ.tracks.filter(x=>x.solo&&!on.includes(x));
+    said.push(on.length?`Solo off on ${on.map(x=>x.name).join(', ')}${left.length?`; ${left.map(x=>x.name).join(', ')} still soloed`:', so every part plays again'}.`:which?`${which[0].toUpperCase()+which.slice(1)} ${role==='drums'||role==='chords'||named.length>1?'aren’t':'isn’t'} soloed.`:'Nothing is soloed.'); }
+  if(um){ const on=pool.filter(x=>x.mute); on.forEach(x=>A.push({type:'mix',track:x.id,mute:false}));
+    said.push(on.length?`Unmuted ${on.map(x=>x.name).join(', ')}.`:which?`${which[0].toUpperCase()+which.slice(1)} ${role==='drums'||role==='chords'||named.length>1?'aren’t':'isn’t'} muted.`:'Nothing is muted.'); }
+  return {actions:A,reply:said.join(' ')}; }
+/* ---- quantize: "quantize my melody to 1/8", "quantize it", "tighten up the timing", "snap the chords to the grid", "quantize to 16ths",
+   "1/8 triplets". The named part, else the track open in the editor or selected, else the newest part you played or sang. ---- */
+const QUANT=/\bquanti[sz](e|es|ed|ing|ation)\b|\b(snap|lock|put|move) (?:[a-z]+ ){0,3}(on|to) (the )?grid\b|\btighten (up )?(the |my )?(timing|rhythm|notes)\b|\btighten (it|this|that|them|everything|the notes) up\b|\b(fix|clean up|tidy up|tidy) (the |my )?(timing|rhythm)\b|\btiming (is |was |sounds |feels )?(off|sloppy|loose|messy|all over)\b|^\s*tighten (it )?up\s*$/;
+function gridSaid(t){ let m, den=null, trip=/\btriplets?\b|\btrip\b/.test(t);
+  if((m=t.match(/\b1\s*\/\s*(1|2|4|8|16|32|64)(th|nd|st|t)?\b/))){ den=+m[1]; if(m[2]==='t') trip=true; }
+  else if(/\b(32nd|32th)\b/.test(t)) den=32; else if(/\b16th\b/.test(t)) den=16; else if(/\b8th\b/.test(t)) den=8; else if(/\b(quarters?|quarter notes?|4th notes?|crotchets?)\b/.test(t)) den=4; else if(/\bhalf notes?\b/.test(t)) den=2;
+  else if((m=t.match(/\bto (4|8|16|32)\b/))) den=+m[1];
+  if(!den&&trip) den=8; return den?`1/${den}${trip?'t':''}`:undefined; }
+function quantizeFix(t){
+  if(!QUANT.test(t)) return null;
+  const notes=PROJ.tracks.filter(x=>x.kind!=='audio'), grid=gridSaid(t);
+  if(!PROJ.tracks.length) return {actions:[],reply:'There are no notes to quantize yet. Play, sing or add a part first.'};
+  const all=/\b(everything|all( the)? (tracks|parts|notes)|every (track|part)|whole song|all of it)\b/.test(t);
+  /* a track named by its own name ("the played keys", "hummed melody"); plain role names (Melody, Chords) go by role, which prefers your own part */
+  const role=all?null:(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0], named=PROJ.tracks.filter(x=>x.name&&x.name.length>2&&!/^(drums|bass|bassline|chords|melody|lead)( \d+)?$/i.test(x.name)&&t.includes(' '+x.name.toLowerCase()+' '));
+  const open=typeof ED!=='undefined'&&ED.tid?PROJ.tracks.find(x=>x.id===ED.tid):null, one=typeof SEL!=='undefined'&&SEL.size===1?PROJ.tracks.find(x=>SEL.has(x.id)):null;
+  let list;
+  if(all) list=notes;
+  else if(named.length) list=[named[named.length-1]];
+  else if(role){ const of=PROJ.tracks.filter(x=>x.role===role); if(!of.length) return {actions:[],reply:`There’s no ${(TONE_PART[role]||role).replace(/^the /,'')} yet to quantize.`};
+    const own=of.filter(x=>!x.gen&&x.kind!=='audio'); list=[[open,one].find(x=>x&&x.role===role)||own[own.length-1]||of[of.length-1]]; }
+  else { const mine=notes.filter(x=>!x.gen); list=[open||one||mine[mine.length-1]||notes[notes.length-1]].filter(Boolean); }
+  const aud=list.filter(x=>x.kind==='audio'); list=list.filter(x=>x.kind!=='audio');
+  if(!list.length) return {actions:[],reply:aud.length?`${aud[0].name} is a recording, so it has no notes to quantize. Say “turn ${aud[0].name} into a melody” first.`:'There are no notes to quantize yet.'};
+  return {actions:list.map(x=>({type:'quantize',track:x.id,grid}))}; }

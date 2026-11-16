@@ -41,6 +41,14 @@ function normAction(a){
   return {type:k,[field]:v};
 }
 const L_=()=>PROJ.bars*4;
+/* quantize grid: "1/8", "1/16", "1/8t" or "1/8 triplets", "8th", "16th", "quarter"; a number is beats (0.25 = 1/16), or a note value
+   when it is 3..64 (8 = 1/8). Nothing said: 1/16. */
+function gridBeats(g){ if(g==null||g==='') return 0.25;
+  if(typeof g==='number'||/^\s*\d*\.?\d+\s*$/.test(String(g))){ const n=+g; return n>=3&&n<=64?4/n:n>0&&n<=4?n:0.25; }
+  const s=String(g).toLowerCase(), trip=/\btriplets?\b|\btrip\b|\d\s*t\b/.test(s); let m=s.match(/1\s*\/\s*(\d+)/)||s.match(/\b(\d+)(?:st|nd|rd|th|s)?\b/);
+  let den=m?+m[1]:/quarter|crotchet/.test(s)?4:/half/.test(s)?2:/sixteenth/.test(s)?16:/eighth|quaver/.test(s)?8:trip?8:16;
+  if(![1,2,4,8,16,32,64].includes(den)) den=16; return 4/den*(trip?2/3:1); }
+function gridName(q){ for(const d of [1,2,4,8,16,32,64]){ if(Math.abs(4/d-q)<1e-6) return `1/${d} notes`; if(Math.abs(8/(3*d)-q)<1e-6) return `1/${d} triplets`; } return `${Math.round(q*1000)/1000} beats`; }
 /* dB words shared by the replies and the chips, so they always say the same number: 2.8, 3, 5 */
 function dbTxt(x){ const r=Math.round(Math.abs(+x||0)*10)/10; return r%1?r.toFixed(1):String(r); }
 /* the dB a fader really moves for a step (gain is vol², so dB/40 is the fader step; full volume caps it) */
@@ -50,18 +58,24 @@ function songDbStep(db){ db=clamp(+db||0,-24,12); if(db<=0) return db; const top
 const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
 let BATCH={}; const LAST_TEXT={text:''}; const LAST_TAKE={part:null};
 const newSeed=()=>1+Math.floor(Math.random()*2e9);
-function tasteArtist(){ const p=TASTE.profile; if(!p||!p.artists) return null; for(const a of p.artists){ const A=findArtist(a); if(A) return A; } return null; }
+function tasteArtist(){ const p=TASTE.profile; if(!p||!p.artists) return null; for(const a of p.artists){ const A=findArtist(a); if(A) return artistAs(A,a); } return null; }
 /* style + artist for a request: named artist > named style > the song's vibe > the person's taste > house */
 function resolveVibe(a){
   /* the AI sometimes invents a reference; only switch away from the song's vibe when the user actually named it */
   const said=normName(LAST_TEXT.text||''), named_=x=>{ const k=normName(x||''); return !said||!k||said.includes(k.split(' ')[0])||(findArtist(x)&&findArtist(x).names.some(n=>said.includes(normName(n)))); };
   if(PROJ.ref&&(a.ref||a.artist||a.like)&&!named_(a.ref||a.artist||a.like)){ a=Object.assign({},a,{ref:undefined,artist:undefined,like:undefined}); }
   if(PROJ.style&&a.style&&pickStyle(a.style)!==PROJ.style&&said&&!STYLE_WORDS.some(([k,re])=>k===pickStyle(a.style)&&re.test(' '+said+' '))) a=Object.assign({},a,{style:undefined});
+  /* the user named a genre and no artist ("afro house beat", "lofi hip hop beat"): the AI's artist pick is dropped and the genre is used,
+     so Keys never says or saves an artist the user didn't name (QA, 16 Nov) */
+  { const w=a.ref||a.artist||a.like, RA=w&&!/playlist/i.test(w)?findArtist(w):null, said_=LAST_TEXT.text||'', sw=typeof askText==='function'?askText(said_):' '+said_.toLowerCase()+' ', gen=RA&&said_?STYLE_WORDS.find(([k,re])=>re.test(sw)):null;
+    if(gen&&!artistAlias(RA,said_)&&!(PROJ.ref&&findArtist(PROJ.ref)===RA)) a=Object.assign({},a,{ref:undefined,artist:undefined,like:undefined,style:a.style||gen[0]}); }
   let artist=findArtist(a.ref||a.artist||a.like); let named=artist?null:pickStyle(a.style); /* a known artist decides the style; the AI's style guess is ignored */
   const pl=typeof findPlaylist==='function'?findPlaylist(a.playlist||(/playlist/i.test(a.ref||a.like||'')?(a.ref||a.like):null)):null;
-  if(pl){ artist=artist||pl.artists.map(findArtist).find(Boolean)||null; named=named||pl.style||(artist&&artist.style)||null; }
+  if(pl){ artist=artist||pl.artists.map(n=>artistAs(findArtist(n),n)).find(Boolean)||null; named=named||pl.style||(artist&&artist.style)||null; }
   if(!artist&&!named&&PROJ.ref) artist=findArtist(PROJ.ref);
   if(!artist&&!named&&!PROJ.style) artist=tasteArtist();
+  /* the name the user said: "like Black Coffee" shows and saves Black Coffee, not the first name of the table row (Keinemusik) */
+  if(artist) artist=artistAs(artist,LAST_TEXT.text,a.ref||a.artist||a.like,PROJ.ref,artist.name);
   const s=named||(artist&&artist.style)||PROJ.style||tasteStyle()||'house';
   return {s,artist};
 }
@@ -178,7 +192,9 @@ const ACT={
   fx(a){ const want=String(a.effect||'').toLowerCase().replace(/[-_]/g,' '); const type=Object.keys(FX_LIB).find(k=>FX_LIB[k].name.toLowerCase()===want||k===want.replace(/ /g,''))||Object.keys(FX_LIB).find(k=>FX_LIB[k].name.toLowerCase().includes(want)||want.includes(k));
     if(!type) return; let i=FX.slots.findIndex(s=>s.type===type); if(i<0){ i=7; FX.setType(i,type); } FX.set(i,clamp((+a.amount)/100,0,1)); return `${FX_LIB[type].name} ${Math.round(FX.slots[i].amount*100)}%`; },
   remove(a){ const t=findTrack(a.track||a.value); if(!t) return; removeTrack(t.id); return `Removed ${t.name}`; },
-  quantize(a){ const t=findTrack(a.track); if(!t) return; const q=+a.grid||0.25; t.events.forEach(e=>{ e.b=Math.round(e.b/q)*q; e.d=Math.max(q,Math.round(e.d/q)*q); }); return `Quantized ${t.name}`; },
+  quantize(a){ const t=findTrack(a.track); if(!t||t.kind==='audio'||!t.events) return; const q=gridBeats(a.grid), L=L_(); let moved=0;
+    t.events.forEach(e=>{ let b=Math.round(e.b/q)*q; if(b>=L&&e.b<L) b=0; if(Math.abs(b-e.b)>1e-6) moved++; e.b=b; e.d=Math.max(q,Math.round(e.d/q)*q); });
+    return `Quantized ${t.name} to ${gridName(q)} (${moved} of ${t.events.length} notes moved)`; },
   transpose(a){ const t=findTrack(a.track); if(!t||(INST.get(t.inst)||{}).percussive) return; const s=Math.round(+a.semitones||0); t.events.forEach(e=>e.n+=s); return `${t.name} ${s>0?'up':'down'} ${Math.abs(s)}`; },
   transport(a){ const d=String(a.do||a.value||'').toLowerCase(); if(/stop|pause/.test(d)){ loopStop(); return 'Stopped'; } if(/rec/.test(d)){ recordPress(); return 'Recording'; } if(PROJ.tracks.length && !TR.running){ loopPlay(); return 'Playing'; } },
   sing(a){ const raw=String(a.part||a.role||a.track||'melody').toLowerCase(); const part=/voice|audio|note/.test(raw)&&!/melody/.test(raw)?'voice':/bass/.test(raw)?'bass':/chord|pad|harmon/.test(raw)?'chords':'melody';
@@ -213,7 +229,9 @@ const ACT={
 };
 function runActions(list){
   const done=[]; let changed=false; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
-  for(const raw of list||[]){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; try{ const r=ACT[a.type](a); if(r){ done.push(r); changed=true; } }catch(e){ console.warn('action failed',a,e); } }
+  /* done.segs[i]: which half of a two-part sentence each result came from (offline "mute the drums and solo the bass") */
+  done.segs=[];
+  for(const raw of list||[]){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; try{ const r=ACT[a.type](a); if(r){ done.push(r); done.segs.push(a.seg); changed=true; } }catch(e){ console.warn('action failed',a,e); } }
   if(changed){ saveProject(); renderTracks(); uiLoop(); }
   return done;
 }
