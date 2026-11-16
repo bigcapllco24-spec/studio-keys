@@ -181,3 +181,93 @@ All five Basic-mode bugs are fixed, plus the typo words. `check.sh`: **CHECK OK,
 - "add some chords, then make another one" makes a new chord progression, so bass and melody follow it. That's what "another" on chords already did.
 - "add a melody and then another one" is still one request (one new melody), same as before.
 - The "…at 124 read as 122" note on the board: the artist's or style's tempo won because "at 124" wasn't read. It is now read (Black Coffee at 124 → 124).
+
+## Fix 2 (16 Nov 2026) · assistant-dev
+
+**What changed**
+- `src/actions.js`
+  - The "add some / more never lowers it" guard in `track_fx` reads only the part of the sentence about this effect and this part (`fxClause`). It applies only when that part says add/more/some and no number, "set", less, too wet, dry, off.
+  - `remove` checks first for "remove / take off / kill / no / get rid of the <effect>". If the user said that about this part, it turns the effect off and keeps the part (`fxOffSaid`). This covers the AI path too.
+  - `track_fx` with effect `all`/`effects` and `remove` turns every effect off on that part ("remove the effects from the chords").
+  - One Undo per request counts the steps pushed during the request (`UNDO.pushes`), not the stack length, so it still works once the history is full (120).
+- `src/maker.js`
+  - Basic mode effects read each effect's own half of the sentence. A number sets it exactly ("to 20%", "at 30%", "reverb 15", "low cut at 60" Hz). Remove, kill, take off, get rid of or no turns it off. Less and more step it. The "+10 at or above default" step only applies to add/some with no number.
+  - "mute everything" / "mute all" mutes every part.
+- `src/edit.js` (one line, as the brief allowed): `undoNote` counts pushes in `UNDO.pushes`.
+- `tests/smoke.mjs`: one new line covering bugs 1, 2 and 4.
+- No change to `cloudflare/worker.js`, so there was no Llama re-test and nothing to deploy.
+
+**Before → after** (chords reverb at 42%; AI path = the actions Llama sends, run with the sentence as said)
+| Case | Before (20fd0da) | After |
+|---|---|---|
+| AI: "set the chords reverb to 20 and add some delay" | reverb 52%, delay 30% | reverb 20%, delay 30% |
+| AI: "add a bassline and make the chords reverb 15" | 52% | 15% |
+| AI: "the chords are too wet, add some clarity" (reverb 15) | 52% | 15% |
+| AI: "add some reverb" (amount 40) / "add more reverb" (30) | 52% / 52% | 52% / 52% (kept) |
+| AI: "add a melody and some reverb on the chords at 20%" | 52% | 20% |
+| Basic: "set the reverb on the chords to 20%" | 52% | 20% |
+| Basic: "set the reverb on the chords to 20% and add some delay" | 52% / delay 20% | 20% / delay 20% |
+| Basic: "reverb at 30% on the chords" · "set the delay on the chords to 35" | 52% · delay 20% | 30% · delay 35% |
+| Basic: "add some reverb" · "more reverb" · "less reverb" · "no reverb" | 52 · 62 · 22 · off | same |
+| Basic: "more reverb on the chords and less on the melody" | 62 / 10 | 62 / 10 (kept) |
+| Full history (120) + slow two-part request | 2 Undos | 1 Undo, exact |
+| "remove the reverb from the chords" (Basic and AI `remove`) | Chords track deleted | Reverb off, Chords kept |
+| "take the reverb off the chords" · "kill the reverb on the chords" · "get rid of the reverb on the chords" | new Chords 2 · 52% · 52% | reverb off (all three) |
+| "remove the effects from the chords" | track deleted | all effects off, part kept |
+| "remove the chords" · "delete the bass" · AI "remove the drums and no reverb on the bass" | removed | removed (kept) |
+| Basic: "mute everything" / "mute all" | not understood | all 4 parts muted |
+
+**How I tested**
+- `bash .claude/tools/check.sh`: CHECK OK, 69 checks (68 + the new line `{"set":20,"add":52,"basic":20,"kept":true,"off":true}`), 1m54s, first run.
+- Tester's `t8-undo.mjs` (slow machine, 200 ms per action):
+  - All 6 requests: 1 step, exact Undo, exact Redo.
+  - Full history 120 + two-part request: 1 Undo back (stack 120 → 119; the oldest step drops as before).
+  - 10× "add a melody": 1 step and exact each time.
+  - The BPM-box line is unchanged from fix 1 (known bug 9, `setTempo`, not in scope).
+- Tester's `t7-fix1.mjs`: 84 rows, 73 the same.
+  - The 7 intended changes are in the table above.
+  - The other 4 are noise: how track ids print, and random progressions or notes.
+- Tester's `t1-words.mjs` (105 phrases): 93 the same.
+  - The other 12 are id-print noise, plus the known chance rows ("make it 100 bpm and add a bassline", "add some chords, then make another one").
+  - 0 unintended differences.
+  - "more reverb on the chords and less on the melody" kept 62/10. An earlier draft broke it (melody 40%); fixed by matching the clause that names the part.
+- 0 page errors.
+- Results: `/tmp/qa/ai-8r/fix1-f2.json`, `/tmp/qa/ai-8/words-ai8f2.json`.
+
+**Known limits / found**
+- In "add a melody and give me another one", the `vary` goes to the first Melody track, not the new Melody 2. The reply says "Melody: a new melody". This was the same on fix 1 (`findTrack('melody')` returns the first). Not fixed (out of scope); a one-line follow-up in `ACT.vary` would target the part just added.
+
+## Fix 3 (16 Nov 2026) · assistant-dev
+
+**What changed**
+- `src/actions.js`: `fxOffSaid` now lets the clause that names THIS part decide (new helpers `fxPartSaid` and `removesPart`).
+  - "remove / delete / get rid of the melody" aimed at the part removes it, even when another clause says "turn off the reverb" or "no reverb".
+  - "remove the reverb from the chords", "remove the chords reverb", "remove the melody's reverb" still turn the effect off and keep the part.
+  - A half with no verb ("…and the bass") borrows the verb of the half before it.
+  - An effect-off clause that names no part ("remove the reverb") only counts when no clause names this part.
+- `src/maker.js` (Basic mode): before the effects rule, `removesPart` is checked.
+  - "remove the melody, no reverb" now removes the melody. The reply says: "Removed Melody. I skipped the reverb change, because that part is gone."
+  - "remove the melody and turn off the reverb" removes the melody. The reply says the reverb half was left out (it has no part to act on).
+- `tests/smoke.mjs`: the fix-2 line now also checks AI "remove the melody and turn off the reverb" and Basic "delete the drums and kill the reverb" (`rmAI`, `rmBasic`).
+- No change to `cloudflare/worker.js`.
+
+**Before (fix 2) → after**, on a song with drums, bass, chords at 42% reverb, and melody:
+
+| Sentence | AI path (fix 2 → fix 3) | Basic mode (fix 2 → fix 3) |
+|---|---|---|
+| remove the melody and turn off the reverb | reverb off on Melody → Melody removed | reverb off on Melody → Melody removed, reverb half skipped |
+| delete the drums and kill the reverb | reverb off on Drums → Drums removed | reverb off on Drums → Drums removed |
+| kill the reverb and delete the bass | reverb off on Bassline → Bassline removed | reverb off on Bassline → Bassline removed |
+| remove the melody, no reverb | reverb off on Melody → Melody removed | reverb off on Melody → Melody removed |
+
+These are unchanged: remove/take off/kill/get rid of the reverb (on or from) the chords, "remove the chords reverb", "remove the effects from the chords", "remove the reverb", "remove the chords", "delete the bass", "remove the drums and no reverb on the bass", "no reverb on the chords and remove the melody", "delete the drums and the bass", and "remove the melody without the reverb" (removes it, as on fix 1).
+
+**How I tested**
+- `check.sh`: CHECK OK, SMOKE OK, 69 checks; the fix-2 line returned `{"set":20,"add":52,"basic":20,"kept":true,"off":true,"rmAI":true,"rmBasic":true}`.
+  - The first run failed the 2 song-reopen timing checks seen on fix 1 (UX files I didn't touch). The re-run passed at load 1-2.
+- Tester's `t14-rm.mjs`: matches `t14-f1.out` on every row, except "remove the reverb" (Chords' reverb off, kept from fix 2).
+- My `/tmp/qa/ai-8f3/t-f3.mjs`: 16 AI rows and 13 Basic rows, all as in the table, 0 page errors. The output is in `/tmp/qa/ai-8f3/t-f3.out`.
+- Tester's `t12-fix2.mjs`: 52 rows, 48 the same. The 4 that differ are the intended remove rows.
+- Tester's `t13-manual.mjs`: identical to fix 2.
+- Tester's `t7-fix1.mjs`: 84 rows, 0 action changes (only id printing, random fills and reply truncation differ).
+- Tester's `t1-words.mjs` (105 phrases): 0 action differences beyond id printing, and the same steps and Undo on every row. The one changes row that differs is a random melody note count.
