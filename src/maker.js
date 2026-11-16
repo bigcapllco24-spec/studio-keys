@@ -86,6 +86,8 @@ function brainCore(raw,sws){
   { const ms=muteSoloFix(t); if(ms) return ms; }
   { const q=quantizeFix(t); if(q) return q; }
   { const FXRE=/\b(reverb|delay|echo|sidechain|side chain|pump|compress(?:ion|or)?|drive|saturation|distortion|width|wider|stereo|low ?cut|high ?cut|effects|fx)\b/g, fxs=[...t.matchAll(FXRE)].map(m=>m[1]), tr=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
+    /* "remove the melody, no reverb": the clause that names the melody removes it; the effect half has no part left, so it is skipped and the reply says so (QA, 16 Nov) */
+    if(fxs.length&&tr&&typeof removesPart==='function'){ const T=findTrack(tr); if(removesPart(t,{role:tr,name:T&&T.name})) return {actions:[{type:'remove',track:tr}],reply:done=>done.length?`${done.join('. ')}. I skipped the ${fxs[0]} change, because that part is gone.`:''}; }
     if(fxs.length&&tr&&/\b(add|put|more|less|on|to|give|use|some|turn|set|at|make|from|off|remove|kill|take|rid|drop|lose|no|without)\b/.test(t)){ const T=findTrack(tr), A=[], seen=new Set();
       /* each effect reads the half of the sentence about it ("set the reverb on the chords to 20% and add some delay": reverb 20, delay a step up).
          A number sets it exactly; remove/kill/take off/no turns it off; less/more step it; "add some X" never lowers X (42% stays 42% + a step, QA 16 Nov) */

@@ -236,3 +236,38 @@ All five Basic-mode bugs are fixed, plus the typo words. `check.sh`: **CHECK OK,
 
 **Known limits / found**
 - In "add a melody and give me another one", the `vary` goes to the first Melody track, not the new Melody 2. The reply says "Melody: a new melody". This was the same on fix 1 (`findTrack('melody')` returns the first). Not fixed (out of scope); a one-line follow-up in `ACT.vary` would target the part just added.
+
+## Fix 3 (16 Nov 2026) · assistant-dev
+
+**What changed**
+- `src/actions.js`: `fxOffSaid` now lets the clause that names THIS part decide (new helpers `fxPartSaid` and `removesPart`).
+  - "remove / delete / get rid of the melody" aimed at the part removes it, even when another clause says "turn off the reverb" or "no reverb".
+  - "remove the reverb from the chords", "remove the chords reverb", "remove the melody's reverb" still turn the effect off and keep the part.
+  - A half with no verb ("…and the bass") borrows the verb of the half before it.
+  - An effect-off clause that names no part ("remove the reverb") only counts when no clause names this part.
+- `src/maker.js` (Basic mode): before the effects rule, `removesPart` is checked.
+  - "remove the melody, no reverb" now removes the melody. The reply says: "Removed Melody. I skipped the reverb change, because that part is gone."
+  - "remove the melody and turn off the reverb" removes the melody. The reply says the reverb half was left out (it has no part to act on).
+- `tests/smoke.mjs`: the fix-2 line now also checks AI "remove the melody and turn off the reverb" and Basic "delete the drums and kill the reverb" (`rmAI`, `rmBasic`).
+- No change to `cloudflare/worker.js`.
+
+**Before (fix 2) → after**, on a song with drums, bass, chords at 42% reverb, and melody:
+
+| Sentence | AI path (fix 2 → fix 3) | Basic mode (fix 2 → fix 3) |
+|---|---|---|
+| remove the melody and turn off the reverb | reverb off on Melody → Melody removed | reverb off on Melody → Melody removed, reverb half skipped |
+| delete the drums and kill the reverb | reverb off on Drums → Drums removed | reverb off on Drums → Drums removed |
+| kill the reverb and delete the bass | reverb off on Bassline → Bassline removed | reverb off on Bassline → Bassline removed |
+| remove the melody, no reverb | reverb off on Melody → Melody removed | reverb off on Melody → Melody removed |
+
+These are unchanged: remove/take off/kill/get rid of the reverb (on or from) the chords, "remove the chords reverb", "remove the effects from the chords", "remove the reverb", "remove the chords", "delete the bass", "remove the drums and no reverb on the bass", "no reverb on the chords and remove the melody", "delete the drums and the bass", and "remove the melody without the reverb" (removes it, as on fix 1).
+
+**How I tested**
+- `check.sh`: CHECK OK, SMOKE OK, 69 checks; the fix-2 line returned `{"set":20,"add":52,"basic":20,"kept":true,"off":true,"rmAI":true,"rmBasic":true}`.
+  - The first run failed the 2 song-reopen timing checks seen on fix 1 (UX files I didn't touch). The re-run passed at load 1-2.
+- Tester's `t14-rm.mjs`: matches `t14-f1.out` on every row, except "remove the reverb" (Chords' reverb off, kept from fix 2).
+- My `/tmp/qa/ai-8f3/t-f3.mjs`: 16 AI rows and 13 Basic rows, all as in the table, 0 page errors. The output is in `/tmp/qa/ai-8f3/t-f3.out`.
+- Tester's `t12-fix2.mjs`: 52 rows, 48 the same. The 4 that differ are the intended remove rows.
+- Tester's `t13-manual.mjs`: identical to fix 2.
+- Tester's `t7-fix1.mjs`: 84 rows, 0 action changes (only id printing, random fills and reply truncation differ).
+- Tester's `t1-words.mjs` (105 phrases): 0 action differences beyond id printing, and the same steps and Undo on every row. The one changes row that differs is a random melody note count.

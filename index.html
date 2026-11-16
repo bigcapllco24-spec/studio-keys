@@ -4734,6 +4734,8 @@ function brainCore(raw,sws){
   { const ms=muteSoloFix(t); if(ms) return ms; }
   { const q=quantizeFix(t); if(q) return q; }
   { const FXRE=/\b(reverb|delay|echo|sidechain|side chain|pump|compress(?:ion|or)?|drive|saturation|distortion|width|wider|stereo|low ?cut|high ?cut|effects|fx)\b/g, fxs=[...t.matchAll(FXRE)].map(m=>m[1]), tr=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
+    /* "remove the melody, no reverb": the clause that names the melody removes it; the effect half has no part left, so it is skipped and the reply says so (QA, 16 Nov) */
+    if(fxs.length&&tr&&typeof removesPart==='function'){ const T=findTrack(tr); if(removesPart(t,{role:tr,name:T&&T.name})) return {actions:[{type:'remove',track:tr}],reply:done=>done.length?`${done.join('. ')}. I skipped the ${fxs[0]} change, because that part is gone.`:''}; }
     if(fxs.length&&tr&&/\b(add|put|more|less|on|to|give|use|some|turn|set|at|make|from|off|remove|kill|take|rid|drop|lose|no|without)\b/.test(t)){ const T=findTrack(tr), A=[], seen=new Set();
       /* each effect reads the half of the sentence about it ("set the reverb on the chords to 20% and add some delay": reverb 20, delay a step up).
          A number sets it exactly; remove/kill/take off/no turns it off; less/more step it; "add some X" never lowers X (42% stays 42% + a step, QA 16 Nov) */
@@ -5349,12 +5351,32 @@ function fxClause(text,k,tr){ const re=FX_WORDS[k]; if(!re) return null; const s
 /* "add some reverb" / "more delay": raise it, never lower it. Not when a number, set, less, too wet or dry was said for it. */
 function fxAddOnly(c){ return !!c&&/\b(add|more|some|extra|boost|increase|zyada|jyada)\b/.test(c)&&!/\d|\b(set|less|lower|reduce|down|remove|no|cut|kam|too|dry|drier|off|kill|drop)\b/.test(c); }
 /* "remove the reverb from the chords", "take the delay off the bass", "kill the reverb", "no reverb on the chords": the effect word, else null */
-function fxOffSaid(text,t){ const FXW='reverb|verb|delay|echo|sidechain|side chain|compression|compressor|drive|saturation|distortion|width|low ?cut|high ?cut|effects?|fx';
+function fxOffSaid(text,t){ const r=fxPartSaid(text,t); return r&&r.fx||null; }
+/* a clause aims remove/delete/get rid of at part t itself ("remove the melody and turn off the reverb"): the part goes, the effect clause doesn't stop it */
+function removesPart(text,t){ const r=fxPartSaid(text,t); return !!(r&&r.aimed); }
+function fxPartSaid(text,t){ const FXW='reverb|verb|delay|echo|sidechain|side chain|compression|compressor|drive|saturation|distortion|width|low ?cut|high ?cut|effects?|fx';
   const R1=new RegExp('\\b(?:remove|take off|take out|kill|lose|drop|get rid of|turn off|switch off|delete|no|without)(?: the| any| all the| all| my| that)? ('+FXW+')\\b'), R2=new RegExp('\\btake (?:the |all the |that )?('+FXW+') (?:off|out)\\b');
-  const RW=typeof ROLE_WORDS!=='undefined'?ROLE_WORDS:[], part=c=>RW.find(([k,re])=>re.test(c));
-  for(const c of String(text||'').toLowerCase().split(/\s*(?:[,;.]|\band then\b|\bthen\b|\band\b|\bbut\b|\balso\b)\s*/)){ const m=(' '+c+' ').match(R1)||(' '+c+' ').match(R2); if(!m) continue;
-    /* the clause names this part, or no part at all ("remove the reverb"); "remove the drums and no reverb on the bass" still removes the drums */
-    const p=part(' '+c+' '); if(!t||!p||p[0]===t.role||(t.name&&c.includes(t.name.toLowerCase()))) return m[1]==='verb'?'reverb':m[1]; }
+  const RW=typeof ROLE_WORDS!=='undefined'?ROLE_WORDS:[], part=c=>RW.find(([k,re])=>re.test(c)), off=c=>{ const m=(' '+c+' ').match(R1)||(' '+c+' ').match(R2); return m?(m[1]==='verb'?'reverb':m[1]):null; };
+  const cl=String(text||'').toLowerCase().split(/\s*(?:[,;.]|\band then\b|\bthen\b|\band\b|\bbut\b|\balso\b)\s*/).filter(x=>x.trim());
+  /* the clause that names THIS part decides (QA, 16 Nov: "remove the melody and turn off the reverb" kept the melody):
+     "remove/delete/get rid of the melody" removes it; "remove the reverb from the chords" turns the effect off. A half with no verb ("…and the bass") reads with the half before it. */
+  if(t){ const rre=(RW.find(([r])=>r===t.role)||[])[1], nm=t.name&&t.name.length>2?t.name.toLowerCase():null, names=c=>!!(rre&&rre.test(' '+c+' ')||nm&&c.includes(nm));
+    const VERB=/\b(remove|delete|kill|lose|drop|get rid|take|turn|switch|no|without|cut|mute|add|make|put|give|set)\b/, RM=/\b(remove|delete|kill|lose|drop|get rid of|take out|take off|take away|bin|scrap|ditch|clear|erase)\b/;
+    let named=false;
+    for(let i=0;i<cl.length;i++){ if(!names(cl[i])) continue; named=true; let c=cl[i];
+      /* "delete the drums and the bass": the verbless half borrows the verb of the half before it */
+      if(!VERB.test(c)) for(let j=i-1;j>=0;j--){ const v=cl[j].match(/\b(remove|delete|kill|lose|drop|get rid of|take out|take off|turn off|switch off|no|without|mute)\b/); if(v){ c=v[1]+' '+c; break; } if(VERB.test(cl[j])) break; }
+      const fw=off(c), p=part(' '+c+' ');
+      /* the remove verb is aimed at the part itself ("remove the melody", "delete the bass", "remove the melody without the reverb"), not at an effect on it */
+      const aimed=[...c.matchAll(new RegExp(RM.source,'g'))].some(m=>{ const after=c.slice(m.index+m[0].length).replace(/^\s*((the|my|that|this|those|these|all|whole|entire|current|new)\s+)*/,'');
+        const pm=rre&&after.match(new RegExp('^'+rre.source.replace(/^\\b/,'')))||nm&&after.startsWith(nm)&&[nm]; if(!pm) return false;
+        /* "remove the chords reverb", "remove the melody's reverb": the effect is the object, not the part */
+        return !new RegExp("^(['’]s|s['’])?\\s*("+FXW+")\\b").test(after.slice(pm[0].length)); });
+      if(aimed) return {aimed:true}; if(fw&&(!p||p[0]===t.role||names(c))) return {fx:fw};
+      const fx2=RM.test(c)&&(c.match(new RegExp('\\b('+FXW+')\\b'))||[])[1]; if(fx2) return {fx:fx2==='verb'?'reverb':fx2}; }
+    if(named) return null; }
+  /* no clause names this part: an effect-off clause that names no part at all ("remove the reverb") */
+  for(const c of cl){ const fw=off(c); if(fw&&!part(' '+c+' ')) return {fx:fw}; }
   return null; }
 function runActions(list){
   const done=[]; let changed=false; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();

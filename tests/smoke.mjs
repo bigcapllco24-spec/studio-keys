@@ -298,8 +298,12 @@ try {
       ch().fx.rev = 0.42; ai('add some reverb to the chords', [{ type: 'track_fx', track: 'chords', effect: 'reverb', amount: 40 }]); R.add = rv();
       ch().fx.rev = 0.42; await handleRequest('set the reverb on the chords to 20%'); R.basic = rv();
       await handleRequest('remove the reverb from the chords'); R.kept = !!ch(); R.off = ch() ? ch().fx.rev == null : null;
+      /* fix 3: a clause that names the part with remove/delete removes it, even next to "turn off the reverb" */
+      const has = r => PROJ.tracks.some(t => t.role === r);
+      runActions([{ type: 'add_melody', seed: 5202 }]); ai('remove the melody and turn off the reverb', [{ type: 'remove', track: 'melody' }, { type: 'fx', effect: 'reverb', amount: 0 }]); R.rmAI = !has('melody');
+      await handleRequest('delete the drums and kill the reverb'); R.rmBasic = !has('drums') && has('chords');
       return R; } finally { ASSIST.engine = eng; } });
-  ok('"set the chords reverb to 20 and add some delay" gives 20%, "add some reverb" still raises it, "remove the reverb from the chords" keeps the chords', g8.set === 20 && g8.add === 52 && g8.basic === 20 && g8.kept && g8.off, JSON.stringify(g8));
+  ok('"set the chords reverb to 20 and add some delay" gives 20%, "add some reverb" still raises it, "remove the reverb from the chords" keeps the chords, "remove the melody and turn off the reverb" removes the melody', g8.set === 20 && g8.add === 52 && g8.basic === 20 && g8.kept && g8.off && g8.rmAI && g8.rmBasic, JSON.stringify(g8));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
