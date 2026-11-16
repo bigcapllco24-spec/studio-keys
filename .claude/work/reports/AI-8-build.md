@@ -52,8 +52,8 @@ All five Basic-mode bugs are fixed, plus the typo words. `check.sh`: **CHECK OK,
 |---|---|---|
 | afro house beat | House, 909, 124 | Afro house drums, 118 BPM |
 | make an afro house groove with congas | House | Afro house drums + congas |
-| afro tech beat | nothing | Afro house |
-| deep tech beat | nothing | Tech house 126 |
+| afro tech beat | afro (already right) | Afro house |
+| deep tech beat | default house beat | Tech house 126 |
 | lofi house beat | Lo-fi 80 | Deep house 120 |
 | lofi hip hop beat | "Lofi Girl-style", ref saved | Lo-fi 80, Hip-hop kit, no ref |
 | melodic techno / minimal techno / uk garage beat | right | still right |
