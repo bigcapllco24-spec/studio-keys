@@ -305,8 +305,7 @@ async function keepLastSong(){ const L=LAST_PROJ, cur=PROJ, gone=store.get('deta
     if(typeof undoReset==='function') undoReset(); }
 }
 /* deleting the song you're in (QA, 16 Nov: it came back with the next autosave): it stays open but isn't saved again
-   until you change something; DETACH remembers it, also across a reload (store 'detached') */
-let DETACH=null;
+   until you change something; DETACH (declared in studio.js) remembers it, also across a reload (store 'detached') */
 const detachedNow=()=>!!DETACH&&PROJ.id===DETACH.id&&snapState()===DETACH.snap;
 function detachCheck(){ if(DETACH&&!detachedNow()){ DETACH=null; store.set('detached',null); } }
 async function saveNamed(quiet){

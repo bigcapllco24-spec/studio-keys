@@ -206,6 +206,16 @@ try {
         const bpm0 = CTRL.bpm; await handleRequest(s); loopStop(); R[s] = { bpm: CTRL.bpm - bpm0, back: drums().recipe.back }; }
       return R; } finally { ASSIST.engine = eng; } });
   ok('"faster" about a part keeps the tempo, "add a snare roll" keeps the clap', n23['make the bass faster'].bpm === 0 && n23['faster chords'].bpm === 0 && n23['make it faster'].bpm === 5 && n23['add a snare roll'].back !== 'snare' && n23['add a snare'].back === 'snare', JSON.stringify(n23));
+  // UX-12: Save a copy starts its own history; Undo in the copy never touches the original (in the songs list too)
+  const cu = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)), rec = async k => { const r = await IDB.get(k, 'projects'); return r ? JSON.stringify([r.name, r.bpm, r.tracks, r.savedAt, r.proj.tracks.map(t => t.events.length)]) : null; };
+    await newSong('Smoke original'); runActions([{ type: 'add_drums', style: 'house', seed: 5170 }]); await W(150); runActions([{ type: 'add_bass', seed: 5171 }]); const oid = PROJ.id; await saveCopy(); await W(200); const o0 = await rec(oid);
+    for (let i = 0; i < 4; i++) { PROJ.tracks[0].events.push({ b: i / 2, d: 0.25, n: 40 + i, v: 0.8 }); saveProject(); await W(150); }
+    for (let i = 0; i < 7; i++) { undo(); await W(150); } await W(1800); return { same: o0 === await rec(oid), id: PROJ.id !== oid, name: PROJ.name, n: PROJ.tracks.length }; });
+  ok('Undo after Save a copy never touches the original', cu.same && cu.id && cu.name === 'Smoke original (copy)' && cu.n === 2, JSON.stringify(cu));
+  // UX-12: a tempo typed in the BPM box is one undo step; Undo and Redo restore it exactly
+  const tb = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); await newSong('Smoke tempo box'); runActions([{ type: 'add_drums', style: 'house', seed: 5180 }]); await W(150); runActions([{ type: 'tempo', bpm: 88 }]); await W(150); runActions([{ type: 'add_chords', seed: 5181 }]); await W(150);
+    const s0 = UNDO.stack.length, el = $('#bpm'); el.value = '96'; el.dispatchEvent(new Event('change')); const steps = UNDO.stack.length - s0; undo(); const u = [CTRL.bpm, PROJ.tracks.length]; redo(); return { steps, u, r: [CTRL.bpm, PROJ.tracks.length] }; });
+  ok('BPM box change is one undo step', tb.steps === 1 && tb.u.join() === '88,2' && tb.r.join() === '96,2', JSON.stringify(tb));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

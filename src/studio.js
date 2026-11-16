@@ -9,7 +9,7 @@ let PROJ=LAST_PROJ&&!(LAST_PROJ.tracks||[]).length&&!LAST_PROJ.sections?LAST_PRO
 function dropTakeVoices(p){ if(p&&p.tracks) p.tracks=p.tracks.filter(t=>!(t.kind==='audio'&&/-voice$/.test(t.take||''))); return p; }
 dropTakeVoices(PROJ); if(LAST_PROJ) dropTakeVoices(LAST_PROJ);
 const AUD=new Map();
-let projSaveT=0;
+let projSaveT=0, DETACH=null; /* DETACH: the open song was deleted from the list and isn't saved until it changes (daw.js) */
 function serialize(p){ return JSON.parse(JSON.stringify(p)); }
 /* an idle transport follows the song: tracks make it ready to play, no tracks make it empty again (UX-2) */
 function syncLoopState(){ if(LOOP.state==='empty'&&PROJ.tracks.length) LOOP.state='stopped'; else if(LOOP.state==='stopped'&&!PROJ.tracks.length) LOOP.state='empty'; }
