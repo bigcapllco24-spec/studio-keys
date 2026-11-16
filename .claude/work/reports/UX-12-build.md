@@ -41,3 +41,10 @@ Branch `preview-ux-12`, pushed: 106ae6c, 547aa3a. Working tree clean. Did not to
 - `tests/smoke.mjs` belongs to qa-tester. I added two lines because the brief asked.
 - Nothing to deploy: no Worker change and no new assistant actions.
 - Known limit: a song deleted while open and then changed comes back in the list under its old name. That is the chosen behaviour.
+
+## Fix 1 (16 Nov): Save after deleting the open song
+Commit 45adf4f on `preview-ux-12` (pushed).
+- `src/daw.js` `saveNamed`: an explicit save (Save button, assistant `save`) of a song deleted while open clears `DETACH` and `store('detached')`, then saves. Quiet saves (autosave, New song, Open song, Save a copy's first step, reload) still skip. It now returns true/false. A failed save sets `SAVE_FAIL` (cleared by the next good save). The toast uses the name of the record that was saved.
+- `src/actions.js` `save` (assistant-dev's file, one line, as the brief asked): it always calls `saveNamed(false)`. It replies `Saved “X”` unless the last save failed (then it says "Trying to save “X” again: last time this browser couldn’t (reason)") or the browser has no IndexedDB. `runActions` is synchronous, so a first-ever failure shows only in the toast ("Couldn’t save in this browser: …") and the header ("Not saved"). An AI-written `reply` from the Worker can still say "Saved" on its own. That is prompt territory.
+- `tests/smoke.mjs`: added "Save after deleting the open song saves it again".
+- Tested in headless Chrome. Make "Gone", autosave, then delete it: it is out of the list after 2.2 s. Click Save: it is back in IndexedDB, with the toast "Saved “Gone”", header "Saved 7:16 AM", and the flag cleared. Delete it again: a quiet save still skips it. Assistant `save`: reply "Saved “Gone”", toast shown, record back. After a reload, "Gone" is still saved (1 track). With `IDB.put` forced to fail: `saveNamed` returns false, the header says "Not saved", and the assistant's reply is the honest "Trying to save… couldn’t (quota)". Once storage works again, the next save works. No page errors. check.sh: CHECK OK, 50 smoke checks, at load 0.4, on the first run.

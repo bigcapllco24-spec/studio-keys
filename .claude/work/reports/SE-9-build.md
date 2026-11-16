@@ -38,3 +38,22 @@ Normal mixes measure identically (0.00 dB difference in peak, true peak and LUFS
 ## Known limits
 - Where AudioWorklet is missing (very old Safari), the soft-clip fallback rounds peaks above about -1.4 dBFS. Normal mixes would lose a fraction of a dB of peak there. Chrome, Firefox and Safari 14.1+ use the limiter.
 - CPU: the limiter costs about 100 multiply-adds per sample on loud material. That is small next to the reverb convolver.
+
+## Fix 1 (16 Nov, after the tester's branch check)
+Only `src/core.js` changed (plus the rebuilt `index.html`). The limiter worklet is untouched.
+- **Fallback renders were 192 samples late.** Renders keep the 4x soft clipper (it's the cleaner one) and now report its real delay. The delay is measured once per sample rate: an impulse goes through it in a tiny offline render (Safari's delay may differ from Chrome's, so we measure instead of hard-coding 192). If that can't be measured, the soft clip runs without oversampling and reports 0. `CEIL_LOOK=72` is the limiter look-ahead. `CEIL_LA` (used by `studio.js` for room at the end of a render) is now 512, the most delay any ceiling path may report. `studio.js` itself is unchanged.
+- **Click or gap at the live hand-over.** The live soft clip is now not oversampled and passes through a 72-sample DelayNode, so it lines up sample for sample with the limiter. The swap is a 6 ms crossfade that starts 40 ms after the limiter is connected, so its look-ahead buffer is already full. The old path is disconnected about 0.3 s later. If the worklet never loads (very old Safari), this unoversampled soft clip stays on for live play. Renders still use the 4x one.
+- `A.ceil` now has `worklet: true|false`. The smoke line's "live limiter on/soft clip" label still reads `A.ceil.latency`, which is now 72 on both paths. The tester could switch that label to `A.ceil.worklet`. It only affects the label, not the pass/fail result.
+
+Tests (headless Chrome, `file://`, seeded random, against `/tmp/qa-main-se-9`):
+| | lag vs main | impulse: reported / measured | max diff vs main (excl. last 256 wrap samples) | peak / RMS |
+|---|---|---|---|---|
+| Loop render, limiter | 0 | 72 / 72 | 0.0012 (main vs main: 0.0012) | -0.57 / -6.12 (main -0.57 / -6.12) |
+| Loop render, fallback (addModule rejected) | **0** (before: 192) | **192 / 192** (before: 0 / 192) | 0.013 (soft knee) | -0.69 / -6.12 |
+| Song span (beats 16-48), limiter | 0 | 72 / 72 | 0.023 (same as before this fix) | -0.58 / -6.40 |
+| Song span, fallback | **0** (before: 192) | 192 / 192 | 0.025 | -0.67 / -6.40 |
+
+Live hand-over: a fresh AudioContext with a steady 110 Hz tone through `liveCeiling()`, captured on the audio thread with an AudioWorklet tap. The tester's ScriptProcessor capture drops buffers in headless Chrome, and its control run without any ceiling showed jumps too. 6 runs at 0.5 amplitude and 6 runs at 1.3 (over the ceiling, so both paths are limiting during the swap): the max sample step was 0.0078 and 0.0204, exactly the tone's own step and the same as the direct control. Silent runs: none. The same test on the pre-fix build caught a 0.474 step at the swap.
+`check.sh`: SMOKE OK, 48 checks, CHECK OK. Ceiling line: peak -0.30 dBFS, TP -0.30 dBTP, 0 full-scale samples.
+
+Inter-sample note (ffmpeg reads -0.21 to -0.26 dBTP): I left it alone. A real improvement means 8x detection with a new, longer filter, which roughly doubles the limiter's cost while it's working and needs its own testing. The free alternative is a 0.1 dB safety margin inside the limiter, but that moves the extreme numbers the tester measured (to about -0.40 on our meter). If the lead wants stricter meters to read -0.3, the margin is one line: `ceil:CEIL*Math.pow(10,-0.1/20)` in `ceilingNode`.
