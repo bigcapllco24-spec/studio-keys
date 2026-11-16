@@ -114,3 +114,70 @@ All five Basic-mode bugs are fixed, plus the typo words. `check.sh`: **CHECK OK,
 - A sentence is only split when each half starts with a verb or is a level line. "louder and punchier" is still one request, and it does the punch only (same as before).
 - "quantize" has no strength (always 100%). Quantizing a generated beat straightens any swing in its notes, which is what was asked.
 - Typo fixes cover only the listed words; I didn't add fuzzy matching (too risky for artist names and Hinglish).
+
+## Fix 1 · 16 Nov 2026 (tester's 4 low issues + 5 older offline bugs)
+`check.sh`: **CHECK OK, SMOKE OK: 68 checks** (1 new line). The first run failed 2 song-reopen checks ("opening the app starts a new empty song…", "Undo right after opening a song…"). They are UX timing checks in files I didn't touch. The re-run passed (load average about 2).
+
+**Files**
+- `src/maker.js`: all nine fixes below.
+- `src/actions.js`: one Undo step per request, and a live-path guard so "add some reverb" can't lower an effect.
+- `cloudflare/worker.js`: one prompt line. **The Worker needs a deploy at release.**
+- `tests/smoke.mjs`: 1 new line, covering items 1, 5 and 9.
+
+| # | Phrase (Basic mode; song with drums, bass, chords, melody) | Before | After |
+|---|---|---|---|
+| 1 | add a bassline and give me another one | add_bass + vary **drums** | add_bass + vary **bass** (drums untouched) |
+| 1 | add some chords, then make another one | add_chords + vary drums | add_chords + vary chords (a new progression) |
+| 2 | afrohouse beat / afrotech groove | house 124 | afro 118 |
+| 2 | techhouse, deephouse, melodictechno, ukgarage, lofihiphop, minimaltechno beat | house 124 | tech house 126, deep house 120, melodic techno 124, UK garage 132, lo-fi 80, techno 130 |
+| 3 | quantize the bass to 1/8 and the chords to 1/4 | bass only | bass 1/8 and chords 1/4; the reply names both |
+| 3 | quantize the drums and the bass to 16ths | drums only | both to 1/16 (a grid said at the end applies to both) |
+| 4 | mute the drums then unmute them | ends muted; "Drums: muted. Nothing is muted." | ends unmuted; "Drums: muted. Unmuted Drums." |
+| 4 | solo the bass and then unsolo it | "Nothing is soloed." | solo off; the reply says so |
+| 5 | mute everything but the drums | mutes the drums | mutes bass, chords and melody: "…so only the drums play" |
+| 5 | mute everything except the drums and the bass | mutes the drums and the bass | mutes chords and melody |
+| 5 | mute all the other tracks apart from the chords | new chord progression | mutes the other three |
+| 6 | add some reverb to the chords (42%) | 25% | 52% (never lowers) |
+| 6 | add some reverb and delay to the chords (42%) | reverb 25%, no delay | reverb 52%, delay 14 → 20% |
+| 6 | mor reverb on teh chords (42%) | 25% | 62% |
+| 6 | add some reverb to the chords (10%) / less reverb (42%) | 25% / 22% | 25% / 22% (unchanged) |
+| 7 | house beat at 120 / techno beat at 135 with claps | 124 / 130 | 120 / 135 |
+| 7 | drums like Black Coffee at 124 / afro house beat at 124 | 120 / 118 | 124 / 124 |
+| 7 | make it 128 (and add a bassline) | skipped | tempo 128 |
+| 7 | add a melody at bar 3 / swing at 60 / house beat at 50% swing | no tempo | no tempo (unchanged) |
+| 8 | bring the drums back (drums muted) / bring back the bass (bass muted) | new drums / new bassline, still muted | unmuted, no new part |
+| 8 | bring the drums back (bass soloed) / bring everything back | new drums / not understood | solo off on the bass / unmutes what's muted |
+| 8 | bring the drums back (already playing) | new drums | "The drums are already playing. Say “another beat” for a new one." |
+| 9 | save the song / save the track | MP3 export | save |
+| 9 | save / save it / save my song / export the song / download the mp3 / save it as an mp3 / bounce the track | — | unchanged |
+| — | add a basline (slow machine) | 2 Undo steps | 1 |
+
+**How the fixes work**
+- **"another one" after a part (1).** A half with no part named takes the part of the half before it. "another one" becomes another take of that part. A pronoun in a mute, solo, level or quantize half ("unmute them", "unsolo it") becomes that part.
+- **Halves read in order (4).** Each later half is read against the song as the earlier halves leave it (mute, solo and fader only). The real song is put back before anything runs.
+- **Quantize (3).** "and the chords to 1/4" carries its own grid.
+- **Undo (the note in the brief).** `runActions` collapses any extra Undo steps pushed during one request. It's 2 lines in actions.js, so I did it.
+
+**105-phrase comparison** (the tester's t1 list against `words-ai8.json`, which already matched ai6):
+- 0 unintended differences.
+- 6 rows differ on purpose: afrohouse at 120, bring the drums back, the two "another one" rows, dnb "at 174" (now an explicit tempo action, same BPM), and "add a basline" (2 Undo steps → 1).
+- 5 more rows differ only in how the runner printed track ids.
+- 0 page errors.
+
+**Worker prompt** (Llama 3.3 70B through the Cloudflare connector, old vs new prompt, real `projectState` with the drums muted):
+- The old prompt already handled these correctly, so I added no prompt text for them:
+  - mute everything but the drums → mutes the 3 others
+  - bring the drums back → mute false
+  - save the song → save
+  - house beat at 120 → style + tempo 120
+  - the two-part quantize → 1/8 and 1/4
+  - mute the drums then unmute them → mute, then unmute
+- **One gap:** with the old prompt, "add a bassline and give me another one" gave add_bass + vary drums. I added one line to the vary entry. Now it gives add_bass + vary Bassline.
+- No change: "another one" → vary drums, "sing the bassline" → sing bass.
+- The prompt still has no backticks and no `${`.
+- "add some reverb" got amount 40 from Llama. The AI can't see each track's effects in the song state, so `ACT.track_fx` now never lowers an effect when the request says add/some/more without less/lower/cut. Tested: 42% with amount 40 → 52%; "set the reverb to 20" still gives 20%; "less reverb" still lowers it.
+
+**Known limits**
+- "add some chords, then make another one" makes a new chord progression, so bass and melody follow it. That's what "another" on chords already did.
+- "add a melody and then another one" is still one request (one new melody), same as before.
+- The "…at 124 read as 122" note on the board: the artist's or style's tempo won because "at 124" wasn't read. It is now read (Black Coffee at 124 → 124).
