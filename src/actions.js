@@ -232,8 +232,10 @@ const ACT={
 function runActions(list){
   const done=[]; let changed=false; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
   /* done.segs[i]: which half of a two-part sentence each result came from (offline "mute the drums and solo the bass") */
-  done.segs=[];
+  done.segs=[]; const u0=typeof UNDO!=='undefined'?UNDO.stack.length:-1;
   for(const raw of list||[]){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; try{ const r=ACT[a.type](a); if(r){ done.push(r); done.segs.push(a.seg); changed=true; } }catch(e){ console.warn('action failed',a,e); } }
   if(changed){ saveProject(); renderTracks(); uiLoop(); }
+  /* one request is one Undo step, even when a slow machine saves the parts more than 120 ms apart (QA, 16 Nov: "add a melody" left 2 steps) */
+  if(u0>=0&&UNDO.stack.length>u0+1){ UNDO.stack.splice(u0+1); if(typeof undoButtons==='function') undoButtons(); }
   return done;
 }
