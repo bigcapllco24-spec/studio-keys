@@ -278,6 +278,16 @@ try {
   ok('Basic mode: afro house is afro, lofi hip hop is lo-fi with no artist, "like Black Coffee" stays Black Coffee', a8.afro === 'afro' && a8.lofi === 'lofi/' && a8.ref === 'Black Coffee', `${a8.afro}, ${a8.lofi}, ${a8.ref}`);
   ok('Basic mode: unsolo / un-mute / "remove the solo" / "unmute everything"; two requests in one sentence both run (one Undo)', a8.unsolo && a8.unmute && a8.both && a8.clear && a8.fx && a8.undo1 === 1, JSON.stringify(a8));
   ok('Basic mode: "quantize my melody to 1/8" snaps your own part to 1/8 and adds no track', a8.q === '0,1/5', a8.q);
+  // AI-8 fix 1: "another one" after adding a part varies that part, "mute everything but the drums", "save the song" saves (no MP3)
+  const f8 = await E(async () => { const eng = ASSIST.engine, R = {};
+    try { ASSIST.engine = null;
+      await newSong('Smoke AI-8 fix'); runActions([{ type: 'add_drums', style: 'house', seed: 5190 }, { type: 'add_bass', seed: 5191 }, { type: 'add_chords', seed: 5192 }]); loopStop();
+      const tr = r => PROJ.tracks.find(t => t.role === r);
+      R.another = localBrain('add a bassline and give me another one').actions.map(a => a.type + ':' + (a.track || '')).join();
+      await handleRequest('mute everything but the drums'); R.but = !tr('drums').mute && tr('bass').mute && tr('chords').mute;
+      R.save = localBrain('save the song').actions.map(a => a.type).join();
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('Basic mode: "add a bassline and give me another one" varies the bass, "mute everything but the drums" mutes the rest, "save the song" saves', f8.another === 'add_bass:,vary:bass' && f8.but && f8.save === 'save', JSON.stringify(f8));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
