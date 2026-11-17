@@ -99,15 +99,18 @@ async function extract(){
   if(i1-i0<sr*0.3){ labStatus('Select at least half a second.'); return; }
   const L=buf.getChannelData(0).slice(i0,i1), R=buf.numberOfChannels>1?buf.getChannelData(1).slice(i0,i1):L.slice();
   const stem=$('#isStem').checked, fsel=$('#focusSel').value, focus=fsel==='auto'?el.focus:fsel;
+  if(peakOf(L)<LAB_SILENT && peakOf(R)<LAB_SILENT){ labSilent(); return; }
   const btn=$('#extractBtn'); btn.disabled=true; const t0=performance.now();
   try{
     labStatus(`Separating the ${el.label.toLowerCase()}…`); await nextFrame();
     let iso;
-    if(stem){ iso=new Float32Array(L.length); let pk=0; for(let i=0;i<L.length;i++){ iso[i]=(L[i]+R[i])*0.5; pk=Math.max(pk,Math.abs(iso[i])); } if(pk>0) for(let i=0;i<iso.length;i++) iso[i]*=0.89/pk; }
+    let isoGain=1;
+    if(stem){ iso=new Float32Array(L.length); let pk=0; for(let i=0;i<L.length;i++){ iso[i]=(L[i]+R[i])*0.5; pk=Math.max(pk,Math.abs(iso[i])); } if(pk>0){ isoGain=0.89/pk; for(let i=0;i<iso.length;i++) iso[i]*=isoGain; } }
     else iso=await SEPARATION_ENGINES[activeEngine].run(L,R,sr,{focus,comp:el.comp,lo:el.lo,hi:el.hi,maskPow:el.maskPow});
     labStatus(`Finding a clean ${el.kind==='drum'?'hit':'note'}…`); await nextFrame();
     const pick=el.kind==='drum'?pickDrumHit(iso,sr,el):pickTonalNote(iso,sr,el);
     const slice=iso.slice(pick.start,pick.end);
+    if(peakOf(slice)/isoGain<LAB_SILENT){ btn.disabled=false; labSilent(); return; }
     const fi=Math.min(slice.length,Math.round(0.002*sr)), fo=Math.min(slice.length,Math.round(0.03*sr));
     for(let i=0;i<fi;i++) slice[i]*=i/fi; for(let i=0;i<fo;i++) slice[slice.length-1-i]*=i/fo;
     let pk=0; for(let i=0;i<slice.length;i++) pk=Math.max(pk,Math.abs(slice[i])); if(pk>0) for(let i=0;i<slice.length;i++) slice[i]*=0.9/pk;
@@ -122,9 +125,18 @@ async function extract(){
 }
 $('#extractBtn').onclick=extract;
 
+/* A part whose peak is below about -50 dBFS is treated as silence: no instrument is made from it. */
+const LAB_SILENT=Math.pow(10,-50/20);
+function peakOf(x){ let pk=0; for(let i=0;i<x.length;i++){ const a=x[i]<0?-x[i]:x[i]; if(a>pk) pk=a; } return pk; }
+function labSilent(){
+  LAB.res=null; $('#result').hidden=true; $('#resultEmpty').hidden=false;
+  $('#addSampler').disabled=true; $('#addSynth').disabled=true;
+  labStatus('That part is silent — pick a section with sound.');
+}
 function renderResult(){
   const r=LAB.res, an=r.an, el=r.el, tonal=el.kind==='tonal';
   $('#resultEmpty').hidden=true; $('#result').hidden=false;
+  $('#addSampler').disabled=false; $('#addSynth').disabled=false;
   const short=r.song.replace(/\.[a-z0-9]+$/i,'');
   $('#resTitle').textContent=`${el.label} from “${short}”`;
   const focusTxt={center:'center of the mix',sides:'sides of the mix',all:'whole stereo field'}[r.focus];

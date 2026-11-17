@@ -76,10 +76,10 @@ function holdParam(p,t,c){
 }
 const LIVE=new Set();
 class Voice{
-  constructor(c,dest){ this.c=c; this.amp=c.createGain(); this.amp.connect(dest); this.srcs=[]; this.ended=0; this.rel=0.2; this.oneShot=false; this.stopT=Infinity; this.done=false; this.released=false; if(c===A.ctx) LIVE.add(this); }
+  constructor(c,dest){ this.c=c; this.amp=c.createGain(); this.amp.connect(dest); this.srcs=[]; this.ended=0; this.rel=0.2; this.oneShot=false; this.stopT=Infinity; this.done=false; this.released=false; this.wheel=c===A.ctx&&A.wheelLive>0; if(c===A.ctx) LIVE.add(this); }
   src(node){
     this.srcs.push(node);
-    if(this.c===A.ctx && node.detune){ try{ A.bend.connect(node.detune); A.vibGain.connect(node.detune); node._mod=true; }catch(e){} }
+    if(this.wheel && node.detune){ try{ A.bend.connect(node.detune); A.vibGain.connect(node.detune); node._mod=true; }catch(e){} }
     node.onended=()=>{ if(++this.ended>=this.srcs.length) this.cleanup(); };
     return node;
   }
@@ -93,6 +93,9 @@ class Voice{
     LIVE.delete(this); if(this.onEnd) this.onEnd();
   }
 }
+/* The pitch and mod wheels belong to the notes played live (keys, pads, controller), never to the song,
+   the looper or offline renders: only voices made inside playLive() are wired to A.bend / A.vibGain. */
+function playLive(inst,c,dest,n,v,t){ A.wheelLive=(A.wheelLive||0)+1; try{ return inst.play(c,dest,n,v,t); } finally{ A.wheelLive--; } }
 function osc(c,type,f,det=0){ const o=c.createOscillator(); o.type=type; o.frequency.value=f; o.detune.value=det; return o; }
 function gainN(c,v=1){ const g=c.createGain(); g.gain.value=v; return g; }
 function filt(c,type,f,q=0.7){ const b=c.createBiquadFilter(); b.type=type; b.frequency.value=f; b.Q.value=q; return b; }

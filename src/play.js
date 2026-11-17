@@ -11,7 +11,7 @@ function noteOn(note,vel,src,opt={}){
   const old=active.get(key); if(old){ old.kill(now); active.delete(key); LOOP.capOff(key); }
   let n=opt.pitch!=null?opt.pitch:note; if(zone==='keys' && !inst.percussive) n+=CTRL.transpose;
   const v=clamp((CURVES[CTRL.curve]||CURVES.linear)(vel/127),0.02,1);
-  let voice; try{ voice=inst.play(c,zoneDest(zone),n,v,now); }catch(e){ console.error(e); return; }
+  let voice; try{ voice=playLive(inst,c,zoneDest(zone),n,v,now); }catch(e){ console.error(e); return; }
   if(!voice) return;
   voice.capKey=key;
   voice.onEnd=()=>{ if(active.get(key)===voice) active.delete(key); sustained.delete(voice); A.openHats.delete(voice); };
