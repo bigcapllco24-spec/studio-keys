@@ -206,6 +206,15 @@ try {
         const bpm0 = CTRL.bpm; await handleRequest(s); loopStop(); R[s] = { bpm: CTRL.bpm - bpm0, back: drums().recipe.back }; }
       return R; } finally { ASSIST.engine = eng; } });
   ok('"faster" about a part keeps the tempo, "add a snare roll" keeps the clap', n23['make the bass faster'].bpm === 0 && n23['faster chords'].bpm === 0 && n23['make it faster'].bpm === 5 && n23['add a snare roll'].back !== 'snare' && n23['add a snare'].back === 'snare', JSON.stringify(n23));
+  // SE-10: the pitch and mod wheels move only the notes you play live, never the song's notes
+  const wh = await E(() => { ensureAudio(); loopStop(); runActions([{ type: 'add_bass', seed: 5170 }]); loopStop(); const tr = PROJ.tracks.find(t => t.role === 'bass'), inst = INST.get(tr.inst), seen = [], of = Voice.prototype.src;
+    Voice.prototype.src = function (n) { const r = of.call(this, n); seen.push(n); return r; };
+    try { scheduleEvent(tr, { n: 45, v: 0.8 }, A.ctx.currentTime + 0.05, 0.2); const songN = seen.length, songWired = seen.filter(n => n._mod).length; seen.length = 0;
+      noteOn(57, 100, 'kb', { inst }); const liveWired = seen.filter(n => n._mod).length; noteOff(57, 'kb'); return { songN, songWired, liveWired }; } finally { Voice.prototype.src = of; } });
+  ok('pitch and mod wheels bend the notes you play, not the song', wh.songN > 0 && wh.songWired === 0 && wh.liveWired > 0, `song ${wh.songWired}/${wh.songN} wired, live ${wh.liveWired} wired`);
+  // SE-10: the Sound Lab refuses a silent part
+  const ls = await E(async () => { const buf = new AudioBuffer({ length: 44100 * 2, sampleRate: 44100, numberOfChannels: 2 }); setSong(buf, 'silence.wav', [0, 2]); await extract(); return { st: $('#labStatus').textContent, add: $('#addSampler').disabled, res: !!LAB.res }; });
+  ok('Sound Lab says a silent part is silent and keeps Add off', /silent/i.test(ls.st) && ls.add && !ls.res, ls.st);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
