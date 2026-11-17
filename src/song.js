@@ -221,12 +221,13 @@ function songTick(now,ahead){
 }
 /* QA, 17 Nov: the looped section was moved or resized while it played (or the sections before it changed), so the loop
    range moved under the playhead. Stay in the same spot of the looped section; if that spot is gone (Shorter), go back to
-   the loop's start. Playing from before the loop still plays into it; deleting the looped section ends the loop (as before). */
+   the loop's first bar at the same point in the bar, so the groove doesn't stumble. Playing from before the loop still plays
+   into it; deleting the looped section ends the loop (as before). */
 function songLoopFollow(t,s){ const lr=songLoopRange(), pl=SONG.lr; SONG.lr=lr;
   if(!lr||!pl||(lr[0]===pl[0]&&lr[1]===pl[1])||!SONG.segs.length) return;
-  const g=SONG.segs[SONG.segs.length-1], t0=Math.max(t,g.t), b=g.b+(t0-g.t)/s; let nb=null;
-  if(b>=pl[0]-1e-9&&b<pl[1]+1e-9){ const off=b-pl[0]; nb=off<lr[1]-lr[0]-1e-9?lr[0]+off:lr[0]; } /* was inside the loop */
-  else if(b<pl[0]&&b>=lr[1]-1e-9) nb=lr[0]; /* was heading into the loop, and the loop is now behind the playhead */
+  const g=SONG.segs[SONG.segs.length-1], t0=Math.max(t,g.t), b=g.b+(t0-g.t)/s, first=lr[0]+Math.min(mod(b-lr[0],4),lr[1]-lr[0]-1e-6); let nb=null;
+  if(b>=pl[0]-1e-9&&b<pl[1]+1e-9){ const off=b-pl[0]; nb=off<lr[1]-lr[0]-1e-9?lr[0]+off:first; } /* was inside the loop */
+  else if(b<pl[0]&&b>=lr[1]-1e-9) nb=first; /* was heading into the loop, and the loop is now behind the playhead */
   if(nb==null||Math.abs(nb-b)<1e-9) return;
   SONG.segs.push({t:t0,b:nb}); if(SONG.segs.length>4) SONG.segs.shift(); }
 function songSchedule(b0,b1,g,s){ const at=B=>g.t+(B-g.b)*s;
