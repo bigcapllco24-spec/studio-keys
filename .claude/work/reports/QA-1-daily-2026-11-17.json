@@ -1,0 +1,24 @@
+{
+ "bugs": [
+  {"area": "controller", "severity": "medium", "owner": "sound-engine-dev (src/core.js Voice.src), with studio-ux-dev for src/play.js",
+   "text": "The pitch wheel and mod wheel bend and wobble the whole playing song (drums and bass too), not just the notes you play on the keys.",
+   "steps": "1. Make a beat with a bassline and press Play. 2. Without pressing a key, push the controller's pitch wheel up, or move the mod wheel. Happens: the song's bassline goes 110.0 -> 123.5 Hz (+200 cents); mod wheel 127 makes it wobble 108.4-112.8 Hz; every scheduled drum voice is wired to the wheels. Expected: the wheels only affect the notes you play, like any DAW. Cause: Voice.src() connects every live-context voice, including the song's scheduled notes, to A.bend and A.vibGain."},
+  {"area": "studio", "severity": "medium", "owner": "studio-ux-dev (src/edit.js importFile)",
+   "text": "Importing a MIDI file that is longer than the song silently keeps only the first bars; the rest of the notes are deleted.",
+   "steps": "1. New song, type 'drums like Ben Böhmer' (4 bars). 2. Import (picker or drag-in) a 16-bar MIDI file (melody 64 notes, drums 96). Happens: toast 'Imported 2 MIDI tracks', but Melody has 16 of 64 notes and Drums 24 of 96; the song stays 4 bars; adding bars later doesn't bring them back. Expected: grow the song to fit (or offer to), or keep the notes and say only the first 4 bars play, as audio import does."},
+  {"area": "studio", "severity": "medium", "owner": "studio-ux-dev (src/song.js songTick)",
+   "text": "Song view: moving or shortening a looped section while it plays makes playback leave the loop, run to the end of the song and stop.",
+   "steps": "A: Full track, double-click Drop 2 to loop it, then drag Drop 2 to the start: the playhead carries on at bar 96 in 'Drop 3', plays to the end and stops; the label still says Drop 2. B: loop an 8-bar Drop, and in its second half choose Shorter (or drag its edge to 4 bars): the playhead is past the new end, plays the Outro and stops. Expected: playback stays in the looped section. Cause: songTick only wraps when crossing the loop end from inside (b0<lr[1]&&b1>lr[1])."},
+  {"area": "studio", "severity": "low", "owner": "studio-ux-dev (src/studio.js makeMp3 / makeSongMp3)",
+   "text": "Both MP3 downloads start 25 ms late (MP3 encoder delay), so they're off the grid in a DAW and the '1 loop' MP3 doesn't loop cleanly.",
+   "steps": "Download MP3 with '1 loop' (or a Song-mode MP3), decode it and line it up with the app's render: the audio is 1105 samples (25.1 ms) late in both; the 4-bar loop at 124 BPM is 7.784 s instead of 7.742 s. Expected: trim the encoder delay and padding (or write gapless info) so the file starts on the beat and is exactly the loop's length."},
+  {"area": "engine", "severity": "low", "owner": "sound-engine-dev (src/lab.js extract / addCustom)",
+   "text": "The Sound Lab makes an instrument out of silence and loads it on the keys, which then make no sound.",
+   "steps": "Sound Lab: load a silent file, Extract, Add as sampler. Happens: 'Lead synth from silence' (root not detected, noise 1.00); Add puts 'Lead synth · silence' on the rack and on the keys, which go silent. Expected: 'that part is silent, pick a section with sound', with Add disabled."}
+ ],
+ "ideas": [
+  {"area": "studio", "text": "Export the whole arrangement for Ableton: stems and MIDI of the song as laid out, each starting at bar 1, not just the 4-bar loop. In Song mode today the zip gives one loop and the MP3 is the only whole-song audio."},
+  {"area": "studio", "text": "On a computer, the first visit starts at Keys: scroll to Keys, or a one-line 'Tell Keys what you want' with 3 starter chips above the controller. On a 1366x768 laptop the first screen is the controller and a 'Sound off' pill; the Keys box is at y=974, below the fold."},
+  {"area": "studio", "text": "Tempo-match a dropped audio loop: detect its BPM and offer 'fit to 124 BPM' or 'set the song to 128'. Today imported audio plays at its own speed and is cut at the song's length, so a 128 BPM loop drifts against a 124 BPM beat."}
+ ]
+}
