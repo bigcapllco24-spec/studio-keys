@@ -250,7 +250,9 @@ function makeGroove(rec,L,seed){
     const openSteps=rec.open?(rec.hats==='8th'?[14]:[2,6,10,14]):[];
     closed.forEach(([s,v])=>{ if(openSteps.includes(s)) return; at(bar,s,42,v,0.12); });
     openSteps.forEach(s=>{ if(rec.hats==='8th'&&!(isFill||bar%2===1)) return; at(bar,s,46,(rec.hats==='8th'?0.6:0.7)*sh.hato[s],0.3); });
-    if(rec.shaker) for(let s=0;s<16;s++){ const v=s%2===1?0.55:0.3; if(E<=2&&s%2===0) continue; at(bar,s,44,v*sh.shaker[s],0.1); }
+    /* the RES-4 feel shapes the shaker itself (every 16th, the off-16ths soft); other feels keep the off-beat shaker */
+    if(rec.shaker&&F===FEELS.amh) for(let s=0;s<16;s++) at(bar,s,44,(E<=2?0.39:0.44)*sh.shaker[s],0.1);   /* same shaker energy as before */
+    else if(rec.shaker) for(let s=0;s<16;s++){ const v=s%2===1?0.55:0.3; if(E<=2&&s%2===0) continue; at(bar,s,44,v*sh.shaker[s],0.1); }
     if(rec.ride&&(E>=4||isB)) [2,6,10,14].forEach(s=>at(bar,s,51,0.5,0.4));
     /* percussion */
     percNotes.forEach((n,i)=>{ if(i>0&&!isB&&E<4) return; const p=isB?percB[n]:percPat[n]; for(let s=0;s<16;s++) if(p[s]==='x') at(bar,s,n,(0.55+r()*0.15)*sh.perc[s],0.15); });
