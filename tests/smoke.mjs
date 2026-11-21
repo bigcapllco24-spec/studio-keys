@@ -15,6 +15,8 @@ const b = await pc.launch({ executablePath: chrome, headless: 'new', args: ['--n
 const p = await b.newPage(); await p.setViewport({ width: 1400, height: 1100 });
 const errs = []; p.on('pageerror', e => errs.push(e.message));
 await p.evaluateOnNewDocument(() => { if (!sessionStorage.getItem('skSmoke')) { localStorage.clear(); sessionStorage.setItem('skSmoke', '1'); } }); // clear once, so the reload check keeps the last song
+await p.evaluateOnNewDocument(() => { window.__sr = []; class SR { start() { this.on = true; window.__sr.push(this); } stop() { this.end(); } abort() { this.end(); } end() { if (this.on) { this.on = false; setTimeout(() => this.onend && this.onend(), 10); } } }
+  window.SpeechRecognition = window.webkitSpeechRecognition = SR; }); // speech can't run headless: a fake recogniser that counts live ones
 const W = ms => new Promise(r => setTimeout(r, ms)), E = (f, ...a) => p.evaluate(f, ...a);
 try {
   await p.goto(target, { waitUntil: 'load', timeout: 60000 }); await W(2500);
@@ -125,6 +127,9 @@ try {
   ok('sing the bassline → bass track', sb && sb.n >= 4 && sb.lo < 60, sb ? `${sb.n} notes` : 'no track');
   ok('a sung part doesn\'t add your raw voice as an extra track', await E(() => !PROJ.tracks.some(t => t.kind === 'audio')));
   ok('your voice isn\'t played back live while you sing, and the mic turns off after', await E(() => window.__live === 0 && !MIC.on));
+  const lo = await E(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), cb = $('#asListen'); cb.click(); await w(1200); const on = MIC.on, tr = MIC.stream && MIC.stream.getTracks()[0];
+    cb.click(); cb.click(); cb.click(); await w(1200); return { on, off: !MIC.on && !MIC.pending, ended: !!tr && tr.readyState === 'ended', live: __sr.filter(r => r.on).length, orb: $('#asOrb').dataset.state }; });
+  ok('listening off (even off-on-off fast) releases the mic and leaves no recogniser running', lo.on && lo.off && lo.ended && lo.live === 0 && lo.orb === 'idle', JSON.stringify(lo));
   ok('humming isn\'t mistaken for talking', await E(() => !isSpeechy('la la la da da') && isSpeechy('add a bassline please')));
   // 6b. sung chords land on the beat, no repeats back to back, each at least a beat (UX-2)
   await E(() => { ASSIST.run('let me sing the chords'); }); await W(14500);
