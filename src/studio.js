@@ -162,7 +162,7 @@ function tick(){
   const c=A.ctx, now=c.currentTime, s=spb(), ahead=now+0.12;
   if(LOOP.state==='counting' && now>=TR.t0-0.004) beginAfterCount();
   if(LOOP.state==='recording' && LOOP.fixed && now>=TR.t0+LOOP.fixed*s) finalizeFirst();
-  if(LOOP.state==='take' && now>=TR.t0+PROJ.bars*4*s) TAKE.finish();
+  if(LOOP.state==='take' && !TAKE.ending && now>=TR.t0+PROJ.bars*4*s+TAKE.tail) TAKE.end();
   if(songOn() && LOOP.state==='playing'){ songTick(now,ahead); TR.schedT=ahead; return; }
   const b0=(TR.schedT-TR.t0)/s, b1=(ahead-TR.t0)/s;
   if(b1>b0){
@@ -230,7 +230,85 @@ function shapePart(notes,part,key){
       voice(chordOn(c.deg,k),55).forEach(n=>out.push({b:c.b,d:c.d,n,v:0.7})); }); ev=out; }
   return ev;
 }
-const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
+/* the take recorder (UX-10). An AudioWorklet copies the mic on the audio thread and stamps each block with its exact sample
+   frame, so a take has no holes however busy the page is. Before, ScriptProcessor blocks were placed by the clock time of
+   their callback; callbacks run late and in bursts, so the take had 3-16 ms holes of silence inside sung notes (and some
+   blocks twice), and audioToNotes split held notes in two ("a 1/16 stub, then the same note again"). Without worklets
+   (or if one can't load) a ScriptProcessor is the fallback: its blocks are written back to back from one start point,
+   jumping on only when a block was really dropped. The recording is moved earlier by the input and output latency, so a
+   note lands on the beat the singer heard, not when the sound reached the page. */
+const REC_CODE='registerProcessor("sk-rec",class extends AudioWorkletProcessor{constructor(){super();this.id=0;this.n=0;this.f=0;this.b=new Float32Array(1024);'+
+  'this.port.onmessage=e=>{const m=e.data;if(m.on){this.id=m.on;this.n=0;}else if(m.off){this.flush();this.id=0;}else if(m.drain){this.flush();this.port.postMessage({drained:m.drain});}};}'+
+  'flush(){if(!this.n)return;const d=this.b.slice(0,this.n);this.port.postMessage({id:this.id,f:this.f,d:d},[d.buffer]);this.n=0;}'+
+  'process(i){if(!this.id)return true;const x=i[0]&&i[0][0],L=x?x.length:128;if(this.n+L>this.b.length)this.flush();if(!this.n)this.f=currentFrame;'+
+  'if(x)this.b.set(x,this.n);else this.b.fill(0,this.n,this.n+L);this.n+=L;if(this.n>=this.b.length)this.flush();return true;}})';
+const TAKE_REC={node:null,kind:'',ctx:null,ready:null,chunks:[],id:0,on:false,
+  load(c){ if(this.ready&&this.ctx===c) return this.ready; this.ctx=c;
+    return this.ready=(async()=>{
+      try{ if(!c.audioWorklet||typeof AudioWorkletNode!=='function') throw new Error('no worklets');
+        /* a blob: url on the website (Safari wants that), a data: url when the page is opened as a local file */
+        const urls=[]; if(location.protocol!=='file:') urls.push(URL.createObjectURL(new Blob([REC_CODE],{type:'application/javascript'})));
+        urls.push('data:application/javascript;charset=utf-8,'+encodeURIComponent(REC_CODE));
+        let loaded=false, last=null; for(const u of urls){ try{ await c.audioWorklet.addModule(u); loaded=true; break; }catch(e){ last=e; } } if(!loaded) throw last||new Error('no worklet');
+        const n=new AudioWorkletNode(c,'sk-rec',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1],channelCount:1,channelCountMode:'explicit'});
+        n.port.onmessage=e=>{ const m=e.data; if(m.drained){ if(m.drained===this.id&&this.onDrained){ const f=this.onDrained; this.onDrained=null; f(); } return; } if(m.id===this.id) this.chunks.push({f:m.f,d:m.d}); };
+        this.node=n; this.kind='worklet'; }
+      catch(err){ /* fallback: back-to-back ScriptProcessor blocks. 16384 samples (about 0.34 s): Chrome drops or splices
+           4096-sample blocks when the page stalls for 100 ms or more (2-11 of 97 blocks in 9 s, measured with a stamped test
+           signal), and none of 16384 (fix 1). The cost is that the last block arrives up to 0.34 s after the take. */
+        const bs=16384, sp=c.createScriptProcessor(bs,1,1); this.bs=bs; let next=null, lags=[];
+        sp.onaudioprocess=e=>{ if(!this.on) return; const d=new Float32Array(e.inputBuffer.getChannelData(0)), est=Math.round(c.currentTime*c.sampleRate)-d.length;
+          if(next==null) next=est; lags.push(est-next); if(lags.length>6) lags.shift(); /* 6 blocks (2 s): a stalled page can run 4 callbacks in a row 0.28 s late */
+          const lag=Math.min(...lags); if(lags.length===6&&lag>d.length*0.75){ next+=lag; lags=lags.map(x=>x-lag); } /* a block really went missing: carry on from where the audio is now */
+          this.chunks.push({f:next,e:est,d}); next+=d.length; };
+        this.resetSP=()=>{ next=null; lags=[]; }; this.node=sp; this.kind='script'; }
+      const z=gainN(c,0); this.node.connect(z).connect(c.destination); return this.node; })();
+  },
+  start(){ this.chunks=[]; this.id++; this.on=true; if(this.resetSP) this.resetSP(); if(this.kind==='worklet') this.node.port.postMessage({on:this.id}); },
+  stop(){ if(!this.on) return; this.on=false; this.onDrained=null; if(this.kind==='worklet') this.node.port.postMessage({off:1}); },
+  /* resolves once every block recorded so far has reached the page: the worklet sends its last part-block, then a "drained"
+     reply, which comes after all its blocks (one port keeps the order). The fallback just waits two of its blocks. */
+  drain(){ if(!this.on) return Promise.resolve(); const id=this.id;
+    return new Promise(r=>{ const t=setTimeout(r,this.kind==='worklet'?500:Math.round(2*this.bs/this.ctx.sampleRate*1000)+20);
+      if(this.kind==='worklet'){ this.onDrained=()=>{ clearTimeout(t); r(); }; this.node.port.postMessage({drain:id}); } }); },
+  /* seconds between the sound of the beat leaving the page and the singer's voice coming back in */
+  latency(){ const c=this.ctx; let out=c&&isFinite(c.outputLatency)&&c.outputLatency>0?c.outputLatency:(c&&c.baseLatency)||0, inp=0.01;
+    try{ const s=MIC.stream&&MIC.stream.getAudioTracks()[0].getSettings(); if(s&&isFinite(s.latency)&&s.latency>0) inp=s.latency; }catch(_){}
+    return clamp(Math.min(out,0.3)+Math.min(inp,0.2),0,0.4); },
+  /* the take as one gapless buffer of len samples starting at the beat time t0 */
+  take(t0,len){ const c=this.ctx, sr=c.sampleRate, pcm=new Float32Array(len), got=new Uint8Array(len), f0=Math.round((t0+this.latency())*sr);
+    /* blocks go back to back; the audio clock only moves them when it is clearly ahead or behind (a block really
+       went missing), not for a wobble of a few hundred samples, which would cut a held note */
+    this.stop(); let pos=null, run=0, sign=0;
+    /* fallback: a callback can only run late, never early (its clock stamp is 0-5500 samples behind the audio, and exactly on
+       it every few blocks, measured with a stamped test signal). So each back-to-back run of blocks is moved by the smallest
+       gap between its clock stamps and its positions: the take lands on the beat even when the first callback was late. */
+    if(this.kind==='script'){ for(let a=0;a<this.chunks.length;){ let b=a+1; while(b<this.chunks.length&&this.chunks[b].f===this.chunks[b-1].f+this.chunks[b-1].d.length) b++;
+      let m=Infinity; for(let k=a;k<b;k++) m=Math.min(m,this.chunks[k].e-this.chunks[k].f); for(let k=a;k<b;k++) this.chunks[k].f+=m; a=b; } }
+    this.chunks.forEach(ch=>{ if(pos==null) pos=ch.f; const dr=ch.f-pos;
+      if(Math.abs(dr)>2048){ pos=ch.f; run=0; } else if(Math.abs(dr)>256){ const sg=Math.sign(dr); run=sg===sign?run+1:1; sign=sg; if(run>=8){ pos=ch.f; run=0; } } else run=0;
+      const off=pos-f0, a=Math.max(0,-off), b=Math.min(ch.d.length,len-off); if(b>a){ pcm.set(ch.d.subarray(a,b),off+a); got.fill(1,off+a,off+b); } pos+=ch.d.length; });
+    this.chunks=[];
+    /* when the audio clock skips (a busy or sleeping machine), a few ms never arrive: patch those short holes from the sound
+       around them. Only audio that never came is patched (UX-10 fix 1): blocks missing from the recorder, or a device dropout,
+       which zeroes out the middle of a waveform (cut off sharply on both sides). Silence that fades in and out is left alone:
+       a gating mic or interface gives that between staccato notes, and it is the music. The patched ranges go to audioToNotes. */
+    const first=got.indexOf(1), max=Math.round(0.06*sr), patched=[];
+    for(let i=first+1;first>=0&&i<len;i++){ if(got[i]) continue; let j=i; while(j<len&&!got[j]) j++;
+      if(j<len&&j-i<=max){ patchHole(pcm,i,j,sr); patched.push([i,j]); } i=j; }
+    for(let i=Math.max(1,first+1);first>=0&&i<len;i++){ if(pcm[i]!==0||pcm[i-1]===0) continue; let j=i; while(j<len&&pcm[j]===0) j++;
+      if(j<len&&j-i>=64&&j-i<=max){ let lp=0; for(let k=Math.max(0,i-256);k<i;k++) lp=Math.max(lp,Math.abs(pcm[k])); for(let k=j;k<Math.min(len,j+256);k++) lp=Math.max(lp,Math.abs(pcm[k]));
+        if(lp>0.003&&Math.abs(pcm[i-1])>0.15*lp&&Math.abs(pcm[j])>0.15*lp){ patchHole(pcm,i,j,sr); patched.push([i,j]); } } i=j; }
+    this.holes=patched.length; this.patched=patched; this.tailMs=Math.round((len-1-got.lastIndexOf(1))/sr*1000); return pcm; }
+};
+/* fill pcm[i..j) by carrying the waveform on from both sides, one pitch period at a time, and crossfading the two */
+function patchHole(x,i,j,sr){
+  const per=(at,dir)=>{ const W=Math.min(1024,dir<0?at:x.length-at), lo=Math.round(sr/1000), hi=Math.min(Math.round(sr/50),W>>1); let best=0, bl=0;
+    if(hi<=lo) return 0; for(let L=lo;L<=hi;L++){ let s=0,e=0; for(let k=0;k<W-L;k++){ const a=dir<0?x[at-1-k]:x[at+k], b=dir<0?x[at-1-k-L]:x[at+k+L]; s+=a*b; e+=a*a+b*b; } const r=e>0?2*s/e:0; if(r>best){ best=r; bl=L; } } return bl; };
+  const l=j-i, P=per(i,-1), Q=per(j,1);
+  for(let k=0;k<l;k++){ const w=(k+0.5)/l, a=P?x[i-P+(k%P)]:0, b=Q?x[j+(((k-l)%Q)+Q)%Q]:0; x[i+k]=P&&Q?a*(1-w)+b*w:P?a*(1-w):b*w; }
+}
+const TAKE={chunks:[],notes:[],open:null,part:'melody',tail:0.14,ending:false,
   async start(part){ this.part=PART_NAME[part]||part==='voice'?part:'melody';
     const c=ensureAudio(); if(!c) return;
     this.micByTake=!MIC.on; if(!MIC.on){ await micStart(); if(!MIC.on) return; }
@@ -239,28 +317,31 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     if(!PROJ.tracks.length){ PROJ.bars=PROJ.bars||4; }
     PROJ.tracks.forEach(t=>{ t.cyc=-1; t.events.forEach(e=>e.cyc=-1); });
     this.chunks=[]; this.notes=[]; this.open=null;
-    if(!this.proc){ this.proc=c.createScriptProcessor(1024,1,1); const z=gainN(c,0); this.proc.connect(z).connect(c.destination);
-      this.proc.onaudioprocess=e=>{ if(LOOP.state!=='take') return; const d=e.inputBuffer.getChannelData(0); this.chunks.push({t:c.currentTime-d.length/c.sampleRate-0.02,d:new Float32Array(d)}); }; }
-    try{ MIC.src.disconnect(this.proc); }catch(_){} MIC.src.connect(this.proc);
+    const rec=await TAKE_REC.load(c); if(!MIC.on||!MIC.src) return;
+    try{ MIC.src.disconnect(rec); }catch(_){} MIC.src.connect(rec); TAKE_REC.start();
     $('#micStatus').textContent=`Recording a take (${this.part}): ${PROJ.bars} bars after the count-in. Sing now.`;
     TAKE_GUIDE=this.part!=='voice'&&PROJ.tracks.some(t=>t.role==='drums'||(INST.get(t.inst)||{}).drums); refreshTrackGains();
     setOrb('listening',`Get ready: ${CTRL.countIn?'one bar count-in, then ':''}sing ${this.part==='bass'?'the bassline':this.part==='chords'?'one note per chord':this.part==='voice'?'your voice note':'the melody'}.`);
     countInto('take');
   },
-  begin(){ this.chunks=[]; lcd('TAKE · SING NOW'); const w={bass:'the bassline',chords:'one note per chord',melody:'the melody',voice:'your voice note'}[this.part]||'now';
+  begin(){ this.ending=false; this.tail=TAKE_REC.latency()+0.1; lcd('TAKE · SING NOW'); const w={bass:'the bassline',chords:'one note per chord',melody:'the melody',voice:'your voice note'}[this.part]||'now';
     setOrb('listening',`Sing ${w} now: ${PROJ.bars} bar${PROJ.bars>1?'s':''}. ${this.part==='voice'?'':'Only the drums play so I can hear you clearly.'}`); if(typeof showSung==='function'){ ASSIST.sung=[]; showSung(0,false); } },
   noteOn(n,v){ if(LOOP.state!=='take') return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60; this.noteOff(); this.open={n,v,b:Math.max(0,b)}; },
   noteOff(){ if(!this.open) return; const lag=0.07, b=(A.ctx.currentTime-lag-TR.t0)*CTRL.bpm/60, o=this.open; this.open=null; if(b-o.b>0.12) this.notes.push({b:o.b,d:b-o.b,n:o.n,v:o.v}); },
   releaseMic(){ if(this.micByTake&&!(ASSIST.listening&&ASSIST.hum)){ this.micByTake=false; try{ micStop(); }catch(e){} } },
   backSong(){ if(!this.backToSong) return; this.backToSong=false; songMode('song',{force:true}); },
-  cancel(){ setTimeout(()=>this.backSong(),0); this.releaseMic(); this.chunks=[]; this.notes=[]; this.open=null; TAKE_GUIDE=false; refreshTrackGains(); $('#micStatus').textContent='Take cancelled.'; setOrb(ASSIST.listening?'listening':'idle',idleText()); },
+  /* the take's window is moved later by the latency (the voice comes back late), so it ends latency() after the last beat:
+     wait that long plus 0.1 s, then for the recorder's last blocks, so a pickup on the last off-beat lands (UX-10 fix 1).
+     The loop and the drums go on on time; only the analysis waits. */
+  end(){ this.ending=true; const id=TAKE_REC.id;
+    TAKE_REC.drain().then(()=>{ if(!this.ending||LOOP.state!=='take'||TAKE_REC.id!==id) return; this.ending=false; this.finish(); }); },
+  cancel(){ this.ending=false; setTimeout(()=>this.backSong(),0); TAKE_REC.stop(); this.releaseMic(); this.chunks=[]; this.notes=[]; this.open=null; TAKE_GUIDE=false; refreshTrackGains(); $('#micStatus').textContent='Take cancelled.'; setOrb(ASSIST.listening?'listening':'idle',idleText()); },
   finish(){
-    this.noteOff(); const c=A.ctx, L=PROJ.bars*4, sec=L*spb(), sr=c.sampleRate, pcm=new Float32Array(Math.round(sec*sr));
-    this.chunks.forEach(ch=>{ const off=Math.round((ch.t-TR.t0)*sr); for(let i=0;i<ch.d.length;i++){ const j=off+i; if(j>=0&&j<pcm.length) pcm[j]=ch.d[i]; } });
+    this.noteOff(); const c=A.ctx, L=PROJ.bars*4, sec=L*spb(), sr=c.sampleRate, pcm=TAKE_REC.take(TR.t0,Math.round(sec*sr));
     let pk=0; for(let i=0;i<pcm.length;i++) pk=Math.max(pk,Math.abs(pcm[i])); if(pk>0.001){ const g=0.85/pk; for(let i=0;i<pcm.length;i++) pcm[i]*=g; }
     const q=0.25; let notes=this.notes.map(e=>({b:Math.round(e.b/q)*q,d:Math.max(q,Math.round(e.d/q)*q),n:e.n,v:clamp(e.v/127,0.4,1)})).filter(e=>e.b<L);
     /* the live pitch tracker runs a little behind the voice; the recording itself gives exact onsets */
-    if(this.part!=='voice'&&typeof audioToNotes==='function'){ try{ const det=audioToNotes(makeBuf(pcm,sr)), sb=spb();
+    if(this.part!=='voice'&&typeof audioToNotes==='function'){ try{ const det=audioToNotes(makeBuf(pcm,sr),{holes:TAKE_REC.patched}), sb=spb();
       if(det.length>=Math.min(2,notes.length||2)) notes=det.map(x=>({b:Math.round(x.t0/sb/q)*q,d:Math.max(q,Math.round((x.t1-x.t0)/sb/q)*q),n:x.n,c:x.c,v:clamp(x.v,0.45,1)})).filter(e=>e.b<L); }catch(e){ console.warn('take analysis',e); } }
     notes.sort((a,b)=>a.b-b.b); notes=notes.filter((e,i)=>!(i&&notes[i-1].b===e.b&&notes[i-1].n===e.n));
     for(let i=0;i<notes.length-1;i++){ if(notes[i+1].b===notes[i].b){ notes.splice(i+1,1); i--; continue; } if(notes[i].b+notes[i].d>notes[i+1].b) notes[i].d=notes[i+1].b-notes[i].b; }
@@ -285,13 +366,27 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     /* the raw recording is only used to find the notes; it isn't added as a track (owner, 13 Nov) */
     this.chunks=[]; this.notes=[];
     LOOP.state='playing'; refreshTrackGains(); saveProject(); renderTracks(); uiLoop();
-    this.backSong();
+    this.backSong(); if(mt) catchUpTrack(mt);
     const what=part==='chords'?`${new Set(notes.map(e=>e.b)).size} chords built on the notes you sang`:`${notes.length} notes`;
     $('#micStatus').textContent=`Take saved: ${what} on “${PART_NAME[part]}”. It’s playing back now.`;
     const outside=PROJ.key&&part!=='chords'?notes.filter(e=>!inKey(e.n,PROJ.key)).length:0, kept=outside?` (${outside} outside the key, kept as you sang ${outside>1?'them':'it'})`:'';
     ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''}${kept} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
   }
 };
+/* a track added while the loop plays (a finished take): the scheduler has already passed everything before TR.schedT, so
+   its notes there would be skipped on this pass (the take finishes 0.1-0.5 s into the next pass, UX-10 fix 2). Schedule the
+   ones still to come, and start a note that is still sounding late rather than drop it (a decaying instrument only when it
+   began under 0.08 s ago: a late piano hit sounds like a mistake). The scheduler plays the rest from TR.schedT as usual.
+   Loop mode only: going back to Song mode restarts the transport */
+function catchUpTrack(tr){
+  if(!A.ctx||!TR.running||!PLAYING.has(LOOP.state)||songOn()||!trackAudible(tr)||tr.kind==='audio') return 0;
+  const inst=INST.get(tr.inst), L=LOOP.L, s=spb(), now=A.ctx.currentTime, bNow=(now-TR.t0)/s, bS=(TR.schedT-TR.t0)/s; if(!inst||!(L>0)) return 0;
+  let n=0;
+  for(const e of tr.events) for(let k=Math.max(0,Math.ceil((bNow-e.b-e.d)/L-1e-9)); k*L+e.b<bS; k++){ if(e.cyc!=null&&k<=e.cyc) continue;
+    const B=k*L+e.b, T=TR.t0+B*s, end=T+e.d*s, t=Math.max(T,now+0.01); if(end-t<0.05) continue;
+    if(T<now&&inst.percussive&&now-T>0.08) continue; scheduleEvent(tr,e,t,end-t); n++; }
+  return n;
+}
 function makeBuf(pcm,sr){ const b=new AudioBuffer({length:Math.max(1,pcm.length),numberOfChannels:1,sampleRate:sr}); b.copyToChannel(pcm,0); return b; }
 
 

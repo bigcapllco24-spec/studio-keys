@@ -125,6 +125,26 @@ try {
     const t = PROJ.tracks.find(x => x.name === 'Long'), r = { bars: PROJ.bars, notes: t ? t.events.length : 0, last: t ? Math.max(...t.events.map(e => e.b)) : 0, toast: $('#toast').textContent };
     undo(); r.undoBars = PROJ.bars; r.undoTracks = PROJ.tracks.length; r.undoDrums = PROJ.tracks[0].events.length === n0; return r; });
   ok('long MIDI import keeps all notes and grows the loop (one Undo)', lm.bars === 16 && lm.notes === 64 && lm.last === 63 && /loop is now 16 bars/.test(lm.toast) && lm.undoBars === 4 && lm.undoTracks === 1 && lm.undoDrums, JSON.stringify(lm));
+  // QA, 15 Nov (UX-10 check): an imported bounce of "da da da" on one note with short digital silence between the notes
+  // (a gated synth bass, 20 and 40 ms gaps of exact zeros) keeps every note: those gaps are the music, not recording holes
+  const stc = await E(() => { const sr = 48000, R = {};
+    for (const gap of [0.02, 0.04]) { const nl = Math.round(0.2 * sr), gl = Math.round(gap * sr), x = new Float32Array(Math.round(0.3 * sr) * 2 + 8 * (nl + gl));
+      for (let k = 0, o = Math.round(0.3 * sr); k < 8; k++, o += nl + gl) for (let i = 0; i < nl; i++) { const t = i / sr, a = Math.min(1, i / 240, (nl - i) / 240); let s = 0; for (let h = 1; h < 6; h++) s += Math.sin(2 * Math.PI * 110 * h * t) / h; x[o + i] = 0.3 * a * s; }
+      R[gap * 1000 + ' ms'] = audioToNotes(makeBuf(x, sr)).length; }
+    return R; });
+  ok('import: 8 notes on one pitch with short exact-silence gaps stay 8 notes', Object.values(stc).every(n => n === 8), JSON.stringify(stc));
+  // QA, 15 Nov (UX-10 re-check): audio that is sound most of the time is still read. (a) 8 held notes sung with a short breath
+  // (1.8 of every 2 beats at 124 bpm, 0.1 s gaps, -54 dB noise floor), like a take where you hold each bass note; (b) a dense
+  // bounce: 32 notes of 0.2 s with 40 ms gaps and no silence before or after. The level gate must not sit above every frame
+  const dense = await E(() => { const sr = 44100, R = {}, s = 60 / 124, rnd = (k => () => (k = (k * 16807) % 2147483647) / 2147483647)(7);
+    const tone = (x, o, len, f, ramp) => { for (let i = 0; i < len; i++) { const t = i / sr, a = Math.min(1, i / ramp, (len - i) / ramp); let v = 0; for (let h = 1; h < 6; h++) v += Math.sin(2 * Math.PI * f * h * t) / h; x[o + i] += 0.3 * a * v; } };
+    const held = new Float32Array(Math.round(16 * s * sr)); for (let i = 0; i < held.length; i++) held[i] = (rnd() * 2 - 1) * 0.002;
+    [45, 48, 52, 43, 45, 50, 47, 40].forEach((n, k) => tone(held, Math.round(2 * k * s * sr), Math.round(1.8 * s * sr), 440 * Math.pow(2, (n - 69) / 12), Math.round(0.03 * sr)));
+    R.held = audioToNotes(makeBuf(held, sr)).length;
+    const nl = Math.round(0.2 * sr), gl = Math.round(0.04 * sr), loop = new Float32Array(32 * (nl + gl)), fs = [110, 110, 130.81, 130.81, 196, 196, 110, 110];
+    for (let k = 0; k < 32; k++) tone(loop, k * (nl + gl), nl, fs[k % 8], 240);
+    R.dense = audioToNotes(makeBuf(loop, sr)).length; return R; });
+  ok('held sung notes with short breaths, and a dense bounce, are still turned into notes', dense.held === 8 && dense.dense >= 28, `held ${dense.held}/8, dense ${dense.dense}/32`);
   // 6. sing a bassline over the beat (fake microphone sings C E G A C G)
   await E(() => newSong('Smoke sing')); await W(300);
   await E(() => { runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_chords' }]); window.__sayLog = []; const o = ASSIST.say; ASSIST.say = function (m, op) { window.__sayLog.push(m); ASSIST.say = o; return o.call(this, m, op); }; ASSIST.run('let me sing the bassline'); });
@@ -251,10 +271,11 @@ try {
   ok('song: sing the chords in Song mode → plays in the selected section like an added part, and one toast says so', sg.mode === 'song' && sg.sung === 'Intro' && sg.sung === sg.ref && /^“Sung chords” plays in Intro\. Click its empty parts/.test(sg.toast || '') && sg.n === 1, JSON.stringify(sg));
   const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
   await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(1500);
-  await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 15000 }).catch(() => {}); // keepLastSong is async: wait for it on a busy machine
+  // keepLastSong is async: wait for it on a busy machine (QA, 15 Nov: 15 s was too short under load 6-11 on 2 cores; the reopened song was the older copy)
+  const kt0 = Date.now(), kept = await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 45000 }).then(() => true, () => false), keptMs = Date.now() - kt0;
   const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null; try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r) await loadNamed(id);
     return { n0, name0, listed: !!r, name: PROJ.name, n: PROJ.tracks.length, s: songSections().length, label: $('#saveState').textContent }; }, before.id);
-  ok('song: opening the app starts a new empty song; the last one reopens from the list intact', rl.n0 === 0 && rl.listed && rl.name === 'Before reload' && rl.n === before.n && rl.s === before.s, `new song had ${rl.n0} tracks; reopened "${rl.name}" ${rl.n} tracks, ${rl.s} sections`);
+  ok('song: opening the app starts a new empty song; the last one reopens from the list intact', rl.n0 === 0 && rl.listed && rl.name === 'Before reload' && rl.n === before.n && rl.s === before.s, `new song had ${rl.n0} tracks; reopened "${rl.name}" ${rl.n} tracks, ${rl.s} sections; kept in the list after ${kept ? (keptMs / 1000).toFixed(1) + ' s' : 'no "New song" label in 45 s'}`);
   // QA, 13 Nov: after opening a song from the list, Undo must step back inside that song, never to the empty song opened before it
   const uo = await E(async () => { const s = songSections()[0], t = PROJ.tracks[0]; songSetPart(s.id, t.id, { on: !(s.parts[t.id] && s.parts[t.id].on) }); await new Promise(r => setTimeout(r, 200)); undo(); await new Promise(r => setTimeout(r, 200)); return { name: PROJ.name, n: PROJ.tracks.length, s: songSections().length }; });
   ok('song: Undo right after opening a song stays in that song', uo.name === 'Before reload' && uo.n === before.n && uo.s === before.s, `after one change + Undo: "${uo.name}" ${uo.n} tracks, ${uo.s} sections`);
@@ -381,6 +402,43 @@ try {
   const sa = await E(async () => { await newSong('Smoke sing alone'); runActions([{ type: 'add_drums', style: 'house', seed: 5200 }]); const d = runActions([{ type: 'add_chords' }, { type: 'add_bass' }, { type: 'sing', part: 'bass' }]);
     return { roles: PROJ.tracks.map(t => t.role).join(), take: BATCH.take, d: d.length }; });
   ok('a sung take stands alone (no made-up bassline next to "sing the bassline")', sa.roles === 'drums,chords' && sa.take === 'bass', JSON.stringify(sa));
+  // UX-10: 5 sung bass takes in a row on a busy page: the recording has no holes inside notes and no note comes out doubled
+  // (sing.wav never sings the same note twice in a row, and its own gaps are 100 ms of silence)
+  await E(() => newSong('Smoke takes')); await W(300);
+  await E(() => { runActions([{ type: 'add_drums', style: 'house' }]); setBars(2); loopStop(); window.__tk = [];
+    window.__a2n = audioToNotes; window.audioToNotes = function (buf, o) { const r = window.__a2n(buf, o), x = buf.getChannelData(0), sr = buf.sampleRate; let holes = 0;
+      for (let i = 1; i < x.length; i++) { if (x[i] !== 0 || x[i - 1] === 0) continue; let j = i; while (j < x.length && x[j] === 0) j++; const mid = (i + j) / 2 / sr;
+        if (j < x.length && j - i >= 0.002 * sr && j - i < 0.06 * sr && r.some(n => mid > n.t0 && mid < n.t1)) holes++; i = j; }
+      window.__tk.push({ holes, cut: TAKE_REC.tailMs }); return r; };
+    window.__busy = setInterval(() => { const t = performance.now() + 4 + Math.random() * 25; while (performance.now() < t); }, 35); });
+  for (let k = 0; k < 5; k++) { await E(() => ASSIST.run('let me sing the bassline'));
+    for (let i = 0; i < 40; i++) { await W(500); if (await E(n => window.__tk.length > n && LOOP.state !== 'take', k)) break; }
+    await E(n => { const t = PROJ.tracks.find(t => t.take === 'bass'), ev = t ? [...t.events].sort((a, b) => a.b - b.b) : [], r = window.__tk[n];
+      if (r) { r.n = ev.length; r.dbl = ev.filter((e, i) => i && e.n === ev[i - 1].n).length; } loopStop(); }, k); await W(400); }
+  const tk = await E(() => { clearInterval(window.__busy); window.audioToNotes = window.__a2n; return window.__tk; });
+  ok('5 sung basslines in a row: no holes in the recording, no doubled notes', tk.length === 5 && tk.every(r => r.n >= 4 && !r.holes && !r.dbl), tk.map(r => `${r.n} notes/${r.dbl} doubled/${r.holes} holes`).join(', '));
+  // QA, 15 Nov (UX-10 re-check): the take waits for the recorder's last blocks, so its end isn't cut
+  ok('a sung take\'s last beat is recorded to the end (no audio cut at the end)', tk.length === 5 && tk.every(r => r.cut === 0), tk.map(r => `${r.cut} ms`).join(', '));
+  // QA, 15 Nov (UX-10 re-check): Stop pressed after the last beat, while the take waits for its tail, cancels it cleanly
+  const stp = await E(async () => { const before = JSON.stringify(PROJ.tracks.map(t => [t.name, t.events.length])); let fin = 0; const f = TAKE.finish; TAKE.finish = function () { fin++; return f.apply(this, arguments); };
+    try { ASSIST.run('let me sing the bassline'); const s0 = performance.now(); while (LOOP.state !== 'take' && performance.now() - s0 < 8000) await new Promise(r => setTimeout(r, 20));
+      let at = null; while (LOOP.state === 'take' && performance.now() - s0 < 20000) { if (A.ctx.currentTime >= TR.t0 + PROJ.bars * 4 * spb() + 0.005) { at = +(A.ctx.currentTime - TR.t0 - PROJ.bars * 4 * spb()).toFixed(3); $('#stopBtn').click(); break; } await new Promise(r => setTimeout(r, 2)); }
+      await new Promise(r => setTimeout(r, 900));
+      return { at, fin, st: LOOP.state, mic: MIC.on, same: JSON.stringify(PROJ.tracks.map(t => [t.name, t.events.length])) === before, msg: $('#micStatus').textContent }; } finally { TAKE.finish = f; } });
+  ok('Stop right after a take\'s last beat cancels it: old take kept, mic off', stp.at != null && stp.fin === 0 && stp.st === 'stopped' && !stp.mic && stp.same, JSON.stringify(stp));
+  // QA, 15 Nov (UX-10 fix 2): the first loop pass after a take plays every note of the new part that hasn't already ended when
+  // the take is analysed (the scheduler had passed the opening notes), none twice and none inside the take pass
+  const cu = await E(async () => { const se = window.scheduleEvent, f = TAKE.finish, sch = []; let fE = null;
+    window.scheduleEvent = function (tr, e, t, d) { if (tr.take) sch.push({ e, t }); return se.apply(this, arguments); };
+    TAKE.finish = function () { const x = f.apply(this, arguments); fE = A.ctx.currentTime; return x; };
+    try { ASSIST.run('let me sing the bassline'); const s0 = performance.now();
+      while (fE == null && performance.now() - s0 < 20000) await new Promise(r => setTimeout(r, 50)); if (fE == null) return { err: 'no finish' };
+      const t0 = TR.t0, L = PROJ.bars * 4, s = spb(); while (A.ctx.currentTime < t0 + 2 * L * s + 0.05 && performance.now() - s0 < 30000) await new Promise(r => setTimeout(r, 50));
+      const tr = PROJ.tracks.find(t => t.take === 'bass'), ev = tr ? [...tr.events].sort((a, b) => a.b - b.b) : [], r = { n: ev.length, fin: +(fE - t0 - L * s).toFixed(2), due: 0, missing: [], dbl: 0, early: 0 };
+      for (const e of ev) { const T = t0 + (L + e.b) * s, end = T + e.d * s, hits = sch.filter(x => x.e === e && x.t >= T - 1e-3 && x.t < end);
+        if (hits.length > 1) r.dbl++; if (end > fE + 0.07) { r.due++; if (!hits.length) r.missing.push(e.b); } }
+      r.early = sch.filter(x => x.t < t0 + L * s - 1e-3).length; loopStop(); return r; } finally { window.scheduleEvent = se; TAKE.finish = f; } });
+  ok('the first pass after a take plays the new part\'s opening notes (none missed, none twice)', cu.n >= 4 && cu.due >= 1 && !cu.missing.length && !cu.dbl && !cu.early, JSON.stringify(cu));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
