@@ -423,6 +423,11 @@ try {
     await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
     await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
   ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
+  // UX-18: the autosave text (Saving… / Saved 11:52 PM / Not saved) never moves the Studio header or the Keys box at 1400 px
+  const hj = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)), s = $('#saveState'), top = () => Math.round($('#asIn').getBoundingClientRect().top + scrollY), tops = new Set();
+    for (const t of ['Saves automatically', 'New song', 'Saving…', 'Not saved', 'Saved 11:52 PM', 'Saved 12 Nov']) { s.textContent = t; await W(30); tops.add(top()); }
+    PROJ.name = 'Smoke header'; saveProject(); await W(30); tops.add(top()); const mid = s.textContent; await W(1500); tops.add(top()); return { tops: [...tops], mid, end: s.textContent }; });
+  ok('Autosave text never moves the Studio header at 1400 px', hj.tops.length === 1, JSON.stringify(hj));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

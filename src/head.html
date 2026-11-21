@@ -291,7 +291,7 @@ input[type=checkbox]{accent-color:var(--accent)}
 
 /* DAW */
 .songbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-.save-state{font:500 12px var(--mono);color:var(--muted)}
+.save-state{font:500 12px var(--mono);color:var(--muted);display:inline-block;width:19ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums} /* fixed width: autosave text never reflows the header (UX-18) */
 .spacer{flex:1}
 .assistant{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;padding:16px;border-radius:14px;background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--accent) 14%,var(--raised)),var(--raised) 60%);border:1px solid var(--line)}
 @media (max-width:700px){.assistant{grid-template-columns:minmax(0,1fr)}}
