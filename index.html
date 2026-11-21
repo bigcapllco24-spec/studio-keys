@@ -5570,8 +5570,10 @@ const SONG_TRACK=/^(all|song|the song|whole song|the whole song|everything|every
 /* a one-word follow-up ("louder", "a bit softer", "simpler") right after a part: that part (QA, 22 Nov) */
 const BARE_LEVEL=/^\s*(?:(?:ok|okay|now|and|maybe|bit|a bit|a little|little|slightly|even|just)\s+)*(?:louder|softer|quieter|brighter|darker|warmer|simpler|busier|shorter|longer|lower|higher|punchier)(?:\s+(?:please|still|again|than that|a bit|a little|bit|more|now))*\s*[.!?]?\s*$/i;
 /* a song-wide mix or effect sent for a one-part comment, moved onto that part; an absolute volume that would go the wrong way is a 3 dB step */
-function ontoPart(a,T,said){ const b=Object.assign({},a,{track:T.id}); if(a.type==='mix'&&a.volume!=null){ const dir=/\b(softer|quieter|down|lower|less|too loud|kam)\b/i.test(said)?-1:/\b(louder|up|boost|more|too quiet|badhao)\b/i.test(said)?1:0;
-    if(dir&&Math.sign(+a.volume-T.vol*100)!==dir){ delete b.volume; b.db=dir*3; } } return b; }
+const volDir=said=>/\b(softer|quieter|more quiet|down|lower|less|too loud|too much|kam)\b/i.test(said)?-1:/\b(louder|up|boost|more|too quiet|too soft|can'?t hear|cannot hear|barely hear|not loud enough|badhao)\b/i.test(said)?1:0;
+/* an absolute volume that goes against the words ("the melody is too quiet" sent as volume 20 from 40): a 3 dB step the right way */
+function volFix(a,T,said){ if(a.type!=='mix'||a.volume==null||!T) return a; const dir=volDir(said); if(dir&&Math.sign(+a.volume-T.vol*100)!==dir){ const b=Object.assign({},a); delete b.volume; b.db=dir*3; return b; } return a; }
+function ontoPart(a,T,said){ return volFix(Object.assign({},a,{track:T.id}),T,said); }
 function onePart(list,depth){
   const said=String(LAST_TEXT.text||''); if(!said||!list.length) return list;
   /* praised or protected parts ("the drums are fine, just change the chords") are never touched; the rest of the words is the request */
@@ -5594,9 +5596,17 @@ function onePart(list,depth){
     /* a song-wide mix or effect for a comment about one part ("the bass is too loud", "the bass is muddy", "make it softer" after the bass):
        that part only; dropped when the AI also sent the same kind of change for that part */
     if(G.size&&!whole&&(a.type==='mix'||a.type==='track_fx')&&SONG_TRACK.test(String(a.track||''))){
-      if(oneT&&!list.some(b=>b!==a&&b.type===a.type&&!SONG_TRACK.test(String(b.track||''))&&actRole(b)===one)){ a=ontoPart(a,oneT,said); if(!named.size) BATCH.retold=true; out.push(a); }
+      if(oneT&&!list.some(b=>b!==a&&b.type===a.type&&!SONG_TRACK.test(String(b.track||''))&&actRole(b)===one)){ a=ontoPart(a,oneT,said); if(!named.size) BATCH.retold=true; else BATCH.redirected=true; out.push(a); }
       else dropped.push(a); continue; }
     if(G.size&&!whole&&a.type==='fx'){ dropped.push(a); continue; } /* the master knobs are the whole song */
+    /* a layout, vibe or new song riding along with a one-part comment ("the bass is too loud" + arrange full, "new drums" + vibe trap,
+       which changed the song's progression but not its chords): only when the words ask for it (QA, 22 Nov fix 2) */
+    if(G.size&&!whole&&/^(vibe|style|new_project|arrange)$/.test(a.type)){ const asks=a.type==='arrange'?/\b(full (?:track|song)|arrange\w*|structure|intro|outro|verse|chorus|drops?|break(?:down)?|build ?up|sections?|song)\b/.test(lc)
+        :/\b(vibe|genre|style|new song|new project|start over|from scratch)\b/.test(lc)||!PROJ.tracks.some(t=>t.kind==='notes'&&!G.has(t.role));
+      if(!asks){ dropped.push(a); continue; } }
+    /* "play the bass an octave lower" sent as a volume move: an octave is a transpose (the offline brain's, below) */
+    if(/\boctaves?\b/.test(lc)&&(a.type==='mix'||a.type==='track_fx')&&!list.some(b=>b.type==='transpose')){ dropped.push(a); continue; }
+    if(a.type==='mix'&&a.volume!=null&&!SONG_TRACK.test(String(a.track||''))){ const T=findTrack(a.track), b=volFix(a,T,said); if(b!==a){ BATCH.redirected=true; a=b; } }
     /* a level comment ("make the bass softer") never brings new notes along with the fader move */
     if(levelOnly&&(a.type==='vary'||a.type==='notes')){ dropped.push(a); continue; }
     if(asked&&(PART_ACTS.has(a.type)||/^(key|tempo|bars|vibe|style|mix|track_fx|fx)$/.test(a.type))){ dropped.push(a); continue; }
@@ -5616,7 +5626,7 @@ function onePart(list,depth){
   if(dropped.length&&tgt&&tgt!=='voice'&&!kept.has(tgt)&&!out.some(a=>PART_ACTS.has(a.type)&&actRole(a)===tgt)){ const T=partTrack(tgt), sh=reshapeSaid(lc);
     if(sh&&T) out.push({type:'reshape',track:T.id,do:sh}); /* "make the bass simpler" sent as a simpler drum groove: the bass gets simpler */
     else if(again&&(T||addedOk.has(tgt))) out.push({type:'vary',track:tgt}); }
-  if(dropped.length) BATCH.guarded=dropped.map(a=>a.type+':'+actRole(a));
+  if(dropped.length){ BATCH.guarded=dropped.map(a=>a.type+':'+actRole(a)); BATCH.guardActs=(BATCH.guardActs||[]).concat(dropped); }
   /* a question the AI answered with a change: nothing changes, and the reply is the answer from the song */
   if(asked&&dropped.length&&askQ.reply){ BATCH.local=askQ; return []; }
   let res=out.filter(a=>a.type!=='noop');
@@ -5626,6 +5636,18 @@ function onePart(list,depth){
   if(kept.size&&!depth){ const w=[...kept].map(r=>({drums:'drums|beat|kick',bass:'bass(?:line)?',chords:'chords',melody:'melody',voice:'vocals?|voice'})[r]||r).join('|');
     songNote(keptTxt(kept),new RegExp('\\b(kept|keep|keeping|left|leaving|didn.t touch)\\b[^.]*\\b('+w+')\\b|\\b('+w+')\\b[^.]*\\b(stay|stays|unchanged|untouched|as (it|they) (is|are|was|were))\\b','i')); }
   return res; }
+/* the AI's reply after the guard dropped or moved some of its actions: its sentences about what didn't happen are left out
+   ("Turned the whole song down 3 dB." when only the bass moved, "Here are fresh drums…" when the drums were kept). '' = say what changed. */
+function honestReply(reply){ reply=String(reply||''); const G=BATCH.guardActs||[]; if(!reply||!G.length&&!BATCH.redirected) return reply;
+  const touched=new Set(BATCH.touched||[]), roles=new Set(G.map(actRole).filter(r=>r&&!touched.has(r))), types=new Set(G.map(a=>a.type));
+  const bad=[...roles].map(r=>(PART_SAID.find(x=>x[0]===r)||[])[1]).filter(Boolean);
+  if(BATCH.redirected||G.some(a=>/^(mix|track_fx|fx)$/.test(a.type)&&SONG_TRACK.test(String(a.track||'all')))) bad.push(/\b(whole song|whole track|everything|every part|all (?:the )?parts|the (?:whole )?mix|overall|master)\b/);
+  if(types.has('arrange')) bad.push(/\b(full (?:track|song)|arrange\w*|sections?|intro|outro|drops?|structure|\d+ bars|break)\b/);
+  if(types.has('vibe')||types.has('style')||types.has('new_project')) bad.push(/\b(vibe|style|genre|tempo|bpm|new song|trap|house|drill|lo-?fi|techno|afro\w*|r&b|pop)\b/);
+  if(types.has('key')) bad.push(/\b(key|major|minor)\b/); if(types.has('tempo')) bad.push(/\b(tempo|bpm|faster|slower)\b/);
+  if(G.some(a=>a.type==='mix'&&a.volume!=null)||BATCH.redirected) bad.push(/\bvolume \d+\b/);
+  const S=reply.match(/[^.!?]+[.!?]*\s*/g)||[reply], keep=/\b(kept|keep|keeping|left|leaving|stays?|unchanged|untouched|as (?:it|they) (?:is|are))\b/i;
+  return S.filter(x=>keep.test(x)&&!/\b(whole song|everything)\b/i.test(x)||!bad.some(re=>re.test(' '+x.toLowerCase().replace(/hi[\s-]?hats?/g,'hats')+' '))).join('').trim(); }
 /* add_bass/add_chords/add_melody about a part that is already there, with no add word: change that part in place */
 function inPlace(a,text,named){ const m=/^add_(bass|chords|melody)$/.exec(a.type); if(!m) return a; const role=m[1], lc=String(text).toLowerCase();
   const T=partTrack(role); if(!T||!named.has(role)||ADD_SAID.test(lc)||a.new) return a;
@@ -5674,7 +5696,7 @@ function artPart(ev,how){ const L=L_(), on=onsets(ev); return on.flatMap(([b,es]
 function shapeEvents(t,ev){ let x=ev; const dn=t.dens||0; for(let i=0;i<Math.abs(dn);i++){ const y=dn<0?thinPart(x,t.role):busyPart(x,t.role); if(y) x=y; } if(t.art) x=artPart(x,t.art); return x; }
 /* every part's earlier versions this session, newest last: what "go back to the previous chords" brings back */
 const keyNamedIn=t=>!t||/\b[a-g](?:#|♯|b|♭| sharp| flat)? ?(?:major|minor|maj|min|m)\b|\bkey of\b|\bin the key\b/i.test(String(t));
-const VERSIONS=[];
+const VERSIONS=[], REVERT_AT=new Map(); /* REVERT_AT: the version each part went back to last, so going back again walks further back */
 /* a new or replaced generated part starts plain; a held sound keeps the chord rhythm it was given (SE-4 note: regenTrack forgot it) */
 function freshShape(t,cs){ if(!t) return; t.cs=cs; delete t.bs; delete t.dens; delete t.art; }
 const partCopy=t=>({events:JSON.parse(JSON.stringify(t.events||[])),inst:t.inst,name:t.name,seed:t.seed,recipe:t.recipe?JSON.parse(JSON.stringify(t.recipe)):t.recipe,desc:t.desc,cs:t.cs,bs:t.bs,dens:t.dens,art:t.art});
@@ -5750,15 +5772,23 @@ const ACT={
     const y=artPart(t.events,how); if(JSON.stringify(y)===JSON.stringify(t.events)){ songNote(`The ${name} ${pl?'are':'notes are'} already as ${how==='shorter'?'short':'long'} as they go.`); BATCH.declined=true; return; }
     t.events=y; t.art=how; return `${t.name}: ${how==='shorter'?'shorter, tighter notes':'longer, held notes'}, same ${t.role==='chords'?'chords':'notes'}`; },
   /* the part as it was before its last change ("go back to the previous chords", "no, the other one"); the rest of the song stays */
-  revert(a){ const t=findTrack(a.track)||(ASSIST.focus&&partTrack(ASSIST.focus))||null; let i=VERSIONS.length-1;
-    /* a version that sounds like the part does now (after an Undo, say) is skipped */
-    if(t){ const cur=partSig(t); while(i>=0&&(!VERSIONS[i].tracks[t.id]||partSig(VERSIONS[i].tracks[t.id])===cur)) i--; } if(i<0||!t){ songNote(t?`There’s no earlier ${ROLE_TXT[t.role]||t.name} this session to go back to. Say “undo” to take back the last change.`:'Which part should go back? Say “go back to the previous bassline”, for example.'); BATCH.declined=true; return; }
-    const v=VERSIONS.splice(i,1)[0], ids=[t.id].concat(t.role==='chords'?Object.keys(v.tracks).filter(id=>id!==t.id&&v.follow&&v.follow.includes(id)):[]);
+  revert(a){ const t=findTrack(a.track)||(ASSIST.focus&&partTrack(ASSIST.focus))||null, said=String(LAST_TEXT.text||'').toLowerCase();
+    /* "the original/first chords": the oldest version this session; "go back" again right after going back: one more step back;
+       "no, the other one": the one just before, so it toggles (QA, 22 Nov fix 2). Versions are kept, never used up. */
+    const first=a.to==='first'||/\b(original|first|very first|start)\b/.test(said), toggle=!first&&/\bother one\b/.test(said);
+    let i=VERSIONS.length-1, chain=false;
+    if(t){ const cur=partSig(t), w=REVERT_AT.get(t.id), wi=w?VERSIONS.indexOf(w):-1;
+      if(!first&&!toggle&&wi>=0&&w.tracks[t.id]&&partSig(w.tracks[t.id])===cur){ i=wi-1; chain=true; }
+      const ok=k=>VERSIONS[k].tracks[t.id]&&partSig(VERSIONS[k].tracks[t.id])!==cur;
+      if(first){ i=VERSIONS.findIndex((v,k)=>ok(k)); }
+      else while(i>=0&&!ok(i)) i--; }
+    if(i<0||!t){ songNote(t?(chain||first?`${/^(chords|drums)$/.test(t.role)?'These are':'That’s'} already the first ${ROLE_TXT[t.role]||t.name} of this session. Say “new ${ROLE_TXT[t.role]||t.name}” for another one.`:`There’s no earlier ${ROLE_TXT[t.role]||t.name} this session to go back to. Say “undo” to take back the last change.`):'Which part should go back? Say “go back to the previous bassline”, for example.'); BATCH.declined=true; return; }
+    const v=VERSIONS[i], ids=[t.id].concat(t.role==='chords'?Object.keys(v.tracks).filter(id=>id!==t.id&&v.follow&&v.follow.includes(id)):[]);
     ids.forEach(id=>{ const T=PROJ.tracks.find(x=>x.id===id); if(T) Object.assign(T,JSON.parse(JSON.stringify(v.tracks[id]))); });
     /* the version this saves (the chords as they were a moment ago) keeps its bassline too, so going back again brings both (QA, 22 Nov) */
     ids.slice(1).forEach(id=>(BATCH.follow=BATCH.follow||new Set()).add(id));
-    if(t.role==='chords'&&v.prog!==undefined){ PROJ.prog=v.prog; PROJ.progLocked=v.locked; } BATCH.reverted=true;
-    return `${t.name}: back to the previous version${ids.length>1?' (the bassline follows it)':''}`; },
+    if(t.role==='chords'&&v.prog!==undefined){ PROJ.prog=v.prog; PROJ.progLocked=v.locked; } BATCH.reverted=true; REVERT_AT.set(t.id,v);
+    return `${t.name}: back to the ${first?'first version':chain?'version before that':'previous version'}${ids.length>1?' (the bassline follows it)':''}`; },
   tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
   bars(a){ setBars(+a.bars||+a.value||4); return `${PROJ.bars} bars`; },
   key(a){ const k=parseKey(a.key||a.value); if(!k) return; setKey(k); BATCH.key=true; return `Key ${keyName(k)}`; },
@@ -6513,6 +6543,8 @@ async function handleRequest(text){
       const r=await fetch('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},signal:ctl.signal,body:JSON.stringify({text,state:projectState(),history:ASSIST.history.slice(-8),instruments:ORDER.map(id=>{ const I=INST.get(id); return `${id}: ${I.name} (${I.cat})`; })})});
       clearTimeout(to); const j=await r.json(); if(!r.ok||j.error) throw new Error(j.error||('HTTP '+r.status));
       done=runActions(j.actions||[]); reply=j.reply||'';
+      /* the guard dropped or moved some of the AI's actions: never keep its claim about them (QA, 22 Nov fix 2) */
+      if(!BATCH.local&&typeof honestReply==='function') reply=honestReply(reply);
       /* the guard used the offline brain's one-part change instead of the AI's (AI-9 fix): its reply says what really changed */
       if(BATCH.local){ const r2=brainReply(BATCH.local,done); reply=r2||(done.length?'':reply); BATCH.guarded=null; BATCH.retold=false; }
       /* the AI's mix or effect moves changed nothing (an EQ on "all", a fader already there): never claim them (QA, 22 Nov) */

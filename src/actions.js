@@ -217,8 +217,10 @@ const SONG_TRACK=/^(all|song|the song|whole song|the whole song|everything|every
 /* a one-word follow-up ("louder", "a bit softer", "simpler") right after a part: that part (QA, 22 Nov) */
 const BARE_LEVEL=/^\s*(?:(?:ok|okay|now|and|maybe|bit|a bit|a little|little|slightly|even|just)\s+)*(?:louder|softer|quieter|brighter|darker|warmer|simpler|busier|shorter|longer|lower|higher|punchier)(?:\s+(?:please|still|again|than that|a bit|a little|bit|more|now))*\s*[.!?]?\s*$/i;
 /* a song-wide mix or effect sent for a one-part comment, moved onto that part; an absolute volume that would go the wrong way is a 3 dB step */
-function ontoPart(a,T,said){ const b=Object.assign({},a,{track:T.id}); if(a.type==='mix'&&a.volume!=null){ const dir=/\b(softer|quieter|down|lower|less|too loud|kam)\b/i.test(said)?-1:/\b(louder|up|boost|more|too quiet|badhao)\b/i.test(said)?1:0;
-    if(dir&&Math.sign(+a.volume-T.vol*100)!==dir){ delete b.volume; b.db=dir*3; } } return b; }
+const volDir=said=>/\b(softer|quieter|more quiet|down|lower|less|too loud|too much|kam)\b/i.test(said)?-1:/\b(louder|up|boost|more|too quiet|too soft|can'?t hear|cannot hear|barely hear|not loud enough|badhao)\b/i.test(said)?1:0;
+/* an absolute volume that goes against the words ("the melody is too quiet" sent as volume 20 from 40): a 3 dB step the right way */
+function volFix(a,T,said){ if(a.type!=='mix'||a.volume==null||!T) return a; const dir=volDir(said); if(dir&&Math.sign(+a.volume-T.vol*100)!==dir){ const b=Object.assign({},a); delete b.volume; b.db=dir*3; return b; } return a; }
+function ontoPart(a,T,said){ return volFix(Object.assign({},a,{track:T.id}),T,said); }
 function onePart(list,depth){
   const said=String(LAST_TEXT.text||''); if(!said||!list.length) return list;
   /* praised or protected parts ("the drums are fine, just change the chords") are never touched; the rest of the words is the request */
@@ -241,9 +243,17 @@ function onePart(list,depth){
     /* a song-wide mix or effect for a comment about one part ("the bass is too loud", "the bass is muddy", "make it softer" after the bass):
        that part only; dropped when the AI also sent the same kind of change for that part */
     if(G.size&&!whole&&(a.type==='mix'||a.type==='track_fx')&&SONG_TRACK.test(String(a.track||''))){
-      if(oneT&&!list.some(b=>b!==a&&b.type===a.type&&!SONG_TRACK.test(String(b.track||''))&&actRole(b)===one)){ a=ontoPart(a,oneT,said); if(!named.size) BATCH.retold=true; out.push(a); }
+      if(oneT&&!list.some(b=>b!==a&&b.type===a.type&&!SONG_TRACK.test(String(b.track||''))&&actRole(b)===one)){ a=ontoPart(a,oneT,said); if(!named.size) BATCH.retold=true; else BATCH.redirected=true; out.push(a); }
       else dropped.push(a); continue; }
     if(G.size&&!whole&&a.type==='fx'){ dropped.push(a); continue; } /* the master knobs are the whole song */
+    /* a layout, vibe or new song riding along with a one-part comment ("the bass is too loud" + arrange full, "new drums" + vibe trap,
+       which changed the song's progression but not its chords): only when the words ask for it (QA, 22 Nov fix 2) */
+    if(G.size&&!whole&&/^(vibe|style|new_project|arrange)$/.test(a.type)){ const asks=a.type==='arrange'?/\b(full (?:track|song)|arrange\w*|structure|intro|outro|verse|chorus|drops?|break(?:down)?|build ?up|sections?|song)\b/.test(lc)
+        :/\b(vibe|genre|style|new song|new project|start over|from scratch)\b/.test(lc)||!PROJ.tracks.some(t=>t.kind==='notes'&&!G.has(t.role));
+      if(!asks){ dropped.push(a); continue; } }
+    /* "play the bass an octave lower" sent as a volume move: an octave is a transpose (the offline brain's, below) */
+    if(/\boctaves?\b/.test(lc)&&(a.type==='mix'||a.type==='track_fx')&&!list.some(b=>b.type==='transpose')){ dropped.push(a); continue; }
+    if(a.type==='mix'&&a.volume!=null&&!SONG_TRACK.test(String(a.track||''))){ const T=findTrack(a.track), b=volFix(a,T,said); if(b!==a){ BATCH.redirected=true; a=b; } }
     /* a level comment ("make the bass softer") never brings new notes along with the fader move */
     if(levelOnly&&(a.type==='vary'||a.type==='notes')){ dropped.push(a); continue; }
     if(asked&&(PART_ACTS.has(a.type)||/^(key|tempo|bars|vibe|style|mix|track_fx|fx)$/.test(a.type))){ dropped.push(a); continue; }
@@ -263,7 +273,7 @@ function onePart(list,depth){
   if(dropped.length&&tgt&&tgt!=='voice'&&!kept.has(tgt)&&!out.some(a=>PART_ACTS.has(a.type)&&actRole(a)===tgt)){ const T=partTrack(tgt), sh=reshapeSaid(lc);
     if(sh&&T) out.push({type:'reshape',track:T.id,do:sh}); /* "make the bass simpler" sent as a simpler drum groove: the bass gets simpler */
     else if(again&&(T||addedOk.has(tgt))) out.push({type:'vary',track:tgt}); }
-  if(dropped.length) BATCH.guarded=dropped.map(a=>a.type+':'+actRole(a));
+  if(dropped.length){ BATCH.guarded=dropped.map(a=>a.type+':'+actRole(a)); BATCH.guardActs=(BATCH.guardActs||[]).concat(dropped); }
   /* a question the AI answered with a change: nothing changes, and the reply is the answer from the song */
   if(asked&&dropped.length&&askQ.reply){ BATCH.local=askQ; return []; }
   let res=out.filter(a=>a.type!=='noop');
@@ -273,6 +283,18 @@ function onePart(list,depth){
   if(kept.size&&!depth){ const w=[...kept].map(r=>({drums:'drums|beat|kick',bass:'bass(?:line)?',chords:'chords',melody:'melody',voice:'vocals?|voice'})[r]||r).join('|');
     songNote(keptTxt(kept),new RegExp('\\b(kept|keep|keeping|left|leaving|didn.t touch)\\b[^.]*\\b('+w+')\\b|\\b('+w+')\\b[^.]*\\b(stay|stays|unchanged|untouched|as (it|they) (is|are|was|were))\\b','i')); }
   return res; }
+/* the AI's reply after the guard dropped or moved some of its actions: its sentences about what didn't happen are left out
+   ("Turned the whole song down 3 dB." when only the bass moved, "Here are fresh drums…" when the drums were kept). '' = say what changed. */
+function honestReply(reply){ reply=String(reply||''); const G=BATCH.guardActs||[]; if(!reply||!G.length&&!BATCH.redirected) return reply;
+  const touched=new Set(BATCH.touched||[]), roles=new Set(G.map(actRole).filter(r=>r&&!touched.has(r))), types=new Set(G.map(a=>a.type));
+  const bad=[...roles].map(r=>(PART_SAID.find(x=>x[0]===r)||[])[1]).filter(Boolean);
+  if(BATCH.redirected||G.some(a=>/^(mix|track_fx|fx)$/.test(a.type)&&SONG_TRACK.test(String(a.track||'all')))) bad.push(/\b(whole song|whole track|everything|every part|all (?:the )?parts|the (?:whole )?mix|overall|master)\b/);
+  if(types.has('arrange')) bad.push(/\b(full (?:track|song)|arrange\w*|sections?|intro|outro|drops?|structure|\d+ bars|break)\b/);
+  if(types.has('vibe')||types.has('style')||types.has('new_project')) bad.push(/\b(vibe|style|genre|tempo|bpm|new song|trap|house|drill|lo-?fi|techno|afro\w*|r&b|pop)\b/);
+  if(types.has('key')) bad.push(/\b(key|major|minor)\b/); if(types.has('tempo')) bad.push(/\b(tempo|bpm|faster|slower)\b/);
+  if(G.some(a=>a.type==='mix'&&a.volume!=null)||BATCH.redirected) bad.push(/\bvolume \d+\b/);
+  const S=reply.match(/[^.!?]+[.!?]*\s*/g)||[reply], keep=/\b(kept|keep|keeping|left|leaving|stays?|unchanged|untouched|as (?:it|they) (?:is|are))\b/i;
+  return S.filter(x=>keep.test(x)&&!/\b(whole song|everything)\b/i.test(x)||!bad.some(re=>re.test(' '+x.toLowerCase().replace(/hi[\s-]?hats?/g,'hats')+' '))).join('').trim(); }
 /* add_bass/add_chords/add_melody about a part that is already there, with no add word: change that part in place */
 function inPlace(a,text,named){ const m=/^add_(bass|chords|melody)$/.exec(a.type); if(!m) return a; const role=m[1], lc=String(text).toLowerCase();
   const T=partTrack(role); if(!T||!named.has(role)||ADD_SAID.test(lc)||a.new) return a;
