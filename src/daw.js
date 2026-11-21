@@ -292,8 +292,8 @@ function autoSaveNamed(){ clearTimeout(projAutoT); projAutoT=setTimeout(()=>save
 async function refreshProjList(){}
 /* owner, 13 Nov: the app opens on a new empty song. The last song is put into the songs list first, so nothing is lost;
    if this browser can't keep the list, the last song opens as before */
-async function keepLastSong(){ const L=LAST_PROJ, cur=PROJ;
-  if(!L||L===PROJ||!(L.tracks||[]).length){ store.set('project',serialize(PROJ)); return; }
+async function keepLastSong(){ const L=LAST_PROJ, cur=PROJ, gone=store.get('detached',null); if(gone) store.set('detached',null);
+  if(!L||L===PROJ||!(L.tracks||[]).length||gone===L.id){ store.set('project',serialize(PROJ)); return; } /* a song deleted while open stays deleted */
   try{ const ex=await IDB.get(L.id,'projects'), proj=Object.assign(serialize(L),{bpm:CTRL.bpm}); migrateSong(proj);
     const same=ex&&ex.proj&&ex.name===L.name&&JSON.stringify(ex.proj.tracks)===JSON.stringify(proj.tracks)&&JSON.stringify(ex.proj.sections||null)===JSON.stringify(proj.sections);
     if(!same){ const bars=proj.sections.reduce((a,s)=>a+s.bars,0), arranged=!(proj.sections.length===1&&proj.sections[0].auto);
@@ -304,12 +304,21 @@ async function keepLastSong(){ const L=LAST_PROJ, cur=PROJ;
   catch(e){ if(PROJ!==cur) return; PROJ=migrateSong(L); songViewLoad(); SONG.ver++; LOOP.state='stopped'; loadAudioFor(PROJ).then(()=>drawRolls()); preloadTracks(); renderTracks(); uiLoop();
     if(typeof undoReset==='function') undoReset(); }
 }
+/* deleting the song you're in (QA, 16 Nov: it came back with the next autosave): it stays open but isn't saved again
+   until you change something; DETACH (declared in studio.js) remembers it, also across a reload (store 'detached') */
+const detachedNow=()=>!!DETACH&&PROJ.id===DETACH.id&&snapState()===DETACH.snap;
+function detachCheck(){ if(DETACH&&!detachedNow()){ DETACH=null; store.set('detached',null); } }
+/* returns true when the song was written; SAVE_FAIL keeps the last error so the assistant never says "Saved" when this browser can't save */
+let SAVE_FAIL='';
 async function saveNamed(quiet){
-  const key=PROJ.id;
-  if(quiet&&!PROJ.tracks.length){ let ex=null; try{ ex=await IDB.get(key,'projects'); }catch(e){} if(!ex) return; } /* an untouched new song doesn't go into the list */
-  try{ await IDB.put(key,{key,name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,song:songArranged()?songLenText():null,tracks:PROJ.tracks.length,savedAt:Date.now(),proj:Object.assign(serialize(PROJ),{bpm:CTRL.bpm})},'projects');
-    $('#saveState').textContent='Saved '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); if(!quiet) toast(`Saved “${PROJ.name}”`); }
-  catch(e){ $('#saveState').textContent='Not saved'; if(!quiet) toast('Couldn’t save in this browser: '+e.message); }
+  if(detachedNow()){ if(quiet){ $('#saveState').textContent='Not saved'; return false; }
+    DETACH=null; store.set('detached',null); } /* Save after deleting the open song puts it back (QA, 16 Nov); quiet saves keep skipping */
+  /* the record is taken now, before any wait, so it can't pick up a song opened or copied meanwhile */
+  const key=PROJ.id, rec={key,name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,song:songArranged()?songLenText():null,tracks:PROJ.tracks.length,savedAt:Date.now(),proj:Object.assign(serialize(PROJ),{bpm:CTRL.bpm})};
+  if(quiet&&!rec.tracks){ let ex=null; try{ ex=await IDB.get(key,'projects'); }catch(e){} if(!ex) return false; } /* an untouched new song doesn't go into the list */
+  try{ await IDB.put(key,rec,'projects'); SAVE_FAIL=''; if(PROJ.id!==key) return true;
+    $('#saveState').textContent='Saved '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); if(!quiet) toast(`Saved “${rec.name}”`); return true; }
+  catch(e){ SAVE_FAIL=(e&&e.message)||'storage is blocked'; if(PROJ.id===key) $('#saveState').textContent='Not saved'; if(!quiet) toast('Couldn’t save in this browser: '+SAVE_FAIL); return false; }
 }
 async function loadAudioFor(p){ for(const t of p.tracks){ if(t.kind==='audio' && !AUD.has(t.id)){ try{ const r=await IDB.get('aud:'+t.id,'audio'); if(r) AUD.set(t.id,makeBuf(r.data,r.sr)); }catch(e){} } } }
 async function loadNamed(key){ clearTimeout(projAutoT); await saveNamed(true); /* keep the last edits of the song you leave */ let r=null; try{ r=await IDB.get(key,'projects'); }catch(e){} if(!r) return; loopStop(); PREVIEW=null; closeEditor(); PROJ=migrateSong(dropTakeVoices(Object.assign(newProject(),r.proj))); songViewLoad(); SONG.ver++; if(r.proj.bpm) setTempo(r.proj.bpm); await loadAudioFor(PROJ); preloadTracks(); LOOP.state=PROJ.tracks.length?'stopped':'empty'; store.set('project',serialize(PROJ)); renderTracks(); uiLoop();
@@ -318,7 +327,9 @@ async function loadNamed(key){ clearTimeout(projAutoT); await saveNamed(true); /
 function savedLabel(at){ if(!at) return ''; const d=new Date(at), today=new Date().toDateString()===d.toDateString();
   return 'Saved '+(today?d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):d.toLocaleDateString([], {day:'numeric',month:'short'})); }
 async function newSong(name){ await saveNamed(true); loopStop(); PREVIEW=null; closeEditor(); PROJ=newProject(); if(name) PROJ.name=String(name).slice(0,60); songViewLoad(); SONG.ver++; LOOP.state='empty'; store.set('project',serialize(PROJ)); renderTracks(); uiLoop(); if(typeof undoReset==='function') undoReset(); $('#saveState').textContent='New song'; }
-async function saveCopy(){ await saveNamed(true); const v=Object.assign({},SONG.view); PROJ=Object.assign(serialize(PROJ),{id:'p'+Date.now().toString(36),name:PROJ.name+' (copy)'}); SONG.view=v; songViewSave(); SONG.ver++; await saveNamed(); renderTracks(); }
+/* the copy starts its own undo history: Undo in the copy never reaches back into the original (QA, 16 Nov) */
+async function saveCopy(){ clearTimeout(projAutoT); await saveNamed(true); const v=Object.assign({},SONG.view); PROJ=Object.assign(serialize(PROJ),{id:'p'+Date.now().toString(36),name:PROJ.name+' (copy)'}); SONG.view=v; songViewSave(); SONG.ver++;
+  store.set('project',serialize(PROJ)); if(typeof undoReset==='function') undoReset(); renderTracks(); await saveNamed(); }
 function preloadTracks(){ PROJ.tracks.forEach(t=>{ const I=INST.get(t.inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); }); }
 async function openSongs(){
   const m=$('#projModal'); m.hidden=false; let list=[]; try{ list=await IDB.all('projects'); }catch(e){} list.sort((a,b)=>b.savedAt-a.savedAt);
@@ -327,7 +338,10 @@ async function openSongs(){
 $('#projModal').addEventListener('click',async e=>{
   if(e.target===$('#projModal')||e.target.closest('#projClose')){ $('#projModal').hidden=true; return; }
   const o=e.target.closest('[data-open]'); if(o){ $('#projModal').hidden=true; if(o.dataset.open!==PROJ.id) await loadNamed(o.dataset.open); return; }
-  const d=e.target.closest('[data-pdel]'); if(d){ if(!d.dataset.armed){ d.dataset.armed='1'; d.textContent='Confirm delete'; return; } await IDB.del(d.dataset.pdel,'projects').catch(()=>{}); if(d.dataset.pdel===PROJ.id){ PROJ.id='p'+Date.now().toString(36); } openSongs(); }
+  const d=e.target.closest('[data-pdel]'); if(d){ if(!d.dataset.armed){ d.dataset.armed='1'; d.textContent='Confirm delete'; return; } const k=d.dataset.pdel, cur=k===PROJ.id; if(cur) clearTimeout(projAutoT); await IDB.del(k,'projects').catch(()=>{});
+    if(cur&&k===PROJ.id){ DETACH={id:k,snap:snapState()}; store.set('detached',k); $('#saveState').textContent='Not saved';
+      toast(`Deleted “${PROJ.name}”. It stays open here and saves again only if you change it.`); }
+    openSongs(); }
   if(e.target.closest('#projNew2')){ $('#projModal').hidden=true; newSong(); }
 });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !$('#projModal').hidden) $('#projModal').hidden=true; });

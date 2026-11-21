@@ -304,6 +304,22 @@ try {
       await handleRequest('delete the drums and kill the reverb'); R.rmBasic = !has('drums') && has('chords');
       return R; } finally { ASSIST.engine = eng; } });
   ok('"set the chords reverb to 20 and add some delay" gives 20%, "add some reverb" still raises it, "remove the reverb from the chords" keeps the chords, "remove the melody and turn off the reverb" removes the melody', g8.set === 20 && g8.add === 52 && g8.basic === 20 && g8.kept && g8.off && g8.rmAI && g8.rmBasic, JSON.stringify(g8));
+  // UX-12: Save a copy starts its own history; Undo in the copy never touches the original (in the songs list too)
+  const cu = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)), rec = async k => { const r = await IDB.get(k, 'projects'); return r ? JSON.stringify([r.name, r.bpm, r.tracks, r.savedAt, r.proj.tracks.map(t => t.events.length)]) : null; };
+    await newSong('Smoke original'); runActions([{ type: 'add_drums', style: 'house', seed: 5170 }]); await W(150); runActions([{ type: 'add_bass', seed: 5171 }]); const oid = PROJ.id; await saveCopy(); await W(200); const o0 = await rec(oid);
+    for (let i = 0; i < 4; i++) { PROJ.tracks[0].events.push({ b: i / 2, d: 0.25, n: 40 + i, v: 0.8 }); saveProject(); await W(150); }
+    for (let i = 0; i < 7; i++) { undo(); await W(150); } await W(1800); return { same: o0 === await rec(oid), id: PROJ.id !== oid, name: PROJ.name, n: PROJ.tracks.length }; });
+  ok('Undo after Save a copy never touches the original', cu.same && cu.id && cu.name === 'Smoke original (copy)' && cu.n === 2, JSON.stringify(cu));
+  // UX-12: a tempo typed in the BPM box is one undo step; Undo and Redo restore it exactly
+  const tb = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); await newSong('Smoke tempo box'); runActions([{ type: 'add_drums', style: 'house', seed: 5180 }]); await W(150); runActions([{ type: 'tempo', bpm: 88 }]); await W(150); runActions([{ type: 'add_chords', seed: 5181 }]); await W(150);
+    const s0 = UNDO.stack.length, el = $('#bpm'); el.value = '96'; el.dispatchEvent(new Event('change')); const steps = UNDO.stack.length - s0; undo(); const u = [CTRL.bpm, PROJ.tracks.length]; redo(); return { steps, u, r: [CTRL.bpm, PROJ.tracks.length] }; });
+  ok('BPM box change is one undo step', tb.steps === 1 && tb.u.join() === '88,2' && tb.r.join() === '96,2', JSON.stringify(tb));
+  // UX-12 fix 1: Save after deleting the open song saves it again (autosave keeps skipping it)
+  const sd = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)), has = async () => !!(await IDB.get(PROJ.id, 'projects'));
+    await newSong('Smoke gone'); runActions([{ type: 'add_drums', style: 'house', seed: 5190 }]); await saveNamed(true); const k = PROJ.id;
+    await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
+    await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
+  ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

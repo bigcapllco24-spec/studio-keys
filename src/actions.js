@@ -233,7 +233,9 @@ const ACT={
     if(!PROJ.tracks.length) return; if(/zip|stem|ableton|wav/.test(fmt)){ exportZip(); return 'Packing the Ableton zip (WAV mix, stems and MIDI)'; } if(/mid/.test(fmt)){ exportMidiOnly(); return 'Downloading the MIDI file'; }
     if(len) { const sel=$('#mp3Len'); if(sel && [...sel.options].some(o=>+o.value===len)) sel.value=String(len); }
     exportMp3(len); return 'Making your MP3, the download starts in a few seconds'; },
-  save(a){ if(a.name) PROJ.name=String(a.name).slice(0,60); saveNamed(); return `Saved “${PROJ.name}”`; },
+  save(a){ if(a.name) PROJ.name=String(a.name).slice(0,60); if(typeof indexedDB==='undefined') return `Couldn’t save “${PROJ.name}”: this browser can’t keep songs`;
+    const fail=SAVE_FAIL; saveNamed(false); /* the real result also shows as a toast */
+    return fail?`Trying to save “${PROJ.name}” again: last time this browser couldn’t (${fail})`:`Saved “${PROJ.name}”`; },
   new_project(a){ newSong(a.name); return 'New song'; },
   rename(a){ if(!a.name) return; PROJ.name=String(a.name).slice(0,60); saveProject(); return `Song renamed to “${PROJ.name}”`; }
 };

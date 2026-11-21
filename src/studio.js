@@ -9,11 +9,11 @@ let PROJ=LAST_PROJ&&!(LAST_PROJ.tracks||[]).length&&!LAST_PROJ.sections?LAST_PRO
 function dropTakeVoices(p){ if(p&&p.tracks) p.tracks=p.tracks.filter(t=>!(t.kind==='audio'&&/-voice$/.test(t.take||''))); return p; }
 dropTakeVoices(PROJ); if(LAST_PROJ) dropTakeVoices(LAST_PROJ);
 const AUD=new Map();
-let projSaveT=0;
+let projSaveT=0, DETACH=null; /* DETACH: the open song was deleted from the list and isn't saved until it changes (daw.js) */
 function serialize(p){ return JSON.parse(JSON.stringify(p)); }
 /* an idle transport follows the song: tracks make it ready to play, no tracks make it empty again (UX-2) */
 function syncLoopState(){ if(LOOP.state==='empty'&&PROJ.tracks.length) LOOP.state='stopped'; else if(LOOP.state==='stopped'&&!PROJ.tracks.length) LOOP.state='empty'; }
-function saveProject(){ syncLoopState(); clearTimeout(projSaveT); projSaveT=setTimeout(()=>{ projSaveT=0; store.set('project',serialize(PROJ)); },250); if(typeof autoSaveNamed==='function'){ $('#saveState').textContent='Saving…'; autoSaveNamed(); } }
+function saveProject(){ syncLoopState(); if(typeof detachCheck==='function') detachCheck(); clearTimeout(projSaveT); projSaveT=setTimeout(()=>{ projSaveT=0; store.set('project',serialize(PROJ)); },250); if(typeof autoSaveNamed==='function'){ $('#saveState').textContent='Saving…'; autoSaveNamed(); } }
 /* closing or reloading the page inside that quarter second still keeps the last change (a late rename came back as the old name) */
 addEventListener('pagehide',()=>{ if(projSaveT){ clearTimeout(projSaveT); projSaveT=0; store.set('project',serialize(PROJ)); } });
 const roleOfInst=inst=>{ const I=INST.get(inst)||{}; return I.drums?'drums':I.cat==='Bass'?'bass':'free'; };
@@ -51,9 +51,16 @@ function setTempo(b){
   if(TR.running && A.ctx){ const now=A.ctx.currentTime, beat=(now-TR.t0)*CTRL.bpm/60; if(songOn()) songRetempo(now); TR.t0=now-beat*60/b; TR.schedT=now; }
   CTRL.bpm=b; saveCtrl(); $('#bpm').value=b; $('#lcdTempo').textContent=b+' BPM'; FX.tempo(b); if(A.sends) A.sends.setTempo(b);
 }
-$('#bpm').addEventListener('change',e=>setTempo(+e.target.value));
+/* a tempo the user types or taps is one undo step (QA, 16 Nov: Undo lost a typed tempo). Tapping settles for 1.2 s,
+   so a run of taps is one step for the final tempo; Undo/Redo flush a step still settling (tempoFlush) */
+let tempoStepT=0;
+function tempoStep(){ clearTimeout(tempoStepT); tempoStepT=0; if(typeof undoBoundary==='function') undoBoundary(); saveProject(); if(typeof undoBoundary==='function') undoBoundary(); }
+function tempoFlush(){ if(tempoStepT) tempoStep(); }
+function userTempo(b,settle){ const was=CTRL.bpm; setTempo(b); if(CTRL.bpm===was&&!tempoStepT) return;
+  if(settle){ clearTimeout(tempoStepT); tempoStepT=setTimeout(tempoStep,1200); } else tempoStep(); }
+$('#bpm').addEventListener('change',e=>{ const b=+e.target.value; if(!b){ e.target.value=CTRL.bpm; return; } userTempo(b); });
 (function(){ const taps=[]; $('#tapBtn').onclick=()=>{ const t=performance.now(); if(taps.length && t-taps[taps.length-1]>2000) taps.length=0; taps.push(t); if(taps.length>6) taps.shift();
-  if(taps.length>=3){ const iv=(taps[taps.length-1]-taps[0])/(taps.length-1); setTempo(60000/iv); } }; })();
+  if(taps.length>=3){ const iv=(taps[taps.length-1]-taps[0])/(taps.length-1); userTempo(60000/iv,true); } }; })();
 [['metro','metro'],['countIn','countIn']].forEach(([id,k])=>{ const el=$('#'+id); el.checked=!!CTRL[k]; el.addEventListener('change',()=>{ CTRL[k]=el.checked; saveCtrl(); }); });
 [['quant','quant'],['loopLen','loopLen']].forEach(([id,k])=>{ const el=$('#'+id); el.value=String(CTRL[k]); el.addEventListener('change',()=>{ CTRL[k]=+el.value; saveCtrl(); }); });
 
