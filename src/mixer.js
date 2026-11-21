@@ -60,6 +60,26 @@ function makeSends(c,dest,bpm){
 /* sidechain: when a kick plays, tracks with fx.duck dip and recover over about a 1/8 note */
 function duckAt(c,strips,t,bpm){ const rel=0.16*60/(bpm||CTRL.bpm);
   strips.forEach(([st,amt])=>{ const g=st.duck.gain, low=Math.max(0.08,1-amt*0.85); g.setValueAtTime(low,t); g.setTargetAtTime(1,t+0.012,rel); }); }
+/* SE-11: stems that add up to the mix. The master glue and limiter (Web Audio compressors) apply ONE gain to both channels
+   of the signal delayed by their look-ahead: out(t) = g(t)·in(t-D). masterGain measures D and g on the full mix (y = master
+   output, x = what goes into the glue, both whole renders), for the n samples from a. Every stem (rendered without the glue
+   and limiter, shifted by D) times g then sums to the mix, and no stem gets the master's makeup gain or limiting on its own. */
+function masterGain(y,x,a,n){
+  const [Y0,Y1]=y, [X0,X1]=x, W=4096, MAXD=Math.min(2048,a); let pk=0, w0=a, best=-1;
+  for(let i=a;i<a+n;i++){ const m=Math.max(Math.abs(X0[i]),Math.abs(X1[i])); if(m>pk) pk=m; }
+  for(let s=a;s+W<=a+n;s+=W){ let e=0; for(let i=s;i<s+W;i++) e+=X0[i]*X0[i]+X1[i]*X1[i]; if(e>best){ best=e; w0=s; } }
+  const thr=pk*1e-3; let D=0, cost=Infinity;
+  if(pk>1e-6) for(let d=0;d<=MAXD;d++){ let c=0, k=0, prev=NaN; /* the right delay gives a smooth gain curve, a wrong one a jagged ratio */
+    for(let t=w0;t<w0+W&&t<a+n;t++){ const u=X0[t-d], v=X1[t-d], ch=Math.abs(u)>=Math.abs(v), xm=ch?u:v; if(Math.abs(xm)<thr) continue;
+      const g=(ch?Y0[t]:Y1[t])/xm; if(prev===prev){ c+=Math.abs(g-prev); k++; } prev=g; }
+    if(k>64&&c/k<cost){ cost=c/k; D=d; } }
+  const g=new Float32Array(n); let last=-1;
+  for(let i=0;i<n;i++){ const t=a+i, u=X0[t-D], v=X1[t-D], ch=Math.abs(u)>=Math.abs(v), xm=ch?u:v;
+    if(Math.abs(xm)>1e-7){ g[i]=clamp((ch?Y0[t]:Y1[t])/xm,0,16);
+      if(i-last>1){ const g0=last<0?g[i]:g[last]; for(let j=last+1;j<i;j++) g[j]=g0+(g[i]-g0)*(j-last)/(i-last); } last=i; } }
+  if(last<0) g.fill(1); else for(let j=last+1;j<n;j++) g[j]=g[last];
+  return {g,D};
+}
 const isKick=(tr,n)=>(n===35||n===36)&&(tr.role==='drums'||(INST.get(tr.inst)||{}).drums);
 const MIX=Object.assign({keys:{vol:0.85,lo:0,mid:0,hi:0,mute:false},pads:{vol:0.85,lo:0,mid:0,hi:0,mute:false},master:{vol:1,lo:0,mid:0,hi:0,mute:false}},store.get('mix',{}));
 let mixSaveT=0; const saveMix=()=>{ clearTimeout(mixSaveT); mixSaveT=setTimeout(()=>store.set('mix',MIX),300); };

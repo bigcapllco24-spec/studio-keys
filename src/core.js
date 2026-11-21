@@ -36,9 +36,14 @@ const saveCtrl=()=>store.set('ctrl',CTRL);
 /* ---------- audio engine ---------- */
 const A={ctx:null,openHats:new Set()};
 const noiseCache=new WeakMap();
-function getNoise(c){ let b=noiseCache.get(c); if(!b){ b=c.createBuffer(1,c.sampleRate*2,c.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; noiseCache.set(c,b); } return b; }
+/* seeded randomness (SE-11): the same noise and the same per-track random choices in every offline render,
+   so exported stems add up exactly to the mix */
+const seedRand=a=>()=>{ a=(a+0x6D2B79F5)|0; let t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; };
+const seedOf=s=>{ let h=2166136261; s=String(s); for(let i=0;i<s.length;i++) h=Math.imul(h^s.charCodeAt(i),16777619); return h>>>0; };
+function withSeed(seed,fn){ const r=Math.random; Math.random=seedRand(seed); try{ return fn(); } finally{ Math.random=r; } }
+function getNoise(c){ let b=noiseCache.get(c); if(!b){ b=c.createBuffer(1,c.sampleRate*2,c.sampleRate); const d=b.getChannelData(0), r=seedRand(0x5EED); for(let i=0;i<d.length;i++) d[i]=r()*2-1; noiseCache.set(c,b); } return b; }
 const SOFT=(()=>{ const n=1024, c=new Float32Array(n), k=2.2, m=Math.tanh(k); for(let i=0;i<n;i++){ const x=i/(n-1)*2-1; c[i]=Math.tanh(k*x)/m; } return c; })();
-function makeImpulse(c,dur,decay){ const len=Math.floor(c.sampleRate*dur), b=c.createBuffer(2,len,c.sampleRate); for(let ch=0;ch<2;ch++){ const d=b.getChannelData(ch); for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay); } return b; }
+function makeImpulse(c,dur,decay){ const len=Math.floor(c.sampleRate*dur), b=c.createBuffer(2,len,c.sampleRate); const r=seedRand(len*31+Math.round(decay*100)); for(let ch=0;ch<2;ch++){ const d=b.getChannelData(ch); for(let i=0;i<len;i++) d[i]=(r()*2-1)*Math.pow(1-i/len,decay); } return b; }
 
 function ensureAudio(){
   if(!A.ctx){

@@ -303,12 +303,17 @@ function buildMidi(tracks,bpm,L,title){
   const head=[0x4D,0x54,0x68,0x64,0,0,0,6,0,1,(out.length>>8)&255,out.length&255,(PPQ>>8)&255,PPQ&255];
   return new Uint8Array([...head,...out.flat()]);
 }
-async function renderGraph(oc,bpm,all){
+async function renderGraph(oc,bpm,all,o={}){
   await FX.loadIR(oc);
   const bus=oc.createGain(), out=oc.createGain();
   const glue=oc.createDynamicsCompressor(); glue.threshold.value=-16; glue.knee.value=10; glue.ratio.value=2; glue.attack.value=0.02; glue.release.value=0.25;
   const lim=oc.createDynamicsCompressor(); lim.threshold.value=-3; lim.knee.value=0; lim.ratio.value=20; lim.attack.value=0.001; lim.release.value=0.08;
-  out.gain.value=Math.pow(CTRL.volume/100,2); out.connect(glue).connect(lim).connect(oc.destination);
+  out.gain.value=Math.pow(CTRL.volume/100,2);
+  if(o.dry) out.connect(oc.destination); /* SE-11 stems: no master glue and limiter of their own */
+  else if(o.tap){ /* master output on channels 1-2, the signal going into the glue on 3-4 (to measure the master's gain) */
+    const m=oc.createChannelMerger(4), y=oc.createChannelSplitter(2), x=oc.createChannelSplitter(2); oc.destination.channelInterpretation='discrete';
+    y.connect(m,0,0); y.connect(m,1,1); x.connect(m,0,2); x.connect(m,1,3); m.connect(oc.destination); out.connect(glue).connect(lim).connect(y); out.connect(x); }
+  else out.connect(glue).connect(lim).connect(oc.destination);
   const ms=makeStrip(oc,out); applyStrip(ms,MIX.master,oc,true,true);
   FX.build(oc,bus,ms.inp,FX.slots,{noRepeat:true,bpm});
   const sends=makeSends(oc,ms.inp,bpm);
@@ -319,17 +324,19 @@ async function renderGraph(oc,bpm,all){
   return {bus,sends,strips,ducks};
 }
 async function renderAudio(tracks,bpm,L,opts={}){
-  const sr=44100, s=60/bpm, len=L*s, OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext, oc=new OAC(2,Math.ceil(sr*len*2),sr);
-  const all=opts.context||tracks, {bus,sends,strips,ducks}=await renderGraph(oc,bpm,all);
+  const sr=44100, s=60/bpm, len=L*s, OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext, oc=new OAC(opts.tap?4:2,Math.ceil(sr*len*2),sr);
+  const all=opts.context||tracks, {bus,sends,strips,ducks}=await renderGraph(oc,bpm,all,opts);
   const kicks=[]; all.forEach(tr=>{ if(tr.kind==='notes') tr.events.forEach(e=>{ if(isKick(tr,e.n)) kicks.push(e.b); }); });
   for(let cyc=0;cyc<2;cyc++) kicks.forEach(b=>{ const t=(cyc*L+b)*s; if(t<2*len&&ducks.length) duckAt(oc,ducks,t,bpm); });
   for(const tr of tracks){ const st=strips.get(tr.id)||makeStrip(oc,bus,sends);
     if(tr.kind==='audio'){ const buf=AUD.get(tr.id); if(!buf) continue; const st0=(tr.start||0)*s, off=Math.min(tr.trim||0,buf.duration), dur=Math.min(buf.duration-off,len-st0); if(dur<=0.01) continue;
       for(let cyc=0;cyc<2;cyc++){ const src=oc.createBufferSource(); src.buffer=buf; src.connect(st.inp); src.start(cyc*len+st0,off,dur); } continue; }
     const I=INST.get(tr.inst); if(!I) continue; if(I.set) await loadSet(I.set,loadOpts(I.set)).catch(()=>{});
-    for(let cyc=0;cyc<2;cyc++) for(const e of tr.events){ const t=(cyc*L+e.b)*s; if(t>=2*len) continue; const v=I.play(oc,st.inp,e.n,e.v,t); if(v && !v.oneShot) v.release(t+e.d*s); } }
-  const buf=await oc.startRendering(), a=Math.round(len*sr), n=Math.round(len*sr);
-  return [buf.getChannelData(0).slice(a,a+n),buf.getChannelData(1).slice(a,a+n)];
+    /* seeded per track, so a stem gets the same noise and random detune as that track in the mix (SE-11) */
+    withSeed(seedOf(tr.id),()=>{ for(let cyc=0;cyc<2;cyc++) for(const e of tr.events){ const t=(cyc*L+e.b)*s; if(t>=2*len) continue; const v=I.play(oc,st.inp,e.n,e.v,t); if(v && !v.oneShot) v.release(t+e.d*s); } }); }
+  const buf=await oc.startRendering(), a=Math.round(len*sr), n=Math.round(len*sr), ch=k=>buf.getChannelData(k);
+  if(opts.tap){ const mg=masterGain([ch(0),ch(1)],[ch(2),ch(3)],a,n); return {mix:[ch(0).slice(a,a+n),ch(1).slice(a,a+n)],gain:mg.g,delay:mg.D}; }
+  const b0=a-(opts.shift||0); return [ch(0).slice(b0,b0+n),ch(1).slice(b0,b0+n)];
 }
 /* one stretch [from,to) of the song in beats, with a run-up so reverb, echo and held notes carry over the joins */
 const yieldMain=()=>new Promise(r=>setTimeout(r,0));
@@ -411,14 +418,23 @@ async function exportZip(){
   try{
     const files=[];
     st.textContent='Rendering the mix…'; await nextFrame();
-    files.push({name:`${base}/${base} Mix.wav`,data:wavBytes(await renderAudio(tracks,bpm,L),44100)});
+    /* SE-11: stems add up to the mix. Each stem is its track after the fader and track effects, with its reverb and echo
+       sends printed in, through the master's EQ and effects but not its own glue and limiter: it gets the master's gain
+       moves measured on the whole mix instead. If a stem alone would clip, all stems go down together (said in the README). */
+    const M=await renderAudio(tracks,bpm,L,{tap:true}), g=M.gain, stems=[]; let spk=0;
+    files.push({name:`${base}/${base} Mix.wav`,data:wavBytes(M.mix,44100)});
     for(let i=0;i<tracks.length;i++){ st.textContent=`Rendering stem ${i+1} of ${tracks.length}…`; await nextFrame();
-      files.push({name:`${base}/Stems/${String(i+1).padStart(2,'0')} ${safeName(tracks[i].name)}.wav`,data:wavBytes(await renderAudio([tracks[i]],bpm,L,{context:tracks}),44100)}); }
+      const x=await renderAudio([tracks[i]],bpm,L,{context:tracks,dry:true,shift:M.delay});
+      for(const c of x) for(let j=0;j<c.length;j++){ const v=c[j]*=g[j]; if(v>spk) spk=v; else if(-v>spk) spk=-v; } stems.push(x); }
+    const hr=spk>0.98?0.98/spk:1, hrDb=Math.round(-20*Math.log10(hr)*10)/10;
+    stems.forEach((x,i)=>{ if(hr<1) for(const c of x) for(let j=0;j<c.length;j++) c[j]*=hr;
+      files.push({name:`${base}/Stems/${String(i+1).padStart(2,'0')} ${safeName(tracks[i].name)}.wav`,data:wavBytes(x,44100)}); });
+    const bent=FX.slots.some(x=>(x.type==='drive'&&x.amount>=0.02)||(x.type==='crush'&&x.amount>=0.03));
     const nt=tracks.filter(t=>t.kind==='notes');
     if(nt.length){ files.push({name:`${base}/MIDI/${base} All tracks.mid`,data:buildMidi(nt,bpm,L,base)});
       nt.forEach((t,i)=>files.push({name:`${base}/MIDI/${String(i+1).padStart(2,'0')} ${safeName(t.name)}.mid`,data:buildMidi([t],bpm,L,t.name)})); }
     files.push({name:`${base}/song.json`,data:new TextEncoder().encode(JSON.stringify(Object.assign(serialize(PROJ),{bpm}),null,1))});
-    files.push({name:`${base}/README.txt`,data:new TextEncoder().encode(`${PROJ.name}\nMade in Studio Keys\n\nTempo: ${bpm} BPM\nKey: ${keyName(projectKey())}\nLength: ${bars} bar${bars>1?'s':''} in 4/4 (${(L*60/bpm).toFixed(3)} s)\nTracks: ${tracks.map((t,i)=>`${i+1}. ${t.name}`).join(', ')}\n\nIn Ableton Live: set the project tempo to ${bpm}, then drag the WAV files (Mix or Stems) or the MIDI files into clip slots. Every file is exactly one loop long and loops seamlessly, including reverb and echo tails. Volume, EQ and effects are printed into the WAV files; the MIDI files keep the notes editable.\n`)});
+    files.push({name:`${base}/README.txt`,data:new TextEncoder().encode(`${PROJ.name}\nMade in Studio Keys\n\nTempo: ${bpm} BPM\nKey: ${keyName(projectKey())}\nLength: ${bars} bar${bars>1?'s':''} in 4/4 (${(L*60/bpm).toFixed(3)} s)\nTracks: ${tracks.map((t,i)=>`${i+1}. ${t.name}`).join(', ')}\n\nIn Ableton Live: set the project tempo to ${bpm}, then drag in the Mix OR all the Stems (not both), or the MIDI files, into clip slots. Every file is exactly one loop long and loops seamlessly, including reverb and echo tails. Volume, EQ and effects are printed into the WAV files; the MIDI files keep the notes editable.\n\nStems: each stem is one track after its fader and effects, with its own reverb and echo printed in (mute a stem and its reverb goes too). The Studio Keys master glue and limiter were worked out on the whole mix and applied to every stem the same way, so all the stems together play back exactly like the Mix.\nOn the Ableton master: nothing. Keep it clean (no limiter or compressor) at 0 dB${hr<1?`, then turn it up by ${hrDb} dB: the stems are ${hrDb} dB quieter than the Mix so no single stem clips`:''}. If you turn stems up or add your own parts, put a limiter on the master.${bent?'\nNote: the master Drive or Bitcrush knob is on, so the stems add up to the Mix closely but not exactly.':''}\n`)});
     st.textContent='Packing the zip…'; await nextFrame();
     const r=await saveFile(`${base}.zip`,zipBytes(files)); st.textContent=r==='declined'?'Download cancelled.':`Downloaded ${base}.zip`;
   }catch(e){ console.error(e); st.textContent='Export failed: '+e.message; }
