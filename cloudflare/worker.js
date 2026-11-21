@@ -43,7 +43,10 @@ export default {
       const context = 'Current song: ' + JSON.stringify(body.state || {}).slice(0, 7000) + '\nInstruments you can use (id: name): ' + (body.instruments || []).join('; ').slice(0, 4000);
       const history = (Array.isArray(body.history) ? body.history : []).slice(-8).filter(m => m && (m.role === 'user' || m.role === 'assistant')).map(m => ({ role: m.role, content: String(m.content).slice(0, 800) }));
       if (history.length && history[history.length - 1].role === 'user') history.pop();
-      const userMsg = { role: 'user', content: context + '\n\nThe user said: "' + text + '"' };
+      // AI-9: Llama reads the user turn more closely than the rules, so the focus part is repeated next to what they said
+      const focus = body.state && typeof body.state.focus === 'string' ? body.state.focus.replace(/[^a-z]/g, '').slice(0, 12) : '';
+      const hint = focus ? '\n(The last request was about the ' + focus + '. If this one says it, that, them or another one without naming a part, it means the ' + focus + ', not the whole song.)' : '';
+      const userMsg = { role: 'user', content: context + '\n\nThe user said: "' + text + '"' + hint };
       try {
         let res;
         if (engine === 'claude') res = await askClaude(env, SYSTEM, [...history, userMsg]);
