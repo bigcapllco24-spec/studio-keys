@@ -8,7 +8,7 @@ const snapState=()=>JSON.stringify({p:PROJ,bpm:CTRL.bpm});
 function undoNote(){
   const j=snapState(); if(UNDO.last===null||UNDO.busy){ UNDO.last=j; return; } if(j===UNDO.last) return;
   const now=performance.now(), prev=UNDO.last; let pushed=false;
-  if(now-UNDO.t>120||!UNDO.stack.length){ UNDO.stack.push(UNDO.last); if(UNDO.stack.length>120) UNDO.stack.shift(); pushed=true; }
+  if(now-UNDO.t>120||!UNDO.stack.length){ UNDO.stack.push(UNDO.last); if(UNDO.stack.length>120) UNDO.stack.shift(); pushed=true; UNDO.pushes=(UNDO.pushes||0)+1; }
   UNDO.t=now; UNDO.redo=[]; UNDO.last=j; undoButtons();
   if(typeof songChipNote==='function') songChipNote(prev,j,pushed); /* a newer change makes the Undo chip's label stale */
 }

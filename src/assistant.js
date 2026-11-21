@@ -42,7 +42,7 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
   return `Shape it with effects (“more reverb on the chords”), mix it, or download the MP3.`; }
 function projectState(){
   return {name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:PROJ.key?keyName(PROJ.key):`auto (${keyName(projectKey())})`,style:PROJ.style||null,playing:TR.running,
-    tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute})),
+    tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute,soloed:!!t.solo,generated:!!t.gen})),
     taste:TASTE.profile?{artists:(TASTE.profile.artists||[]).slice(0,12),styles:(TASTE.profile.styles||[]).map(s=>s.style),playlists:(TASTE.profile.playlists||[]).map(p=>p.name+(p.style?' ('+p.style+')':'')).slice(0,8)}:null,
     vibe:PROJ.ref||null,
     keysSound:zoneInst('keys').name,padsSound:zoneInst('pads').name,effects:FX.slots.map(s=>`${FX_LIB[s.type].name} ${Math.round(s.amount*100)}%`)};
@@ -64,13 +64,16 @@ async function handleRequest(text){
       const r=await fetch('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},signal:ctl.signal,body:JSON.stringify({text,state:projectState(),history:ASSIST.history.slice(-8),instruments:ORDER.map(id=>{ const I=INST.get(id); return `${id}: ${I.name} (${I.cat})`; })})});
       clearTimeout(to); const j=await r.json(); if(!r.ok||j.error) throw new Error(j.error||('HTTP '+r.status));
       done=runActions(j.actions||[]); reply=j.reply||'';
-    }catch(e){ console.warn('assistant AI failed, using offline brain',e); const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
-  } else { const L=localBrain(text); done=runActions(L.actions); reply=L.reply||''; }
-  if(!reply) reply=done.length?'Done: '+done.join(', ')+'. '+nextStep():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
+    }catch(e){ console.warn('assistant AI failed, using offline brain',e); const L=localBrain(text); done=runActions(L.actions); reply=brainReply(L,done); }
+  } else { const L=localBrain(text); done=runActions(L.actions); reply=brainReply(L,done); }
+  /* while a sung take is about to start, no next-step hint: the part doesn't exist yet, and the hint would suggest singing it again */
+  if(!reply) reply=done.length?'Done: '+done.join(', ')+'.'+(BATCH.take?'':' '+nextStep()):`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
   ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false; LAST_TEXT.text='';
   if(BATCH.take){ ASSIST.say(reply,{chips:done,speak:false}); if(ASSIST.voice) speak('Sing after the count-in.'); } else ASSIST.say(reply,{chips:done}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());
   if(BATCH.take){ const part=BATCH.take; LAST_TAKE.part=part; afterSpeak(()=>TAKE.start(part)); }
 }
+/* the offline reply: a two-part sentence's reply is built after its actions ran, so it can say what each half did or skipped */
+function brainReply(L,done){ try{ return typeof L.reply==='function'?L.reply(done):(L.reply||''); }catch(e){ return ''; } }
 /* ---- speech recognition with a wake name ---- */
 function lev(a,b){ const m=a.length,n=b.length,d=Array.from({length:m+1},(_,i)=>[i]); for(let j=1;j<=n;j++) d[0][j]=j; for(let i=1;i<=m;i++) for(let j=1;j<=n;j++) d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1)); return d[m][n]; }
 function findWake(text){

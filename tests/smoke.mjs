@@ -46,6 +46,45 @@ try {
     if (!FXOPEN.has(t.id)) document.querySelector(`[data-tfx="${t.id}"]`).click(); renderTracks(); const panel = !!document.querySelector('.tfx'); const sel = document.querySelector('.tfx [data-tfxadd]'); sel.value = 'width'; sel.dispatchEvent(new Event('change', { bubbles: true }));
     return { r: r.join(), rev: t.fx.rev, width: t.fx.width, duck: t.fx.duck, panel }; });
   ok('track FX: panel, add effect, assistant reverb, sidechain preset', fxr.panel && fxr.rev === 0.3 && fxr.width > 0 && fxr.duck > 0, JSON.stringify(fxr));
+  // 3d. mixing words change EQ / low cut and keep the notes
+  const mud = await E(() => { const t = PROJ.tracks.find(t => t.role === 'bass'), c = PROJ.tracks.find(t => t.role === 'chords'); const n0 = JSON.stringify(t.events), hp0 = t.fx.hp || 0, ch0 = c.fx.hp || 0, n1 = PROJ.tracks.length;
+    const L = localBrain('the bass is muddy'); runActions(L.actions); const bass = { same: JSON.stringify(t.events) === n0, hp: t.fx.hp, hp0, reply: L.reply };
+    const M = localBrain('the mix is muddy'); runActions(M.actions); return { bass, mix: { ch0, ch: c.fx.hp, types: M.actions.map(a => a.type).join() }, added: PROJ.tracks.length - n1 }; });
+  ok('"the bass is muddy" cleans the bass EQ, same notes', mud.bass.same && mud.bass.hp > mud.bass.hp0 && mud.added === 0 && /low cut/.test(mud.bass.reply), `low cut ${mud.bass.hp0}→${mud.bass.hp} Hz`);
+  ok('"the mix is muddy" changes the mix FX', mud.mix.ch > mud.mix.ch0 && /track_fx/.test(mud.mix.types), `chords low cut ${mud.mix.ch0}→${mud.mix.ch} Hz`);
+  const still = await E(() => ['add a bassline', 'let me sing the bassline', 'record a voice note', 'another one'].map(s => localBrain(s).actions.map(a => a.type + (a.part ? ':' + a.part : '')).join('+')).join(' | '));
+  ok('"add a bassline", "sing the bassline", "voice note", "another one" unchanged', still === 'add_bass | sing:bass | sing:voice | vary', still);
+  // QA (AI-6 check): up/down describing a part's shape is not a level change ("let me sing a bassline that goes down" sings; "write a melody that goes down" makes one)
+  const dir = await E(() => ['let me sing a bassline that goes down', 'i want to sing a melody that goes up', 'write a melody that goes down', 'create a bassline that walks up'].map(s => localBrain(s).actions.map(a => a.type + (a.part ? ':' + a.part : '')).join('+')).join(' | '));
+  ok('direction words in sing / make requests keep their meaning (no fader move)', /^sing:bass \| sing:melody \| (add_melody|vary) \| (add_bass|vary)$/.test(dir), dir);
+  // AI-6: level and punch words change the fader / EQ / compressor and never add or remake a part
+  const lv = await E(() => { const T = r => PROJ.tracks.find(t => t.role === r), m = T('melody'), d = T('drums'), sig = () => PROJ.tracks.map(t => t.id + ':' + t.events.map(e => e.n + '@' + e.b).join()).join('|');
+    const s0 = sig(), n0 = PROJ.tracks.length, v0 = m.vol, c0 = d.fx.comp || 0, hi0 = d.hi || 0, lo0 = d.lo || 0, R = {};
+    for (const s of ['turn the melody down a bit', 'make the kick punchier', 'bring the bass up', 'chords louder', 'drums too loud', 'softer hats']) R[s] = runActions(localBrain(s).actions).join(', ');
+    return { db: 40 * Math.log10(m.vol / v0), comp: [c0, d.fx.comp], hi: [hi0, d.hi], lo: [lo0, d.lo], same: sig() === s0, added: PROJ.tracks.length - n0, R }; });
+  ok('"turn the melody down a bit" = -3 dB, "kick punchier" = more compressor, "softer hats" = less highs; no part added or remade', Math.abs(lv.db + 3) < 0.1 && lv.comp[1] > lv.comp[0] && lv.hi[1] < lv.hi[0] && lv.same && lv.added === 0, `melody ${lv.db.toFixed(1)} dB, comp ${lv.comp.join('→')}, drums high ${lv.hi.join('→')} dB, +${lv.added} tracks`);
+  // AI-6 fix 1: the whole song's level moves every part by the same dB (in the song, so Undo restores it exactly; the master fader is untouched)
+  const song = await E(() => { const vols = () => PROJ.tracks.map(t => t.vol.toFixed(4)).join(','), m0 = MIX.master ? MIX.master.vol : 1, v0 = vols(), n0 = PROJ.tracks.length;
+    const L = localBrain('turn it down a bit'), chip = runActions(L.actions).join(), v1 = vols(), r = PROJ.tracks.map(t => t.vol).filter(v => v > 0); undo();
+    return { down: L.actions.map(a => a.type + ':' + a.track + ':' + a.db).join(), chip, reply: L.reply, changed: v1 !== v0, back: vols() === v0, master: (MIX.master ? MIX.master.vol : 1) === m0, added: PROJ.tracks.length - n0 }; });
+  ok('"turn it down a bit" moves every part 3 dB and Undo puts it back exactly (master fader untouched)', song.down === 'mix:all:-3' && song.changed && song.back && song.master && song.added === 0 && /3 dB/.test(song.chip) && /3 dB/.test(song.reply), `${song.down} · ${song.chip} · undo exact ${song.back}`);
+  // QA (AI-6 retest): "punchier" stops at +6 dB low EQ and 90% compressor (then an honest reply), and Undo puts the drums back exactly
+  const pc6 = await E(() => { const D = () => PROJ.tracks.find(t => t.role === 'drums'), s = () => [D().lo || 0, D().fx.comp || 0].join(), s0 = s(), u0 = UNDO.stack.length; let last = ''; /* Undo swaps the track objects, so look the drums up each time */
+    for (let i = 0; i < 6; i++) { const L = localBrain('make the kick punchier'); runActions(L.actions); last = L.actions.length ? '' : L.reply; }
+    const lo = D().lo || 0, comp = Math.round((D().fx.comp || 0) * 100); while (UNDO.stack.length > u0) undo(); return { lo, comp, last, back: s() === s0 }; });
+  ok('"make the kick punchier" x6 stops at +6 dB low EQ / 90% compressor with an honest reply; Undo restores', pc6.lo <= 6 && pc6.comp <= 90 && /already as punchy/.test(pc6.last) && pc6.back, `low +${pc6.lo} dB, comp ${pc6.comp}%`);
+  // AI-6 fix 1: "very" and Hinglish level sentences change the mix only
+  const hin = await E(() => { const n0 = PROJ.tracks.length; const R = ['the drums are very loud', 'the bass is very quiet', 'drums bahut loud hai', 'drums ki awaaz kam karo', 'melody thoda kam karo', 'hats ko soft karo', 'bass ko thoda upar karo'].map(s => { const L = localBrain(s); return L.actions.map(a => a.type).join('+') || (/full volume/.test(L.reply || '') ? 'full' : ''); });
+    return { R: R.join(' | '), ok: R.every(x => /^(mix(\+mix)*|full)$/.test(x)), added: PROJ.tracks.length - n0 }; });
+  ok('"very" and Hinglish level words ("bahut loud hai", "thoda kam karo", "soft karo") only move the mix', hin.ok && hin.added === 0, hin.R);
+  const tone = await E(() => { const t = PROJ.tracks.find(t => t.role === 'bass'), n0 = JSON.stringify(t.events), lo0 = t.lo || 0;
+    runActions(localBrain('boost the lows on the bass').actions); const boost = { lo0, lo: t.lo || 0, same: JSON.stringify(t.events) === n0 };
+    runActions(localBrain('the bass is muddy').actions); const hp1 = t.fx.hp; const S = localBrain('still muddy'); runActions(S.actions);
+    const add = localBrain('add brighter chords').actions.map(a => a.type).join(), another = localBrain('another one with more low end').actions.map(a => a.type).join();
+    return { boost, hp1, hp2: t.fx.hp, stillBass: S.actions.length > 0 && S.actions.every(a => a.track === t.id), add, another }; });
+  ok('"boost the lows on the bass" raises the bass low EQ', tone.boost.lo > tone.boost.lo0 && tone.boost.same, `low ${tone.boost.lo0}→${tone.boost.lo} dB`);
+  ok('"still muddy" after "the bass is muddy" goes further on the bass', tone.stillBass && tone.hp2 > tone.hp1, `low cut ${tone.hp1}→${tone.hp2} Hz`);
+  ok('"add brighter chords" adds chords; "another one with more low end" makes a new groove', tone.add === 'add_chords' && tone.another === 'vary', `${tone.add} | ${tone.another}`);
   const ms = await E(() => { SEL.clear(); PROJ.tracks.slice(0, 2).forEach(t => SEL.add(t.id)); renderTracks(); document.querySelector('[data-sel="play"]').click(); const n = PROJ.tracks.filter(trackAudible).length; loopStop(); SEL.clear(); renderTracks(); return n; });
   ok('select two tracks and play them together', ms === 2, `${ms} audible`);
   const one = await E(() => JSON.stringify(localBrain('make a track like stephan bodzin').actions.map(a => a.type)));
@@ -64,11 +103,20 @@ try {
   // 5. import MIDI and audio, audio → notes
   await E(() => newSong('Smoke import')); await W(300);
   const inp = await p.$('#importFile'); await inp.uploadFile(fx('test.mid')); await W(800); await inp.uploadFile(fx('sing.wav')); await W(1500);
+  const tv = await E(() => { const a = PROJ.tracks.find(t => t.kind === 'audio'); const x = localBrain('turn the voice note into a bassline').actions, y = localBrain('turn ' + a.name + ' into chords').actions; return { x: x.map(q => q.type).join(), y: y.map(q => q.type + ':' + q.to + ':' + (q.track === a.id)).join(), n: PROJ.tracks.length, r: runActions(y).join(), n2: PROJ.tracks.length }; });
+  ok('"turn the voice note into a bassline" transcribes', tv.x === 'transcribe', tv.x);
+  const tv2 = await E(() => ['make the voice note a bassline', 'turn the voice note I just recorded into a bassline', 'make a bassline from the voice note', 'turn the voice note into a base line', 'record a voice note'].map(s => localBrain(s).actions.map(a => a.type + ':' + (a.to || a.part)).join('+')).join(' | '));
+  ok('voice note phrasings convert the recording ("record a voice note" still records)', tv2 === 'transcribe:bass | transcribe:bass | transcribe:bass | transcribe:bass | sing:voice', tv2);
+  const tv3 = await E(() => ['voice note ko bassline bana do', 'is recording se chords banao', 'meri recording ko melody mein badlo'].map(s => localBrain(s).actions.map(a => a.type + ':' + (a.to || a.part)).join('+')).join(' | '));
+  ok('Hinglish voice note requests convert the recording ("voice note ko bassline bana do")', tv3 === 'transcribe:bass | transcribe:chords | transcribe:melody', tv3);
+  ok('"turn <recording name> into chords" transcribes that track',tv.y === 'transcribe:chords:true' && tv.n2 === tv.n + 1 && /chords/.test(tv.r), tv.r);
   const im = await E(() => { const r = runActions([{ type: 'transcribe', to: 'bass' }]); return { tracks: PROJ.tracks.map(t => t.name + ':' + t.kind).join(', '), r: r.join() }; });
   ok('import MIDI + audio, turn audio into a bassline', /Lead:notes/.test(im.tracks) && /sing:audio/.test(im.tracks) && /bassline/.test(im.tracks), im.tracks);
   // 6. sing a bassline over the beat (fake microphone sings C E G A C G)
   await E(() => newSong('Smoke sing')); await W(300);
-  await E(() => { runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_chords' }]); ASSIST.run('let me sing the bassline'); });
+  await E(() => { runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_chords' }]); window.__sayLog = []; const o = ASSIST.say; ASSIST.say = function (m, op) { window.__sayLog.push(m); ASSIST.say = o; return o.call(this, m, op); }; ASSIST.run('let me sing the bassline'); });
+  await W(300); const sr = await E(() => (window.__sayLog || [])[0] || '');
+  ok('the sing reply doesn\'t suggest singing what you just asked for', /Sing the bassline/.test(sr) && !/let me sing|Bassline next/.test(sr), sr);
   await W(3500); const guide = await E(() => TAKE_GUIDE && PROJ.tracks.filter(trackAudible).every(t => t.role === 'drums'));
   ok('while singing, only the drums play', guide);
   await E(() => { window.__live = 0; const orig = noteOn; window.noteOn = function () { if (LOOP.state === 'take') window.__live++; return orig.apply(this, arguments); }; });
@@ -177,6 +225,11 @@ try {
   ok('hats lift on beats 2 and 4, in-between 16ths sit back', fe.on24 > fe.on13 * 1.05 && fe.on24 > fe.off * 1.2, `2/4 ${fe.on24.toFixed(2)} vs 1/3 ${fe.on13.toFixed(2)} vs off-16ths ${fe.off.toFixed(2)}`);
   ok('"more swing" is full triplet swing (off-16ths 1/12 beat late)', fe.more.sw > 0.32 && Math.abs(fe.lag - 1 / 12) < 0.01 && /66%/.test(fe.more.r), `${fe.lag.toFixed(3)} beat · ${fe.more.r}`);
   ok('"less swing" steps down (66 → 58 → 54 → straight), exact "swing 58%", "no swing"', fe.less.map(x => x.sw).join() === '0.16,0.08,0' && /58%/.test(fe.less[0].r) && Math.abs(fe.exact.sw - 0.16) < 0.005 && fe.none.sw === 0, fe.less.map(x => x.r).join(' → '));
+  // AI-6: "straighten it a bit" / "a bit straighter" / "a little less bounce" step one rung; "make it bouncier" steps up; "straighten it" is straight
+  const sw6 = await E(() => { const drums = () => PROJ.tracks.find(t => t.role === 'drums'), said = txt => { LAST_TEXT.text = txt; runActions(localBrain(txt).actions); LAST_TEXT.text = ''; return drums().recipe.swing; };
+    runActions([{ type: 'add_drums', style: 'house', swing: '70%' }]); const down = ['too swingy, straighten it a bit', 'a bit straighter', 'a little less bounce', 'straighten the hats a little'].map(said);
+    const up = said('make it bouncier'); runActions([{ type: 'groove', swing: '70%' }]); return { down, up, full: said('straighten it') }; });
+  ok('"straighten it a bit" steps 70 → 66 → 58 → 54 → straight; "bouncier" swings; "straighten it" is straight', sw6.down.join() === '0.333,0.16,0.08,0' && sw6.up > 0.3 && sw6.full === 0, `${sw6.down.join(' → ')} · bouncier ${sw6.up} · straighten ${sw6.full}`);
   ok('human styles: kick pushes about 10 ms early', fe.kickMs < -6 && fe.kickMs > -14, `${fe.kickMs.toFixed(1)} ms`);
   // with the AI on (mocked like the old live prompt, which sends swing 0 for "less swing"), the user's words still step down
   const ai = await E(async () => { const of = window.fetch, eng = ASSIST.engine, drums = () => PROJ.tracks.find(t => t.role === 'drums');
@@ -206,6 +259,51 @@ try {
         const bpm0 = CTRL.bpm; await handleRequest(s); loopStop(); R[s] = { bpm: CTRL.bpm - bpm0, back: drums().recipe.back }; }
       return R; } finally { ASSIST.engine = eng; } });
   ok('"faster" about a part keeps the tempo, "add a snare roll" keeps the clap', n23['make the bass faster'].bpm === 0 && n23['faster chords'].bpm === 0 && n23['make it faster'].bpm === 5 && n23['add a snare roll'].back !== 'snare' && n23['add a snare'].back === 'snare', JSON.stringify(n23));
+  // AI-8: Basic mode: compound genres, unsolo/unmute, quantize, two requests in one sentence, the artist the user named
+  const a8 = await E(async () => { const eng = ASSIST.engine, R = {};
+    try { ASSIST.engine = null;
+      await newSong('Smoke AI-8 afro'); PROJ.style = null; await handleRequest('afro house beat'); loopStop(); R.afro = PROJ.style;
+      await newSong('Smoke AI-8 lofi'); PROJ.ref = undefined; PROJ.style = null; await handleRequest('lofi hip hop beat'); loopStop(); R.lofi = PROJ.style + '/' + (PROJ.ref || '');
+      await newSong('Smoke AI-8 ref'); PROJ.ref = undefined; await handleRequest('drums like Black Coffee'); loopStop(); R.ref = PROJ.ref;
+      await newSong('Smoke AI-8 mix'); runActions([{ type: 'add_drums', style: 'house', seed: 5180 }, { type: 'add_bass', seed: 5181 }, { type: 'add_chords', seed: 5182 }, { type: 'add_melody', seed: 5183 }]); loopStop();
+      const tr = r => PROJ.tracks.find(t => t.role === r), n0 = PROJ.tracks.length;
+      await handleRequest('solo the bass'); await handleRequest('unsolo the bass'); R.unsolo = !tr('bass').solo && PROJ.tracks.length === n0;
+      await handleRequest('un-mute the drums'); R.unmute = !tr('drums').mute;
+      await handleRequest('mute the drums and solo the bass'); R.both = tr('drums').mute && tr('bass').solo; await handleRequest('remove the solo'); await handleRequest('unmute everything'); R.clear = !PROJ.tracks.some(t => t.solo || t.mute);
+      const rc = (tr('chords').fx || {}).rev || 0, rm = (tr('melody').fx || {}).rev || 0, u0 = UNDO.stack.length;
+      await handleRequest('more reverb on the chords and less on the melody'); R.fx = tr('chords').fx.rev > rc && ((tr('melody').fx || {}).rev || 0) <= rm; R.undo1 = UNDO.stack.length - u0;
+      const p = addTrack({ role: 'melody', inst: 'piano', name: 'Played keys', events: [{ b: 0.07, d: 0.4, n: 60, v: .8 }, { b: 1.12, d: 0.3, n: 64, v: .8 }] }); saveProject();
+      await handleRequest('quantize my melody to 1/8'); R.q = p.events.map(e => e.b).join() + '/' + PROJ.tracks.length;
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('Basic mode: afro house is afro, lofi hip hop is lo-fi with no artist, "like Black Coffee" stays Black Coffee', a8.afro === 'afro' && a8.lofi === 'lofi/' && a8.ref === 'Black Coffee', `${a8.afro}, ${a8.lofi}, ${a8.ref}`);
+  ok('Basic mode: unsolo / un-mute / "remove the solo" / "unmute everything"; two requests in one sentence both run (one Undo)', a8.unsolo && a8.unmute && a8.both && a8.clear && a8.fx && a8.undo1 === 1, JSON.stringify(a8));
+  ok('Basic mode: "quantize my melody to 1/8" snaps your own part to 1/8 and adds no track', a8.q === '0,1/5', a8.q);
+  // AI-8 fix 1: "another one" after adding a part varies that part, "mute everything but the drums", "save the song" saves (no MP3)
+  const f8 = await E(async () => { const eng = ASSIST.engine, R = {};
+    try { ASSIST.engine = null;
+      await newSong('Smoke AI-8 fix'); runActions([{ type: 'add_drums', style: 'house', seed: 5190 }, { type: 'add_bass', seed: 5191 }, { type: 'add_chords', seed: 5192 }]); loopStop();
+      const tr = r => PROJ.tracks.find(t => t.role === r);
+      R.another = localBrain('add a bassline and give me another one').actions.map(a => a.type + ':' + (a.track || '')).join();
+      await handleRequest('mute everything but the drums'); R.but = !tr('drums').mute && tr('bass').mute && tr('chords').mute;
+      R.save = localBrain('save the song').actions.map(a => a.type).join();
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('Basic mode: "add a bassline and give me another one" varies the bass, "mute everything but the drums" mutes the rest, "save the song" saves', f8.another === 'add_bass:,vary:bass' && f8.but && f8.save === 'save', JSON.stringify(f8));
+  // AI-8 fix 2: an explicit number beats the "add some never lowers" guard (AI path), "add some reverb" still raises, "remove the reverb from the chords" keeps the part
+  const g8 = await E(async () => { const eng = ASSIST.engine, R = {};
+    try { ASSIST.engine = null;
+      await newSong('Smoke AI-8 fix 2'); runActions([{ type: 'add_drums', style: 'house', seed: 5200 }, { type: 'add_chords', seed: 5201 }]); loopStop();
+      const ch = () => PROJ.tracks.find(t => t.role === 'chords'), rv = () => Math.round(((ch() || {}).fx || {}).rev * 100);
+      const ai = (text, acts) => { LAST_TEXT.text = text; try { runActions(acts); } finally { LAST_TEXT.text = ''; } };
+      ch().fx.rev = 0.42; ai('set the chords reverb to 20 and add some delay', [{ type: 'track_fx', track: 'chords', effect: 'reverb', amount: 20 }, { type: 'track_fx', track: 'chords', effect: 'delay', amount: 30 }]); R.set = rv();
+      ch().fx.rev = 0.42; ai('add some reverb to the chords', [{ type: 'track_fx', track: 'chords', effect: 'reverb', amount: 40 }]); R.add = rv();
+      ch().fx.rev = 0.42; await handleRequest('set the reverb on the chords to 20%'); R.basic = rv();
+      await handleRequest('remove the reverb from the chords'); R.kept = !!ch(); R.off = ch() ? ch().fx.rev == null : null;
+      /* fix 3: a clause that names the part with remove/delete removes it, even next to "turn off the reverb" */
+      const has = r => PROJ.tracks.some(t => t.role === r);
+      runActions([{ type: 'add_melody', seed: 5202 }]); ai('remove the melody and turn off the reverb', [{ type: 'remove', track: 'melody' }, { type: 'fx', effect: 'reverb', amount: 0 }]); R.rmAI = !has('melody');
+      await handleRequest('delete the drums and kill the reverb'); R.rmBasic = !has('drums') && has('chords');
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('"set the chords reverb to 20 and add some delay" gives 20%, "add some reverb" still raises it, "remove the reverb from the chords" keeps the chords, "remove the melody and turn off the reverb" removes the melody', g8.set === 20 && g8.add === 52 && g8.basic === 20 && g8.kept && g8.off && g8.rmAI && g8.rmBasic, JSON.stringify(g8));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
