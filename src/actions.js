@@ -162,7 +162,7 @@ function onePart(list){
   const out=[], dropped=[];
   for(let a of list){
     /* "turn it down a bit" right after the bass: the bass, not the whole song */
-    if(a.type==='mix'&&/^(all|song|everything|mix|master)$/i.test(String(a.track||''))&&!named.size&&!whole&&ASSIST.focus&&/\b(it|that|this|them)\b/.test(lc)&&a.volume==null){ const T=partTrack(ASSIST.focus); if(T) a=Object.assign({},a,{track:T.id}); }
+    if(a.type==='mix'&&/^(all|song|everything|mix|master)$/i.test(String(a.track||''))&&!named.size&&!whole&&ASSIST.focus&&/\b(it|that|this|them)\b/.test(lc)&&a.volume==null){ const T=partTrack(ASSIST.focus); if(T){ a=Object.assign({},a,{track:T.id}); BATCH.retold=true; } }
     if(!G.size||!PART_ACTS.has(a.type)){ out.push(a); continue; }
     const r=actRole(a);
     if(!r||G.has(r)||(added.has(r)&&/^add_/.test(a.type))){ out.push(inPlace(a,text,named)); continue; }

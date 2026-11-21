@@ -103,6 +103,8 @@ async function handleRequest(text){
   const notes=(BATCH.notes||[]).filter(n=>!(n.unless&&n.unless.test(reply))).map(n=>n.text);
   if(BATCH.declined&&!done.length&&notes.length){ const q=(reply.match(/[^.!?]*\?\s*$/)||[''])[0].trim(); reply=notes.join(' ')+(q&&!notes.some(n=>/\?/.test(n))?' '+q:''); notes.length=0; }
   /* the AI's actions for other parts were left out (AI-9): say so, so the reply matches what changed */
+  /* "make it softer" right after the bass went to the bass, not the whole song the AI said: say what really changed */
+  if(BATCH.retold&&done.length&&ASSIST.engine) reply=done.join('. ')+'. Same notes, the rest stays as it was.';
   if(BATCH.guarded&&BATCH.guarded.length&&done.length&&ASSIST.engine) notes.push('I only changed what you asked about; the rest stays as it was.');
   if(reply&&notes.length) reply=reply.replace(/\s*$/,'')+' '+notes.join(' ');
   else if(!reply&&!done.length&&notes.length) reply=notes.join(' ');

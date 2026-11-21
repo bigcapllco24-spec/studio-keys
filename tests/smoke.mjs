@@ -407,6 +407,33 @@ try {
       await handleRequest('delete the drums and kill the reverb'); R.rmBasic = !has('drums') && has('chords');
       return R; } finally { ASSIST.engine = eng; } });
   ok('"set the chords reverb to 20 and add some delay" gives 20%, "add some reverb" still raises it, "remove the reverb from the chords" keeps the chords, "remove the melody and turn off the reverb" removes the melody', g8.set === 20 && g8.add === 52 && g8.basic === 20 && g8.kept && g8.off && g8.rmAI && g8.rmBasic, JSON.stringify(g8));
+  // AI-9: a comment about one part changes only that part, in place; "new chords" keeps the melody; Keys remembers the thread (focus, versions)
+  const a9 = await E(async () => { const eng = ASSIST.engine, R = {};
+    try { ASSIST.engine = null; ASSIST.changes.length = 0; ASSIST.focus = null; VERSIONS.length = 0;
+      await newSong('Smoke AI-9'); runActions([{ type: 'vibe', style: 'house' }, { type: 'add_drums', style: 'house', seed: 5300 }, { type: 'add_bass', seed: 5301 }, { type: 'add_chords', seed: 5302 }, { type: 'add_melody', seed: 5303 }]); loopStop();
+      const sig = () => PROJ.tracks.map(t => t.role + ':' + JSON.stringify([t.inst, t.events.map(e => [e.b, e.n, e.d])])), chg = (a, b) => a.filter((x, i) => x !== b[i]).map(x => x.split(':')[0]).concat(b.length > a.length ? ['+' + (b.length - a.length)] : []);
+      const only = async (text, ai) => { const a = sig(); if (ai) { LAST_TEXT.text = text; try { runActions(ai); } finally { LAST_TEXT.text = ''; } } else await handleRequest(text); return chg(a, sig()).join(','); };
+      R.simpler = await only('make the bass simpler'); R.busy = await only('the melody is too busy'); R.chordsS = await only('make the chords shorter');
+      R.change = await only('change the chords'); R.piano = await only('put the chords on strings'); R.melody = await only('change the melody');
+      const m0 = JSON.stringify(PROJ.tracks.find(t => t.role === 'melody').events); R.newCh = await only('new chords'); R.melKept = m0 === JSON.stringify(PROJ.tracks.find(t => t.role === 'melody').events);
+      R.back = await only('go back to the previous chords');
+      await only('make the bass simpler'); const v0 = PROJ.tracks.find(t => t.role === 'bass').vol; await handleRequest('make it softer'); R.focus = PROJ.tracks.find(t => t.role === 'bass').vol < v0;
+      let same = 0; for (let i = 0; i < 8; i++) { const b = JSON.stringify(PROJ.tracks.find(t => t.role === 'bass').events); await only('change the bassline'); if (b === JSON.stringify(PROJ.tracks.find(t => t.role === 'bass').events)) same++; } R.sameBass = same;
+      R.ask = await only('which chords are these'); R.named = await only('make the chords Am F C G');
+      R.aiAnother = await only('add a bassline and give me another one', [{ type: 'add_bass' }, { type: 'vary', track: 'drums' }]);
+      R.aiSimpler = await only('make the bass simpler', [{ type: 'groove', track: 'drums', change: -1 }]);
+      R.aiCopy = await only('change the chords', [{ type: 'add_chords' }]);
+      R.aiNew = await only('new chords', [{ type: 'vary', track: 'chords' }, { type: 'vary', track: 'bass' }, { type: 'vary', track: 'melody' }]);
+      ASSIST.focus = null; R.sing = ['record my bassline', 'let me record the bass with my voice', "i'll hum it"].map(x => localBrain(x).actions.map(a => a.type + ':' + a.part).join()).join('|');
+      const st = projectState(); R.state = Array.isArray(st.recent) && st.recent.length > 0 && Object.keys(st).indexOf('recent') === 1 && typeof st.chords === 'string';
+      PROJ.tracks.find(t => t.role === 'drums').recipe.energy = 5; await handleRequest('make the drums busier'); const bubs = [...document.querySelectorAll('#asChat .bub.as')]; R.max = /already at full energy/.test(bubs[bubs.length - 1].textContent);
+      const playing = () => TR.running; loopPlay(); await handleRequest('stop listening'); R.listen = playing(); loopStop();
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('AI-9: one-part comments change only that part, in place (simpler, too busy, shorter, change, new sound)', a9.simpler === 'bass' && a9.busy === 'melody' && a9.chordsS === 'chords' && /^(bass,)?chords$|^chords,bass$|^bass,chords$/.test(a9.change) && a9.piano === 'chords' && a9.melody === 'melody', JSON.stringify(a9));
+  ok('AI-9: "new chords" changes the chords and keeps the melody (bass follows); "go back to the previous chords" brings them back', /chords/.test(a9.newCh) && !/melody|drums/.test(a9.newCh) && a9.melKept && /chords/.test(a9.back) && !/melody|drums/.test(a9.back), `${a9.newCh} | ${a9.back}`);
+  ok('AI-9: "make it softer" right after the bass is the bass; "change the bassline" is always different; questions and named chords add no track', a9.focus && a9.sameBass === 0 && a9.ask === '' && a9.named === '', JSON.stringify({ f: a9.focus, s: a9.sameBass, a: a9.ask, n: a9.named }));
+  ok('AI-9 guard (AI path): another one goes to the bass, "simpler bass" sent as a drum groove simplifies the bass, add_chords for "change the chords" makes no copy, "new chords" leaves the melody', !/drums/.test(a9.aiAnother) && a9.aiSimpler === 'bass' && !/\+/.test(a9.aiCopy) && /chords/.test(a9.aiCopy) && !/melody|drums/.test(a9.aiNew), JSON.stringify([a9.aiAnother, a9.aiSimpler, a9.aiCopy, a9.aiNew]));
+  ok('AI-9: sung-part phrases sing, "busier drums" at full energy says so, "stop listening" never stops the song, the AI gets the change log', a9.sing === 'sing:bass|sing:bass|sing:melody' && a9.max && a9.listen && a9.state, JSON.stringify({ sing: a9.sing, max: a9.max, listen: a9.listen, state: a9.state }));
   // UX-12: Save a copy starts its own history; Undo in the copy never touches the original (in the songs list too)
   const cu = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)), rec = async k => { const r = await IDB.get(k, 'projects'); return r ? JSON.stringify([r.name, r.bpm, r.tracks, r.savedAt, r.proj.tracks.map(t => t.events.length)]) : null; };
     await newSong('Smoke original'); runActions([{ type: 'add_drums', style: 'house', seed: 5170 }]); await W(150); runActions([{ type: 'add_bass', seed: 5171 }]); const oid = PROJ.id; await saveCopy(); await W(200); const o0 = await rec(oid);

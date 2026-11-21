@@ -77,9 +77,9 @@ function brainCore(raw,sws){
   if(plm&&typeof findPlaylist==='function'&&findPlaylist(plm[1])) ref='playlist '+plm[1];
   const style=(STYLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
   /* sing a part over the beat */
-  /* "record my bassline", "let me record the bass with my voice", "i'll hum it" are sung takes (UX-14); a hum with no part named is the part talked about last, else a melody */
+  /* "record my bassline", "let me record the bass with my voice", "i'll hum it" are sung takes (UX-14); a hum with no part named is a melody (the bassline right after talking about the bass) */
   const singAsk=/\b(sing|hum|whistle|record (my )?voice|let me (do|try)|with my voice|record (my|the) (bass ?line|bass|chords?|melody|lead|hook|tune))\b/.test(t)&&!AUD_NOUN.test(t.replace(/\bmy voice\b/,''));
-  if(singAsk&&/\bi ?(?:'|’)?ll (sing|hum|whistle)\b|\b(let me|i want to|i wanna|can i) (sing|hum|whistle) (it|that|this|one)\b/.test(t)&&!/\b(bass|chords?|pads?|melody|lead|hook|tune|riff)\b/.test(t)) return {actions:[{type:'sing',part:['bass','chords','melody'].includes(ASSIST.focus)?ASSIST.focus:'melody'}]};
+  if(singAsk&&/\bi ?(?:'|’)?ll (sing|hum|whistle)\b|\b(let me|i want to|i wanna|can i) (sing|hum|whistle) (it|that|this|one)\b/.test(t)&&!/\b(bass|chords?|pads?|melody|lead|hook|tune|riff)\b/.test(t)) return {actions:[{type:'sing',part:ASSIST.focus==='bass'?'bass':'melody'}]};
   const singRole=singAsk?(/\bbass/.test(t)?'bass':/\bchord|\bpad/.test(t)?'chords':/\b(melody|lead|hook|tune|riff|top ?line|voice)\b/.test(t)?'melody':null):null;
   /* "save the song" / "save my track" is a save; a file only when export, download, bounce, render, mp3 or wav is said (QA, 16 Nov) */
   if(/\b(download|export|bounce|render|give me)\b.*\b(mp3|audio file|song file|the song|the track|my song|my track)\b|\bmp3\b|\bsave\b.*\b(as|to) (an? )?(audio|wav)\b/.test(t)&&!/\b(zip|stems?|ableton|midi)\b/.test(t)){ const mm=t.match(/(\d+)\s*(min|minute)/), loops=t.match(/(\d+)\s*loops?/); return {actions:[{type:'export',format:'mp3',minutes:mm?+mm[1]:undefined,loops:loops?+loops[1]:undefined}]}; }
