@@ -128,15 +128,53 @@ const ROMAN={major:['I','ii','iii','IV','V','vi','vii°'],minor:['i','ii°','III
 function romans(prog,mode){ const R=ROMAN[mode]||ROMAN.minor; return (prog||[]).map(d=>R[mod(d,7)]).join('–'); }
 /* the chords the song plays now, bar by bar ("Am F C G"); spoken: "A minor, F, C, G" */
 function chordList(){ try{ const {key,plan}=chordPlan(); return {key,list:plan.map(c=>{ const th=mod(c.pcs[1]-c.pcs[0],12), fi=mod(c.pcs[2]-c.pcs[0],12); return {root:c.root,q:fi===6?'dim':th===3?'m':'',deg:c.deg}; })}; }catch(e){ return null; } }
-const pcSay=pc=>PC_NAMES[pc].replace('♯',' sharp').replace('♭',' flat');
+/* chord roots spelled for the key: flats in flat keys (F minor: D♭, not C♯), sharps in sharp keys (QA, 22 Nov) */
+const PC_SHARP=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'], PC_FLAT=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+const pcKey=(pc,k)=>{ const maj=k?mod(k.tonic+(k.mode==='minor'?3:0),12):0; return ([7,2,9,4,11].includes(maj)?PC_SHARP:PC_FLAT)[mod(pc,12)]; };
+const pcSay=(pc,k)=>pcKey(pc,k).replace('♯',' sharp').replace('♭',' flat');
 function chordsSaid(spoken){ const c=chordList(); if(!c||!PROJ.tracks.some(t=>t.role==='chords'||t.role==='bass')) return null; const L=c.list.slice(0,Math.min(c.list.length,8));
-  const names=L.map(x=>spoken?pcSay(x.root)+(x.q==='m'?' minor':x.q==='dim'?' diminished':''):PC_NAMES[x.root]+x.q);
+  const names=L.map(x=>spoken?pcSay(x.root,c.key)+(x.q==='m'?' minor':x.q==='dim'?' diminished':''):pcKey(x.root,c.key)+x.q);
   const R=ROMAN[c.key.mode]||ROMAN.minor; return spoken?names.join(', '):`${names.join(' ')} (${L.map(x=>R[x.deg]).join('–')}) in ${keyName(c.key)}`; }
 /* which parts the user's words name: role words, or a track's own name ("the grand piano") */
 const PART_SAID=[['drums',/\b(drums?|beat|kicks?|hats|hi ?hats?|snares?|claps?|groove|percussion|perc|shakers?|rims?|toms?|cymbals?|crash)\b/],['bass',/\b(bass ?lines?|bass|808s?|sub ?bass)\b/],['chords',/\b(chords?|pads?|harmony|progression)\b/],['melody',/\b(melod(?:y|ies)|lead|hook|riff|top ?line|arp|pluck)\b/],['voice',/\b(vocals?|voice ?notes?)\b/]];
 const roleWord=w=>{ const s=' '+String(w||'').toLowerCase()+' '; return (PART_SAID.find(([k,re])=>re.test(s))||[])[0]||null; };
-function partsSaid(text){ let s=' '+String(text||'').toLowerCase().replace(/hi[\s-]?hats?/g,'hats')+' '; const nm=String((typeof ASSIST!=='undefined'&&ASSIST.name)||'Keys').toLowerCase().replace(/[^a-z0-9 ]/g,''); if(nm) s=s.replace(new RegExp('\\b'+nm+'\\b','g'),' ');
-  const out=new Set(PART_SAID.filter(([k,re])=>re.test(s)).map(x=>x[0])); PROJ.tracks.forEach(t=>{ const n=String(t.name||'').toLowerCase(); if(n.length>3&&!/^(drums|bassline|chords|melody)$/.test(n)&&s.includes(' '+n)) out.add(t.role); }); return out; }
+function partsSaid(text){ const P=protectSaid(text); text=P.rest; let s=' '+String(text||'').toLowerCase().replace(/hi[\s-]?hats?/g,'hats')+' '; const nm=String((typeof ASSIST!=='undefined'&&ASSIST.name)||'Keys').toLowerCase().replace(/[^a-z0-9 ]/g,''); if(nm) s=s.replace(new RegExp('\\b'+nm+'\\b','g'),' ');
+  const out=new Set(PART_SAID.filter(([k,re])=>re.test(s)).map(x=>x[0])); PROJ.tracks.forEach(t=>{ const n=String(t.name||'').toLowerCase(); if(n.length>3&&!/^(drums|bassline|chords|melody)$/.test(n)&&s.includes(' '+n)) out.add(t.role); }); P.kept.forEach(r=>out.delete(r)); return out; }
+/* parts the user praises or protects ("the drums are fine, just change the chords", "don't touch the drums", "the kick is great but…",
+   "I like the chords", "keep the bass", "drums theek hai", "drums mat chhedo") are never changed, offline or on the AI path (owner, 22 Nov).
+   kept: those parts; rest: the words with those clauses taken out (what the request is really about). A praised part is the target
+   after all when the rest names no part ("the melody is good but too loud", "I love the bass but it's too loud"). */
+const KEEP_PRAISE=/\b(?:is|are|was|were|'s|’s|sounds?|sounding|feels?|looks?|seems?)\s+(?:(?:really|pretty|so|very|totally|just|actually|already|perfectly|quite|super|bloody|honestly)\s+)*(?:fine|great|good|perfect|ok|okay|cool|nice|sick|fire|dope|solid|alright|all right|amazing|awesome|lovely|spot on|on point|banging|bangin|sweet|tight|beautiful|gorgeous|excellent|brilliant|killer|sorted|right)\b|\b(?:theek|thik|badhiya|badiya|mast|accha|acha|achha|sahi|perfect|zabardast)\s+(?:hai|he|h|hain|lag (?:raha|rahi|rahe) hai)\b/;
+const KEEP_ASK=/\b(?:don'?t|dont|do not|never|no need to)\s+(?:touch|change|mess(?: with| up)?|alter|edit|redo|regenerate|tweak|move|modify|replace|lose|break|vary)\b|\b(?:leave|keep)\b(?!.*\bout\b)|\bmat\s+(?:chhed\w*|chhu\w*|badl\w*|badal\w*|chhoo\w*)\b|\b(?:rehne|rehnay)\s+do\b|^\s*(?:but\s+)?not\s+(?:the|my)\b|\b(?:except(?: for)?|apart from|other than|besides)\b/;
+const KEEP_LIKE=/\b(?:i|we)\s+(?:really\s+|totally\s+|kinda\s+|do\s+)?(?:like|love|dig)\b/;
+const KEEP_NOT=/\b(previous|other one|old|older|last|first|original|before|earlier|better than)\b/;
+const KEEP_SHAPE=/\b(louder|quieter|softer|simpler|busier|shorter|longer|brighter|darker|warmer|lower|higher|down|up|quiet|loud|simple|busy|tight(?:er)?|in key|in time|on beat|same key)\b/;
+const KEEP_SEP=/(\s*(?:[,;.!?]|\s-\s|\b(?:but|and|just|though|although|however|so|only|while|whereas)\b)\s*)/;
+const KEEP_MEMO=new Map();
+function protectSaid(text){ text=String(text||''); if(KEEP_MEMO.has(text)) return KEEP_MEMO.get(text);
+  const orig=text.split(KEEP_SEP), kept=new Set(), drop=new Set(), cut=new Map(), praised=new Set(); let pending=[];
+  const low=c=>String(c||'').toLowerCase().replace(/hi[\s-]?hats?/g,'hats'), roles=c=>PART_SAID.filter(([k,re])=>re.test(' '+low(c)+' ')).map(x=>x[0]);
+  for(let i=0;i<orig.length;i+=2){ const c=low(orig[i]), R=roles(c);
+    /* "the drums and the bass are fine": a half with only a part in it goes with the clause after it */
+    if(R.length&&!c.replace(/\b(the|my|your|that|this|those|these|and|both|all|kick|drums?|beat|hats|snares?|claps?|bass ?lines?|bass|808s?|chords?|pads?|melod(?:y|ies)|lead|hook)\b/g,'').trim()){ pending.push(i); continue; }
+    /* "change everything except the drums": the drums stay, the rest of the clause is the request */
+    const ex=/\b(?:except(?: for)?|apart from|other than|besides|but not)\s+(?:the |my )?/.exec(c);
+    if(ex){ const RA=roles(c.slice(ex.index)); if(RA.length){ RA.forEach(r=>kept.add(r)); if(roles(c.slice(0,ex.index)).length||c.slice(0,ex.index).trim()) cut.set(i,orig[i].slice(0,ex.index)); else drop.add(i); } pending=[]; continue; }
+    const praise=R.length&&!KEEP_NOT.test(c)&&(KEEP_PRAISE.test(c)&&!/\b(not|isn'?t|aren'?t|wasn'?t|too)\b/.test(c)||KEEP_LIKE.test(c)&&!/\b(don'?t|do not|didn'?t|would|'d)\b/.test(c));
+    const ask=R.length&&!KEEP_NOT.test(c)&&KEEP_ASK.test(c)&&!(/\b(keep|leave)\b/.test(c)&&KEEP_SHAPE.test(c));
+    if(!praise&&!ask){ pending=[]; continue; }
+    const P=pending.concat([i]); P.forEach(j=>{ drop.add(j); roles(orig[j]).forEach(r=>{ kept.add(r); if(praise&&!ask) praised.add(r); }); }); pending=[]; }
+  /* rest: the words without the praised clauses; "except the drums" stays in it (the parser knows "mute everything except the drums"),
+     but its part doesn't count as one the rest is about */
+  const join=useCut=>{ const out=[]; for(let i=0;i<orig.length;i+=2){ if(drop.has(i)) continue; if(out.length) out.push(orig[i-1]||' '); out.push(useCut&&cut.has(i)?cut.get(i):orig[i]||''); }
+    return out.join('').replace(/^[\s,;.!?-]*(?:(?:but|and|just|though|so|only|however)\b[\s,]*)*/i,'').replace(/[\s,;-]+$/,'').trim(); };
+  const rest=drop.size||cut.size?join(false):text, restCut=cut.size?join(true):rest;
+  const restRoles=new Set(roles(restCut)), song=SONG_SAID.test(low(restCut));
+  /* the rest is about that same part ("the kick is great but the snare is too loud"), or about no part at all after praise: it is the target */
+  restRoles.forEach(r=>kept.delete(r));
+  if(rest&&!restRoles.size&&!song&&praised.size){ praised.forEach(r=>kept.delete(r)); }
+  const v={kept,rest:kept.size||restRoles.size?rest:text,restCut:kept.size||restRoles.size?restCut:text}; if(KEEP_MEMO.size>40) KEEP_MEMO.clear(); KEEP_MEMO.set(text,v); return v; }
+const keptTxt=kept=>{ const L=[...kept].map(r=>'the '+(ROLE_TXT[r]||r)); return 'Kept '+(L.length>1?L.slice(0,-1).join(', ')+' and '+L[L.length-1]:L[0])+(L.length>1||[...kept][0]==='drums'||[...kept][0]==='chords'?' as they are.':' as it is.'); };
 const SONG_SAID=/\b(everything|every part|all (?:the )?parts|(?:whole|entire|full) (?:song|track|mix|thing)|the song|the mix|the rest|all of it|master)\b/;
 const BACK_SAID=/\b(it|that|this|them|those|another( one)?|one more|new one|the other one|previous one|last one)\b/;
 const ADD_SAID=/\b(add|adding|layer|another|second|extra|also|too|as well|on top|double|bring in|throw in|plus|new track|one more)\b/;
@@ -153,51 +191,88 @@ function actRole(a){ const m=/^add_(drums|bass|chords|melody)$/.exec(a.type); if
 const ROLE_TXT={drums:'drums',bass:'bassline',chords:'chords',melody:'melody',voice:'vocal'};
 /* the guard: the parts this request is about (named, or the focus for "make it softer"); actions that rewrite other parts are
    dropped, "another one" goes to the part just added or named, and "change the chords" changes the Chords track in place */
-function onePart(list){
-  const text=String(LAST_TEXT.text||''); if(!text||!list.length) return list;
-  const named=partsSaid(text), whole=SONG_SAID.test(text.toLowerCase());
-  let G=new Set(named); if(!G.size&&!whole&&BACK_SAID.test(text.toLowerCase())&&ASSIST.focus) G.add(ASSIST.focus);
-  const added=new Set(list.map(a=>(/^add_(drums|bass|chords|melody)$/.exec(a.type)||[])[1]).filter(Boolean));
-  const lc=text.toLowerCase(), swing=typeof swingSaid==='function'&&swingSaid(text)!=null, again=/\b(another|different|one more|new one|again|switch it up|change it up)\b/.test(lc);
-  const out=[], dropped=[];
+const SONG_TRACK=/^(all|song|the song|whole song|the whole song|everything|every part|mix|the mix|master|all tracks|tracks)$/i;
+/* a one-word follow-up ("louder", "a bit softer", "simpler") right after a part: that part (QA, 22 Nov) */
+const BARE_LEVEL=/^\s*(?:(?:ok|okay|now|and|maybe|bit|a bit|a little|little|slightly|even|just)\s+)*(?:louder|softer|quieter|brighter|darker|warmer|simpler|busier|shorter|longer|lower|higher|punchier)(?:\s+(?:please|still|again|than that|a bit|a little|bit|more|now))*\s*[.!?]?\s*$/i;
+/* a song-wide mix or effect sent for a one-part comment, moved onto that part; an absolute volume that would go the wrong way is a 3 dB step */
+function ontoPart(a,T,said){ const b=Object.assign({},a,{track:T.id}); if(a.type==='mix'&&a.volume!=null){ const dir=/\b(softer|quieter|down|lower|less|too loud|kam)\b/i.test(said)?-1:/\b(louder|up|boost|more|too quiet|badhao)\b/i.test(said)?1:0;
+    if(dir&&Math.sign(+a.volume-T.vol*100)!==dir){ delete b.volume; b.db=dir*3; } } return b; }
+function onePart(list,depth){
+  const said=String(LAST_TEXT.text||''); if(!said||!list.length) return list;
+  /* praised or protected parts ("the drums are fine, just change the chords") are never touched; the rest of the words is the request */
+  const P=protectSaid(said), kept=P.kept, text=P.rest||'', lc=text.toLowerCase(); if(kept.size) BATCH.kept=kept;
+  const named=partsSaid(said), whole=SONG_SAID.test(lc), bare=BARE_LEVEL.test(said);
+  let G=new Set(named); if(!G.size&&!whole&&(BACK_SAID.test(lc)||bare)&&ASSIST.focus&&!kept.has(ASSIST.focus)) G.add(ASSIST.focus);
+  const added=new Set(list.map(a=>(/^add_(drums|bass|chords|melody)$/.exec(a.type)||[])[1]).filter(r=>r&&!kept.has(r)));
+  const swing=typeof swingSaid==='function'&&swingSaid(text)!=null, again=/\b(another|different|one more|new one|again|switch it up|change it up)\b/.test(lc);
+  const one=G.size===1?[...G][0]:null, oneT=one&&one!=='voice'?partTrack(one):null, out=[], dropped=[];
+  const levelOnly=/\b(softer|quieter|louder|less loud|too loud|too quiet|turn (?:it |them |the \w+ )?(?:down|up)|volume|db|kam karo|soft karo)\b/.test(lc)&&!CHANGE_SAID.test(lc)&&!again&&!reshapeSaid(lc);
+  /* a question ("which chords are these", "what key is it in") changes nothing, whatever the AI sent with its answer */
+  const asked=!depth&&typeof askFix==='function'&&(()=>{ try{ const q=askFix(said.toLowerCase(),said); return !!(q&&!(q.actions||[]).length); }catch(e){ return false; } })();
   for(let a of list){
-    /* "turn it down a bit" right after the bass: the bass, not the whole song */
-    if(a.type==='mix'&&/^(all|song|everything|mix|master)$/i.test(String(a.track||''))&&!named.size&&!whole&&ASSIST.focus&&/\b(it|that|this|them)\b/.test(lc)&&a.volume==null){ const T=partTrack(ASSIST.focus); if(T){ a=Object.assign({},a,{track:T.id}); BATCH.retold=true; } }
+    if(kept.size){ const r0=actRole(a);
+      if(r0&&kept.has(r0)&&a.type!=='transport'){ dropped.push(a); continue; }
+      if(/^(vibe|style|new_project|arrange)$/.test(a.type)&&!whole){ dropped.push(a); continue; }
+      /* "turn everything down except the drums": every other part moves */
+      if(a.type==='mix'&&SONG_TRACK.test(String(a.track||''))&&!G.size&&(a.db!=null||a.change!=null)&&a.volume==null){ const L=PROJ.tracks.filter(t=>!kept.has(t.role)&&t.vol>0); L.forEach(t=>out.push(Object.assign({},a,{track:t.id})));
+        const db=a.db!=null?+a.db:+a.change>0?3:-3; if(L.length) BATCH.sayInstead=`Turned every part but ${[...kept].map(r=>'the '+(ROLE_TXT[r]||r)).join(' and ')} ${db>0?'up':'down'} ${dbTxt(Math.abs(db))} dB, same notes.`; continue; } }
+    /* a song-wide mix or effect for a comment about one part ("the bass is too loud", "the bass is muddy", "make it softer" after the bass):
+       that part only; dropped when the AI also sent the same kind of change for that part */
+    if(G.size&&!whole&&(a.type==='mix'||a.type==='track_fx')&&SONG_TRACK.test(String(a.track||''))){
+      if(oneT&&!list.some(b=>b!==a&&b.type===a.type&&!SONG_TRACK.test(String(b.track||''))&&actRole(b)===one)){ a=ontoPart(a,oneT,said); if(!named.size) BATCH.retold=true; out.push(a); }
+      else dropped.push(a); continue; }
+    if(G.size&&!whole&&a.type==='fx'){ dropped.push(a); continue; } /* the master knobs are the whole song */
+    /* a level comment ("make the bass softer") never brings new notes along with the fader move */
+    if(levelOnly&&(a.type==='vary'||a.type==='notes')){ dropped.push(a); continue; }
+    if(asked&&(PART_ACTS.has(a.type)||/^(key|tempo|bars|vibe|style|mix|track_fx|fx)$/.test(a.type))){ dropped.push(a); continue; }
     if(!G.size||!PART_ACTS.has(a.type)){ out.push(a); continue; }
     const r=actRole(a);
-    if(!r||G.has(r)||(added.has(r)&&/^add_/.test(a.type))){ out.push(inPlace(a,text,named)); continue; }
+    /* exact notes sent for "make the melody simpler": the part's own notes get simpler (and a sung part is never rewritten) */
+    if(a.type==='notes'&&r&&G.has(r)&&a.mode!=='add'&&reshapeSaid(lc)){ const T=findTrack(a.track)||partTrack(r); if(T){ out.push({type:'reshape',track:T.id,do:reshapeSaid(lc)}); continue; } }
+    /* a new part rides along only when the words name it, say add, or the song doesn't have it yet (QA, 22 Nov: "new chords" + add_melody gave Melody 2) */
+    if(!r||G.has(r)||(added.has(r)&&/^add_/.test(a.type)&&(named.has(r)||ADD_SAID.test(lc)||!partTrack(r)))){ out.push(inPlace(a,text,named)); continue; }
     if(a.type==='groove'&&swing&&Object.keys(a).every(k=>/^(type|track|swing)$/.test(k))){ out.push(a); continue; } /* "more swing on the chords": the swing lives in the drums */
     dropped.push(a); }
-  /* a key, tempo or loop length the words don't ask for never comes along with a one-part comment ("make the chords happier" is not a key change) */
-  if(G.size) for(let i=out.length-1;i>=0;i--){ const ty=out[i].type; if(ty==='key'&&!/\bkey\b|\b[a-g](?:#|b| sharp| flat)? ?(major|minor)\b/.test(lc)||ty==='tempo'&&!/\b(bpm|tempo|faster|slower|speed)\b/.test(lc)||ty==='bars'&&!/\bbars?\b|\bloop\b/.test(lc)) dropped.push(...out.splice(i,1)); }
+  /* a key, tempo or loop length the words don't ask for never comes along with a one-part comment ("make the chords happier" is not a key change;
+     "make the bass a bit faster" is the bass, not the tempo) */
+  if(G.size||kept.size) for(let i=out.length-1;i>=0;i--){ const ty=out[i].type; if(ty==='key'&&!/\bkey\b|\b[a-g](?:#|b| sharp| flat)? ?(major|minor)\b/.test(lc)||ty==='tempo'&&!(/\b(bpm|tempo|speed)\b/.test(lc)||/\b(faster|slower)\b/.test(lc)&&!named.size)||ty==='bars'&&!/\bbars?\b|\bloop\b/.test(lc)) dropped.push(...out.splice(i,1)); }
   /* "add a bassline and give me another one": the AI's vary of the drums becomes another bassline */
-  const tgt=added.size===1?[...added][0]:G.size===1?[...G][0]:null;
-  if(dropped.length&&tgt&&tgt!=='voice'&&!out.some(a=>PART_ACTS.has(a.type)&&actRole(a)===tgt)){ const T=partTrack(tgt), sh=reshapeSaid(lc);
+  const addedOk=new Set(out.map(a=>(/^add_(drums|bass|chords|melody)$/.exec(a.type)||[])[1]).filter(Boolean)), tgt=addedOk.size===1?[...addedOk][0]:G.size===1?[...G][0]:null;
+  if(dropped.length&&tgt&&tgt!=='voice'&&!kept.has(tgt)&&!out.some(a=>PART_ACTS.has(a.type)&&actRole(a)===tgt)){ const T=partTrack(tgt), sh=reshapeSaid(lc);
     if(sh&&T) out.push({type:'reshape',track:T.id,do:sh}); /* "make the bass simpler" sent as a simpler drum groove: the bass gets simpler */
-    else if(again&&(T||added.has(tgt))) out.push({type:'vary',track:tgt}); }
+    else if(again&&(T||addedOk.has(tgt))) out.push({type:'vary',track:tgt}); }
   if(dropped.length) BATCH.guarded=dropped.map(a=>a.type+':'+actRole(a));
-  return out.filter(a=>a.type!=='noop'); }
+  let res=out.filter(a=>a.type!=='noop');
+  /* everything the AI sent was for other parts or the whole song ("the bass is muddy" sent as a master high-pass): the offline brain's
+     one-part change instead, with its own reply */
+  if(!depth&&ASSIST.engine&&dropped.length&&!res.some(a=>a.type!=='transport')&&!BATCH.declined&&typeof localBrain==='function'){ try{ const L=localBrain(said); if(L&&L.actions&&L.actions.length){ res=onePart(L.actions.map(normAction).filter(a=>a&&ACT[a.type]),1); BATCH.local=L; } }catch(e){ console.warn('offline fallback',e); } }
+  if(kept.size&&!depth){ const w=[...kept].map(r=>({drums:'drums|beat|kick',bass:'bass(?:line)?',chords:'chords',melody:'melody',voice:'vocals?|voice'})[r]||r).join('|');
+    songNote(keptTxt(kept),new RegExp('\\b(kept|keep|keeping|left|leaving|didn.t touch)\\b[^.]*\\b('+w+')\\b|\\b('+w+')\\b[^.]*\\b(stay|stays|unchanged|untouched|as (it|they) (is|are|was|were))\\b','i')); }
+  return res; }
 /* add_bass/add_chords/add_melody about a part that is already there, with no add word: change that part in place */
 function inPlace(a,text,named){ const m=/^add_(bass|chords|melody)$/.exec(a.type); if(!m) return a; const role=m[1], lc=String(text).toLowerCase();
   const T=partTrack(role); if(!T||!named.has(role)||ADD_SAID.test(lc)||a.new) return a;
-  if(!T.gen){ songNote(`${T.name} is your own part, so I kept your notes. Say “add a new ${ROLE_TXT[role]}” for one of mine next to it.`); BATCH.declined=true; return {type:'noop'}; }
+  if(!T.gen){ songNote(`${T.name} is your own part, so I kept your notes ${/^(sung|hummed)\b/i.test(T.name)?'as you sang them':'as you played them'}. Say “add a new ${ROLE_TXT[role]}” for one of mine next to it.`); BATCH.declined=true; return {type:'noop'}; }
   const inst=a.instrument&&resolveInst(a.instrument,role==='bass'?'bass':'keys');
   if(inst&&inst!==T.inst&&!/\b(new|different|other|fresh|regenerate|rewrite|simpler|busier)\b/.test(lc)) return {type:'instrument',track:T.id,instrument:inst};
   const sh=reshapeSaid(lc); if(sh) return {type:'reshape',track:T.id,do:sh};
   /* tone words sent as a new part ("make the chords warmer"): an EQ step on that part, same notes */
   const tone=/\b(warm(er|th)?)\b/.test(lc)?{high:-3,low:2}:/\b(bright(er)?|more air|sparkl\w*)\b/.test(lc)?{high:3}:/\b(dark(er)?|duller|mellow(er)?)\b/.test(lc)&&!/\b(new|different|change|replace)\b/.test(lc)?{high:-3}:null;
   if(tone) return {type:'mix',track:T.id,eq:tone};
+  /* a level word sent as a new part ("make the bass softer" as add_bass): a fader step on that part, same notes */
+  const lvl=/\b(softer|quieter|less loud|too loud|turn (?:it |them |the \w+ )?down|kam karo)\b/.test(lc)?-3:/\b(louder|too quiet|turn (?:it |them |the \w+ )?up|boost|badhao)\b/.test(lc)?3:0;
+  if(lvl&&!CHANGE_SAID.test(lc)) return {type:'mix',track:T.id,db:lvl};
   if((CHANGE_SAID.test(lc)||role==='chords'&&moodSaid(lc))&&!inst) return {type:'vary',track:T.id,mood:moodSaid(lc)||a.mood};
   return Object.assign({},a,{replace:true}); }
-const reshapeSaid=t=>/\b(busy|zyada|jyada) (karo|kar do|kardo)\b/.test(t)?'busier':/\b(simpler|simplify|simple|less busy|too busy|not so busy|fewer notes|less notes|sparser|sparse|thin (it|them|this|that) out|thin out|thin down|strip(ped)? (it |them )?back|calmer|minimal)\b/.test(t)?'simpler':/\b(busier|more busy|more notes|denser|fuller|more movement|more going on|more active|livelier|more rhythm(ic)?)\b/.test(t)?'busier':/\b(shorter|staccato|choppier|chopp?(ed|y)|short notes|plucky|punchier notes)\b/.test(t)?'shorter':/\b(longer|legato|held|sustained|smoother|long notes|hold (them|it|the [a-z]+))\b/.test(t)?'longer':null;
+const reshapeSaid=t=>/\b(busy|zyada|jyada) (karo|kar do|kardo)\b|\b(aur|zyada|jyada) notes\b/.test(t)?'busier':/\bkam notes\b/.test(t)?'simpler':/\b(lamb[aie]|lamba|lambi)\b/.test(t)?'longer':/\b(chhot[aie]|chot[aie])\b/.test(t)?'shorter':/\b(simpler|simplify|simple|less busy|too busy|not so busy|fewer notes|less notes|sparser|sparse|thin (it|them|this|that) out|thin out|thin down|strip(ped)? (it |them )?back|calmer|minimal)\b/.test(t)?'simpler':/\b(busier|more busy|more notes|denser|fuller|more movement|more going on|more active|livelier|more rhythm(ic)?)\b/.test(t)?'busier':/\b(shorter|staccato|choppier|chopp?(ed|y)|short notes|plucky|punchier notes)\b/.test(t)?'shorter':/\b(longer|legato|held|sustained|smoother|long notes|hold (them|it|the [a-z]+))\b/.test(t)?'longer':null;
 const moodSaid=t=>/\b(happ(y|ier)|bright(er)?|uplifting|major|hopeful|cheer(ful|ier)|positive|euphoric)\b/.test(t)?'happier':/\b(sad(der)?|dark(er)?|moody|moodier|melanchol\w*|emotional|minor|deeper)\b/.test(t)?'darker':null;
 /* a new progression for "new chords": differs from the chords playing now, fits the melody that stays (generated or the
    user's), and leans happier or darker when asked */
 function pickProg(mood){ const k=projectKey(), list=PROGS[k.mode]||PROGS.minor, cur=(PROJ.prog||[]).join(), mel=PROJ.tracks.filter(t=>t.kind==='notes'&&t.role==='melody').flatMap(t=>t.events);
-  const saved={prog:PROJ.prog,locked:PROJ.progLocked}, own=PROJ.tracks.some(t=>t.kind==='notes'&&t.role==='melody'&&!t.gen), now=chordPlan().plan.map(c=>c.deg).join(), L=PROJ.bars*4, bright=k.mode==='minor'?[2,5,6]:[0,3,4], cands=[];
+  const saved={prog:PROJ.prog,locked:PROJ.progLocked}, own=PROJ.tracks.some(t=>t.kind==='notes'&&t.role==='melody'&&!t.gen), now=chordPlan().plan.map(c=>c.deg).join(), L=PROJ.bars*4, bright=k.mode==='minor'?[2,5,6]:[0,3,4], cands=[], seen=new Set(VERSIONS.map(v=>(v.prog||[]).join()));
   try{ for(const p of list){ if(p.join()===cur) continue; PROJ.prog=p.slice(); PROJ.progLocked=own||undefined; const {plan}=chordPlan(), nd=plan.map(c=>c.deg), od=now.split(','), diff=nd.filter((d,i)=>String(d)!==od[i]).length; if(!diff) continue;
       let fit=0,tot=0; mel.forEach(e=>{ const c=plan[Math.floor(mod(e.b,L)/4)%plan.length], pc=mod(Math.round(e.n),12), d=e.d||0.5; tot+=d; if(c.pcs.includes(pc)) fit+=d; else if(c.sev.includes(pc)) fit+=d/2; });
-      const br=p.filter(d=>bright.includes(d)).length; cands.push({p,fit:(tot?fit/tot:1)+(diff>=Math.ceil(nd.length/2)?0.25:0),m:mood==='happier'?br:mood==='darker'?-br:0}); } }
+      const br=p.filter(d=>bright.includes(d)).length; cands.push({p,fit:(tot?fit/tot:1)+(diff>=Math.ceil(nd.length/2)?0.25:0)-(seen.has(p.join())?0.3:0),m:mood==='happier'?br:mood==='darker'?-br:0}); } }
   finally{ PROJ.prog=saved.prog; PROJ.progLocked=saved.locked; }
   if(!cands.length) return null; cands.sort((a,b)=>b.m-a.m||b.fit-a.fit); const best=cands[0], top=cands.filter(c=>c.m===best.m&&c.fit>=best.fit-0.2);
   return top[Math.floor(Math.random()*top.length)].p.slice(); }
@@ -215,7 +290,7 @@ function busyPart(ev,role){ const L=L_(), on=onsets(ev), out=[]; const k=project
   on.forEach(([b,es],i)=>{ const nx=i+1<on.length?on[i+1][0]:L, gap=nx-b;
     if(role==='bass'){ es.forEach(e=>{ if(e.d>=1){ for(let x=0;x<e.d-0.1;x+=0.5) out.push(Object.assign({},e,{b:b+x,d:0.4,v:x?e.v*0.8:e.v})); } else { out.push(e); const nb=b+0.25; if(gap>=0.5&&!nearB(mod(nb,1),0)&&nb<L) out.push(Object.assign({},e,{b:nb,d:Math.min(0.2,e.d),n:i%2?e.n+12:e.n,v:e.v*0.75})); } }); }
     else if(role==='melody'){ es.forEach((e,j)=>{ if(e.d>=0.75&&!j){ const h=Math.round(e.d/2*4)/4; out.push(Object.assign({},e,{d:h-0.05})); out.push(Object.assign({},e,{b:b+h,d:e.d-h,n:step(e.n,i%2?-1:1),v:e.v*0.85})); } else out.push(e); }); }
-    else { const held=es.every(e=>e.d>=1.5); if(held){ [0,0.75,1.5,2.5,3.25].filter(x=>x<es[0].d-0.2&&b+x<L).forEach((x,j)=>es.forEach(e=>out.push(Object.assign({},e,{b:b+x,d:0.4,v:j?e.v*0.85:e.v})))); }
+    else { const held=es.every(e=>e.d>=1.5); if(held){ const H=[0,0.75,1.5,2.5,3.25].filter(x=>x<es[0].d-0.2&&b+x<L); H.forEach((x,j)=>{ const nx2=j+1<H.length?H[j+1]:Math.min(es[0].d,gap); es.forEach(e=>out.push(Object.assign({},e,{b:b+x,d:Math.max(0.3,nx2-x-0.08),v:j%2?e.v*0.95:e.v}))); }); }
       else { es.forEach(e=>out.push(e)); if(gap>=1){ const mb=Math.round((b+gap/2)*2)/2; if(mb>b&&mb<nx&&mb<L) es.forEach(e=>out.push(Object.assign({},e,{b:mb,d:Math.min(e.d,0.3),v:e.v*0.8}))); } } } });
   return out.length>ev.length?out.sort((a,b)=>a.b-b.b):null; }
 function artPart(ev,how){ const L=L_(), on=onsets(ev); return on.flatMap(([b,es],i)=>{ const nx=i+1<on.length?on[i+1][0]:L; return es.map(e=>Object.assign({},e,{d:how==='shorter'?Math.max(0.15,Math.round(e.d*0.5*100)/100):Math.max(e.d,Math.min(nx-b-0.05,4))})); }); }
@@ -259,16 +334,16 @@ const ACT={
     if(over.swing===undefined) return over.energy!==undefined&&Object.keys(over).length===1?`Drums ${over.energy>e0?'busier':'simpler'} (energy ${clamp(Math.round(over.energy),1,5)} of 5): ${t.desc}`:`Groove: ${t.desc}`;
     const sw=swingWords(+t.recipe.swing||0,prev); return Object.keys(over).length>1?`${sw}; ${t.desc}`:sw; },
   vary(a){ const t=findTrack(a.track||'drums'); if(!t) return;
-    if(!t.gen){ return `${t.name} is your own part, so I left it as it is`; }
+    if(!t.gen){ songNote(`${t.name} is your own part, so I kept your notes ${/^(sung|hummed)\b/i.test(t.name)?'as you sang them':'as you played them'}. Say “add a new ${ROLE_TXT[t.role]||'part'}” for one of mine next to it.`); BATCH.declined=true; return; }
     /* new chords (AI-9): a different progression that fits the melody, which stays as it is; a generated bassline follows the new chords.
        With the user's own melody the chords stop following its notes bar by bar (progLocked), or they would come out the same again. */
     if(t.role==='chords'&&a.progression!==false){ const k=projectKey(), was=chordPlan().plan.slice(0,4).map(c=>c.deg), mood=a.mood||moodSaid(String(LAST_TEXT.text||'').toLowerCase()), p=pickProg(mood);
       if(!p){ songNote('Those are the only chords that fit this melody in '+keyName(k)+'. Say “change the key” or sing a new melody for others.'); BATCH.declined=true; return; }
       PROJ.prog=p; if(PROJ.tracks.some(x=>x.kind==='notes'&&x.role==='melody'&&!x.gen)) PROJ.progLocked=true;
       PROJ.tracks.filter(x=>x.gen&&x.role==='chords').forEach(x=>regenTrack(x,{seed:x.seed}));
-      const bass=PROJ.tracks.filter(x=>x.gen&&x.role==='bass'); bass.forEach(x=>{ regenTrack(x,{seed:x.seed}); (BATCH.follow=BATCH.follow||new Set()).add(x.id); });
-      const mel=PROJ.tracks.some(x=>x.kind==='notes'&&x.role==='melody'), ownBass=PROJ.tracks.some(x=>x.kind==='notes'&&x.role==='bass'&&!x.gen);
-      return `New chords: ${romans(chordPlan().plan.slice(0,4).map(c=>c.deg),k.mode)} (were ${romans(was,k.mode)})${mood?', '+(mood==='happier'?'brighter':'darker'):''}${mel?', same melody':''}${bass.length?'; the bassline follows the new chords':ownBass?'; your bassline stays as you played it':''}`; }
+      const bass=PROJ.tracks.filter(x=>x.gen&&x.role==='bass'&&!(BATCH.kept&&BATCH.kept.has('bass'))); bass.forEach(x=>{ regenTrack(x,{seed:x.seed}); (BATCH.follow=BATCH.follow||new Set()).add(x.id); });
+      const mel=PROJ.tracks.some(x=>x.kind==='notes'&&x.role==='melody'), ownBass=PROJ.tracks.find(x=>x.kind==='notes'&&x.role==='bass'&&!x.gen);
+      return `New chords: ${romans(chordPlan().plan.slice(0,4).map(c=>c.deg),k.mode)} (were ${romans(was,k.mode)})${mood?', '+(mood==='happier'?'brighter':'darker'):''}${mel?', same melody':''}${bass.length?'; the bassline follows the new chords':ownBass?`; your bassline stays as you ${/^(sung|hummed)\b/i.test(ownBass.name)?'sang':'played'} it`:''}`; }
     /* "another one with less swing": the new take gets the new swing, so its chip shows the real amount (one chip, not two) */
     if(t.role==='drums'&&t.recipe&&typeof swingSaid==='function'&&swingSaid(LAST_TEXT.text)!=null){ const prev=+t.recipe.swing||0, v=swingOver({},prev);
       if(v!==undefined){ const d=regenTrack(t,{recipe:{swing:v}}); BATCH.swingShown=true; return d?`${swingWords(v,prev)}; ${t.name}: ${d}`:null; } }
@@ -290,12 +365,12 @@ const ACT={
     const w=String(a.do||a.how||a.change||'').toLowerCase(), how=+a.change<0||/simpl|sparse|less|fewer|calm|thin|strip/.test(w)?'simpler':+a.change>0||/bus|more|dense|full|activ/.test(w)?'busier':/short|stacc|chop|tight/.test(w)?'shorter':/long|legato|sustain|held|hold|smooth/.test(w)?'longer':null;
     if(!how) return;
     if(t.role==='drums'){ if(how==='shorter'||how==='longer'){ songNote('Drum hits have no length to change. Try “simpler drums” or “busier drums”.'); BATCH.declined=true; return; } return ACT.groove({track:t.id,change:how==='busier'?1:-1}); }
-    if(!t.gen){ songNote(`${t.name} is your own part, so I kept your notes as you played them. Double-click the track to edit them, or say “quantize it”.`); BATCH.declined=true; return; }
-    const n0=t.events.length, name=ROLE_TXT[t.role]||t.name;
+    if(!t.gen){ songNote(`${t.name} is your own part, so I kept your notes ${/^(sung|hummed)\b/i.test(t.name)?'as you sang them':'as you played them'}. Double-click the track to edit them, or say “quantize it”.`); BATCH.declined=true; return; }
+    const n0=t.events.length, name=ROLE_TXT[t.role]||t.name, pl=/s$/.test(name), are=pl?'are':'is';
     if(how==='simpler'||how==='busier'){ const y=how==='simpler'?thinPart(t.events,t.role):busyPart(t.events,t.role);
-      if(!y){ songNote(`The ${name} is already as ${how==='simpler'?'simple':'busy'} as I’d make it.`); BATCH.declined=true; return; }
+      if(!y){ songNote(`The ${name} ${are} already as ${how==='simpler'?'simple':'busy'} as I’d make ${pl?'them':'it'}.`); BATCH.declined=true; return; }
       t.events=y; t.dens=clamp((t.dens||0)+(how==='simpler'?-1:1),-3,3); return `${t.name} ${how}: ${t.events.length} notes (was ${n0}), same sound${t.role==='melody'?' and key':' and chords'}`; }
-    const y=artPart(t.events,how); if(JSON.stringify(y)===JSON.stringify(t.events)){ songNote(`The ${name} notes are already as ${how==='shorter'?'short':'long'} as they go.`); BATCH.declined=true; return; }
+    const y=artPart(t.events,how); if(JSON.stringify(y)===JSON.stringify(t.events)){ songNote(`The ${name} ${pl?'are':'notes are'} already as ${how==='shorter'?'short':'long'} as they go.`); BATCH.declined=true; return; }
     t.events=y; t.art=how; return `${t.name}: ${how==='shorter'?'shorter, tighter notes':'longer, held notes'}, same ${t.role==='chords'?'chords':'notes'}`; },
   /* the part as it was before its last change ("go back to the previous chords", "no, the other one"); the rest of the song stays */
   revert(a){ const t=findTrack(a.track)||(ASSIST.focus&&partTrack(ASSIST.focus))||null; let i=VERSIONS.length-1;
@@ -303,6 +378,8 @@ const ACT={
     if(t){ const cur=partSig(t); while(i>=0&&(!VERSIONS[i].tracks[t.id]||partSig(VERSIONS[i].tracks[t.id])===cur)) i--; } if(i<0||!t){ songNote(t?`There’s no earlier ${ROLE_TXT[t.role]||t.name} this session to go back to. Say “undo” to take back the last change.`:'Which part should go back? Say “go back to the previous bassline”, for example.'); BATCH.declined=true; return; }
     const v=VERSIONS.splice(i,1)[0], ids=[t.id].concat(t.role==='chords'?Object.keys(v.tracks).filter(id=>id!==t.id&&v.follow&&v.follow.includes(id)):[]);
     ids.forEach(id=>{ const T=PROJ.tracks.find(x=>x.id===id); if(T) Object.assign(T,JSON.parse(JSON.stringify(v.tracks[id]))); });
+    /* the version this saves (the chords as they were a moment ago) keeps its bassline too, so going back again brings both (QA, 22 Nov) */
+    ids.slice(1).forEach(id=>(BATCH.follow=BATCH.follow||new Set()).add(id));
     if(t.role==='chords'&&v.prog!==undefined){ PROJ.prog=v.prog; PROJ.progLocked=v.locked; } BATCH.reverted=true;
     return `${t.name}: back to the previous version${ids.length>1?' (the bassline follows it)':''}`; },
   tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
@@ -315,6 +392,8 @@ const ACT={
     addTrack({role:'drums',inst:kit,zone:'pads',gen:true,name:'Drums',events:patternEvents(spec,L_(),{seed:9})},{replaceRole:'drums'}); return 'Custom drum pattern'; },
   notes(a){ const list=(a.notes||[]).map(n=>({b:Math.max(0,+n.beat||+n.b||0),d:Math.max(0.1,+n.len||+n.length||+n.d||0.5),n:parsePitch(n.pitch!=null?n.pitch:n.note),v:clamp((+n.vel||+n.velocity||96)/127,0.1,1)})).filter(e=>e.n!=null&&e.b<L_());
     if(!list.length) return; let t=a.replace===false?null:findTrack(a.track);
+    /* the user's own (sung or played) part is never rewritten by notes the AI made up (QA, 22 Nov); notes they dictate are theirs */
+    if(t&&!t.gen&&t.kind==='notes'&&a.mode!=='add'&&!/\b[a-g](?:#|b|♯|♭| sharp| flat)?\s?[1-7]\b/i.test(String(LAST_TEXT.text||''))){ songNote(`${t.name} is your own part, so I kept your notes ${/^(sung|hummed)\b/i.test(t.name)?'as you sang them':'as you played them'}. Double-click the track to edit them.`); BATCH.declined=true; return; }
     const role=a.role||(t&&t.role)||(/bass/i.test(a.track||'')?'bass':/chord|pad/i.test(a.track||'')?'chords':'melody');
     const inst=resolveInst(a.instrument,role==='bass'?'bass':'keys')||(t&&t.inst)||(role==='bass'?'bass':'piano'); const I=INST.get(inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{});
     if(t && a.mode!=='add'){ t.events=list; t.inst=inst; } else if(t){ t.events.push(...list); } else t=addTrack({role,inst,name:a.track&&!/^(melody|bass|chords)$/i.test(a.track)?String(a.track).slice(0,30):ROLE_NAME[role],events:list});
@@ -353,7 +432,7 @@ const ACT={
   quantize(a){ const t=findTrack(a.track); if(!t||t.kind==='audio'||!t.events) return; const q=gridBeats(a.grid), L=L_(); let moved=0;
     t.events.forEach(e=>{ let b=Math.round(e.b/q)*q; if(b>=L&&e.b<L) b=0; if(Math.abs(b-e.b)>1e-6) moved++; e.b=b; e.d=Math.max(q,Math.round(e.d/q)*q); });
     return `Quantized ${t.name} to ${gridName(q)} (${moved} of ${t.events.length} notes moved)`; },
-  transpose(a){ const t=findTrack(a.track); if(!t||(INST.get(t.inst)||{}).percussive) return; const s=Math.round(+a.semitones||0); t.events.forEach(e=>e.n+=s); return `${t.name} ${s>0?'up':'down'} ${Math.abs(s)}`; },
+  transpose(a){ const t=findTrack(a.track); if(!t||(INST.get(t.inst)||{}).percussive) return; const s=Math.round(+a.semitones||0); if(!s) return; t.events.forEach(e=>e.n+=s); const o=Math.abs(s)/12; return `${t.name} ${s>0?'up':'down'} ${o===1?'an octave':o===2?'two octaves':Math.abs(s)+' semitone'+(Math.abs(s)>1?'s':'')}`; },
   transport(a){ const d=String(a.do||a.value||'').toLowerCase(); if(/stop|pause/.test(d)){ loopStop(); return 'Stopped'; }
     /* "play from the second drop": from = a section (name, "drop 2", "second drop", number in the list) or a bar ("bar 33") */
     if(a.from!=null&&a.from!==''&&!/rec/.test(d)){ if(!songArranged()){ loopPlay(); return 'Playing'; } const f=String(a.from).toLowerCase(), bar=/^bar\s*(\d+)$/.exec(f);

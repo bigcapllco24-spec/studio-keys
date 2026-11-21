@@ -92,6 +92,11 @@ async function handleRequest(text){
       const r=await fetch('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},signal:ctl.signal,body:JSON.stringify({text,state:projectState(),history:ASSIST.history.slice(-8),instruments:ORDER.map(id=>{ const I=INST.get(id); return `${id}: ${I.name} (${I.cat})`; })})});
       clearTimeout(to); const j=await r.json(); if(!r.ok||j.error) throw new Error(j.error||('HTTP '+r.status));
       done=runActions(j.actions||[]); reply=j.reply||'';
+      /* the guard used the offline brain's one-part change instead of the AI's (AI-9 fix): its reply says what really changed */
+      if(BATCH.local){ const r2=brainReply(BATCH.local,done); reply=r2||(done.length?'':reply); BATCH.guarded=null; BATCH.retold=false; }
+      /* the AI's mix or effect moves changed nothing (an EQ on "all", a fader already there): never claim them (QA, 22 Nov) */
+      else if(!done.length&&(j.actions||[]).length&&(j.actions||[]).every(a=>/^(mix|track_fx|fx)$/.test(a&&a.type))&&!BATCH.declined&&!(BATCH.notes||[]).length){ const L=localBrain(text); if(L.actions&&L.actions.length){ done=runActions(L.actions); reply=brainReply(L,done); }
+        if(!done.length&&!(BATCH.notes||[]).length) reply='That didn’t change anything, so the song is as it was. Tell me which part to change, for example “turn the bass down a bit”.'; }
     }catch(e){ console.warn('assistant AI failed, using offline brain',e); const L=localBrain(text); done=runActions(L.actions); reply=brainReply(L,done); }
   } else { const L=localBrain(text); done=runActions(L.actions); reply=brainReply(L,done); }
   /* the AI sometimes offers a riser or a filter sweep as the next step; the studio has neither yet (D3), so offer what it has */
@@ -99,13 +104,15 @@ async function handleRequest(text){
   /* nothing changed (it was already like that): say so, or say why (an executor note), and keep the AI's question if it asked one (QA fix 2) */
   if(BATCH.same){ const q=(reply.match(/[^.!?]*\?\s*$/)||[''])[0].trim(), why=(BATCH.notes||[]).map(n=>n.text); BATCH.notes=[];
     reply=(why.length?why.join(' '):`It’s already like that, so nothing changed${BATCH.same.length?': '+BATCH.same.join(', '):''}.`)+' '+(q||nextStep()); }
+  /* "turn everything down except the drums": every other part moved, so the reply says that, not "the whole song" */
+  if(BATCH.sayInstead&&done.length) reply=BATCH.sayInstead;
   /* what the executor knows and the AI didn't: a clamped length, a riser played as a roll, a missing part (AI-1) */
   const notes=(BATCH.notes||[]).filter(n=>!(n.unless&&n.unless.test(reply))).map(n=>n.text);
   if(BATCH.declined&&!done.length&&notes.length){ const q=(reply.match(/[^.!?]*\?\s*$/)||[''])[0].trim(); reply=notes.join(' ')+(q&&!notes.some(n=>/\?/.test(n))?' '+q:''); notes.length=0; }
   /* the AI's actions for other parts were left out (AI-9): say so, so the reply matches what changed */
   /* "make it softer" right after the bass went to the bass, not the whole song the AI said: say what really changed */
   if(BATCH.retold&&done.length&&ASSIST.engine) reply=done.join('. ')+'. Same notes, the rest stays as it was.';
-  if(BATCH.guarded&&BATCH.guarded.length&&done.length&&ASSIST.engine) notes.push('I only changed what you asked about; the rest stays as it was.');
+  if(BATCH.guarded&&BATCH.guarded.length&&done.length&&ASSIST.engine&&!notes.some(n=>/^Kept /.test(n))) notes.push('I only changed what you asked about; the rest stays as it was.');
   if(reply&&notes.length) reply=reply.replace(/\s*$/,'')+' '+notes.join(' ');
   else if(!reply&&!done.length&&notes.length) reply=notes.join(' ');
   /* while a sung take is about to start, no next-step hint: the part doesn't exist yet, and the hint would suggest singing it again */

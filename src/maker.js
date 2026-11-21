@@ -184,12 +184,15 @@ function partEditFix(t,raw){
   if(!role||role==='voice'||songW) return null;
   const T=[...PROJ.tracks].reverse().find(x=>x.role===role&&x.kind==='notes'); if(!T) return null;
   if(/\b(add|another|second|layer|extra|new track|on top|as well|also)\b/.test(t)) return null; /* "add a choir", "another bassline": the paths below */
+  /* "play the bass an octave lower": the same notes 12 semitones down, never a volume move (QA, 22 Nov) */
+  { const o=t.match(/\b(?:(an?|one|two|2) )?octaves? (lower|down|higher|up)\b|\b(lower|higher|down|up) (?:by )?(an?|one|two|2) octaves?\b/);
+    if(o&&role!=='drums'){ const n=/two|2/.test((o[1]||'')+(o[4]||''))?2:1, dn=/lower|down/.test(o[2]||o[3]); return {actions:[{type:'transpose',track:T.id,semitones:(dn?-12:12)*n}],reply:`${T.name} ${n>1?'two octaves':'an octave'} ${dn?'lower':'higher'}, same notes and rhythm.`}; } }
   const sh=reshapeSaid(t);
   if(sh&&role!=='drums'||sh&&/^(simpler|busier)$/.test(sh)){ const A=[{type:'reshape',track:role,do:sh}], lv=levelFix(t.replace(/\b(simpler|simplify|simple|busier|less busy|too busy|more busy|shorter|longer)\b/g,' '));
     if(lv&&lv.actions&&lv.actions.length) A.push(...lv.actions); return {actions:A}; }
   /* "happier chords", "make the melody darker": a new version that leans that way (bright/dark alone on a melody is its EQ, toneFix) */
   if(role==='chords'&&moodSaid(t)&&!/\b(brighter|darker)\b.*\b(sound|tone|eq)\b/.test(t)&&!/\b(bright|brighter|dark|darker|dull|duller|muffled)\b/.test(t)) return {actions:[{type:'vary',track:'chords',mood:moodSaid(t)}]};
-  const iw=(INST_WORDS.find(([k,re])=>re.test(t))||[])[0], fresh=/\b(redo|rework|rewrite|regenerate|new|different|other|fresh|try (some )?(other|different|something else))\b/.test(t);
+  const iw=(INST_WORDS.find(([k,re])=>re.test(t))||[])[0], fresh=/\b(redo|rework|rewrite|regenerate|new|different|other|fresh|try (some )?(other|different|something else)|badal\w*|badl\w*|naya|nayi|naye|koi aur|dusr[aie]|alag)\b/.test(t);
   if(fresh||/\b(change|replace|swap( out)?|switch( up)?)\b/.test(t)){
     const inst=iw&&iw!==T.inst&&/\b(to|with|for|on|into|as|by)\b/.test(t)?{type:'instrument',track:role,instrument:role==='drums'&&iw==='bass808'?'kit808':iw}:null;
     if(role==='drums') return inst?{actions:[inst]}:null;
@@ -202,6 +205,8 @@ function focusText(raw){ const f=typeof ASSIST!=='undefined'&&ASSIST.focus, w={d
   if(/\b(song|track|mix|everything|whole|all|master|volume|tempo|bpm|key|loop|intro|outro|drop|break|build|section|bars?|longer|shorter|faster|slower|swing|bounce)\b/.test(t)) return raw;
   if(/\b(play|stop|pause|save|download|export|bounce|arrange|record|sing|hum|whistle|name|rename|undo|redo|delete|remove|again|mp3|quantize|quantise)\b/.test(t)) return raw;
   if(/\b(it|that|this|them|those)\b/.test(t)) return raw.replace(/\b(it|that|this|them|those)\b/i,'the '+w);
+  /* one word after a part ("louder", "a bit softer", "simpler"): that part */
+  if(typeof BARE_LEVEL!=='undefined'&&BARE_LEVEL.test(raw)) return 'make the '+w+' '+raw.trim();
   if(/\b(another|one more|new one|different one|the other one|previous one|last one)\b/.test(t)) return raw+' '+w;
   return raw; }
 /* ---------- the song by voice, offline (AI-1): "8-bar intro, then build up and drop", "make the break longer", "drop the drums in the outro",
@@ -349,7 +354,7 @@ function levelFix(t){
   const dv=DRUM_VOICE.find(([k,re])=>re.test(t)); let role=dv?'drums':(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
   const small=/\b(a (little|bit|touch|tad|notch|hair)( bit)?|slightly|just a bit|tiny bit|bit|little|somewhat|thoda|thodi|thora)\b/.test(t), big=/\b(a lot|lots|way|much|loads|really|heaps|so)\b/.test(t);
   const dbm=t.match(/(\d+(?:\.\d)?) ?(?:db|decibels?)\b/), n=dbm?Math.min(12,+dbm[1]):small?3:big?8:5, sign=up?1:-1;
-  const master=!role&&!punch&&(/\b(louder|quieter|too loud|too quiet|(turn|bring) (it|everything|the (whole )?(song|track|mix|master|volume|thing)|the master|the volume|master|volume) (up|down)|(turn|bring) (up|down) (the )?(volume|master|song|mix|everything)|volume (up|down))\b/.test(t)||/\b(awaaz|aawaz|awaz|volume|gaana|gana)\b/.test(t));
+  const master=!role&&!punch&&(/\b(louder|quieter|softer|too loud|too quiet|(turn|bring) (it|everything|the (whole )?(song|track|mix|master|volume|thing)|the master|the volume|master|volume) (up|down)|(turn|bring) (up|down) (the )?(volume|master|song|mix|everything)|volume (up|down))\b/.test(t)||/\b(awaaz|aawaz|awaz|volume|gaana|gana)\b/.test(t));
   if(!role&&!punch&&!master) return null;
   /* the whole song: every part's fader moves by the same dB (part of the song, so Undo puts it back exactly); going up stops when the loudest part reaches full */
   if(master){ if(!PROJ.tracks.length) return {actions:[],reply:'There’s nothing in the song yet. Say “make a house beat” to start.'};
@@ -387,7 +392,7 @@ function toneFix(t){
   else if(/\b(boxy|honky|nasal)\b/.test(t)) kind='box';
   else if(/\b(warm|warmer|warmth|less cold|too cold)\b/.test(t)) kind='warm';
   else if(/\b(harsh|shrill|piercing|sibilant|too bright|too sharp|too much top)\b/.test(t)) kind='harsh';
-  else if(/\b(dull|muffled|lifeless|too dark|brighter|(?:more|some|add) (?:air|sparkle|shine|top end))\b/.test(t)) kind='dull';
+  else if(/\b(dull|muffled|lifeless|too dark|brighter|brighten(?: (?:it|them|that))?(?: up)?|(?:more|some|add) (?:air|sparkle|shine|top end))\b/.test(t)) kind='dull';
   if(!kind) return null;
   /* "still muddy" / "still harsh" with no part named carries on with the part fixed last */
   let role=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0]; const last=ASSIST.lastTone;
@@ -493,6 +498,8 @@ function askShadow(acts){ const saved=PROJ.tracks.map(t=>[t,t.mute,t.solo,t.vol]
 function localBrain(raw){
   /* a typed "Keys, make an 8-bar intro…": the assistant's name isn't the part "keys" (speech already strips it) */
   { const nm=String((typeof ASSIST!=='undefined'&&ASSIST.name)||'Keys').trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); if(nm) raw=String(raw||'').replace(new RegExp('^\\s*(?:(?:hey|hi|ok|okay|yo)\\s+)?'+nm+'\\s*[,:!–—-]\\s*|^\\s*(?:hey|hi|ok|okay|yo)\\s+'+nm+'\\b\\s*|^\\s*'+nm+'\\s+(?=(?:make|add|turn|arrange|give|let|put|take|drop|loop|play|remove|bring|can|could|please|stretch|move|rename|duplicate)\\b)','i'),''); }
+  /* "the drums are fine, just change the chords": the praised or protected part is left out of the words (protectSaid, AI-9 fix) */
+  { const P=typeof protectSaid==='function'?protectSaid(raw):null; if(P&&P.kept.size){ if(!P.rest.trim()) return {actions:[],reply:'OK. '+keptTxt(P.kept)+' What should I change next?'}; } const r2=P&&(/\b(mute|unmute|solo|unsolo)\b/i.test(raw)?P.rest:P.restCut); if(r2&&r2!==raw) raw=r2; }
   raw=focusText(raw);
   const segs=splitAsks(raw); if(!segs) return brainOne(raw);
   const R=[];
