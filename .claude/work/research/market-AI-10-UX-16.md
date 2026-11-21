@@ -1,0 +1,27 @@
+# Market checks: AI-10 and UX-16
+music-researcher · 22 Nov 2026 · background: RES-7
+
+## AI-10 · Music dips while you talk to Keys
+**Verdict: great (5/5).** Talking to Keys over a loud beat is where voice control fails today. Every voice product producers already use ducks the music when it hears its wake word, and the studio AI tools from rivals take typed input only. That makes ducking a real advantage for a voice-first studio.
+- **Who wants it:** anyone who talks to Keys while a loop plays, which is the main use. The design follows the usual norms: about -15 dB, a fast dip, a slow return of about 0.8 s, and the dip held through Keys' reply. Phones, Sonos, car assistants (Android Automotive) and DJ-mixer talkover all work this way.
+- **Competitors:** Suno Studio Chat (Oct 2026) and FL Studio's Gopher agent (Jul 2026) are chat boxes where you type. None of them listens over the music, so no rival has had to solve this yet.
+- **Risks to watch:** the iPhone may stack its own ducking on top of ours, so phones may need to default to Light. On Windows, the call-style mic may trigger "reduce other sounds". The proposal already plans a fallback for both. Test both early, not at gate 2.
+- **Tweak:** leave "keep the kick" (D3 B) for later. Agree with the recommended D1 Normal, D2 A and D3 A.
+
+## UX-16 · Ableton-like studio, step 1 = one-screen frame
+**Verdict: good (4/5).** A one-screen layout is the clearest "this is a real DAW" signal. It also fixes the worst laptop problem: today the tracks start 1,700 px down the page. The risk is size. Step 1 is L, moves many page elements and depends on UX-4.
+- **Who wants it:** every producer who knows Live, Bitwig or FL. In all three, the arrangement sits in the centre of a fixed window, with panels you can show or hide at the sides and the bottom. Bitwig's centre panel cannot be hidden. Its Browser and Inspector are side panels, and the detail editor sits below the timeline ([Bitwig window body](https://www.bitwig.com/userguide/latest/the_window_body)).
+- **Competitors:** AI studios keep the assistant one panel away from the timeline, never on a separate page. Examples are the Suno Studio 2.0 Chat Bar and Gopher as a tab in FL's Communications panel.
+- **Tweaks:** (1) Let a single shortcut show or hide each panel, and remember the choice. That matters more than the default sizes. (2) On 1366×768, start with the drawer hidden and the editor closed. (3) Make sure voice still works when Keys is folded to the orb rail.
+
+### UX-16 research questions (short answers)
+1. **Live 12 / Bitwig on a 1366×768 laptop.** Neither changes its panels by screen size; I found no documented size rule in either. Live opens a set with the views it was saved with, usually Browser plus Detail (Clip/Device). Users hide them with view toggles (Ctrl/Cmd+Alt+B for the Browser, Ctrl/Cmd+Alt+L for Detail) or use the Zoom Display preference. The Detail shortcut has a known bug on non-English keyboards ([Ableton forum](https://www.ableton.com/forum/viewtopic.php?p=1818838)). This is from my product knowledge; the Live help pages I read don't cover small screens. Bitwig handles screen size with **display profiles** (one includes a tablet layout), and in some profiles the Inspector moves into the right-hand panel ([Bitwig tablet](https://www.bitwig.com/userguide/latest/working_on_a_tablet_computer)). **So:** starting with the drawer hidden below 760 px is our own sensible rule, not a copy of what they do. Remembering the user's last choice is the convention.
+2. **AI DAWs that dock the chat.** In FL Studio 2025/2026, Gopher is a resizable tab in the Communications panel, next to the other panels and not over the playlist ([Image-Line manual](https://www.image-line.com/fl-studio-learning-content/fl-studio-online-manual/html/gopher/gopher_control.htm)). Suno Studio 2.0 (13 Aug 2026) has a Chat Bar that "sits across" the session ([AI Musicpreneur](https://www.aimusicpreneur.com/ai-tools-news/suno-studio-2-0-midi-chat-bar-custom-plugins/)). It is beta, and I couldn't confirm its exact edge from text. I found no published user reactions to either placement. **So:** a right sidebar for Keys (D3 a) fits, because chat needs height and the bottom is already taken by the editor and controller. The fold-to-orb rail answers the "it takes room" complaint before anyone makes it. Not checked: Logic Session Players and BandLab.
+
+AI-10's own research questions (Windows ducking on an echo-cancelled mic; iOS 26 ducking when speech recognition starts) were not in this brief. They can be a quick-answer job.
+
+## Files
+- `/tmp/research/market/AI-10.json`, `/tmp/research/market/UX-16.json`
+
+## Sources
+[Suno Chat blog](https://suno.com/blog/studio-chat-assistant) · [Suno Studio 2.0](https://suno.com/blog/studio-2) · [MusicRadar: FL Studio agentic Gopher](https://www.musicradar.com/music-tech/you-can-now-control-fl-studio-with-an-ai-chatbot-from-inside-the-daw) · [Gopher manual](https://www.image-line.com/fl-studio-learning-content/fl-studio-online-manual/html/gopher/gopher_control.htm) · [FL 2025 new features](https://www.image-line.com/fl-studio-learning-content/fl-studio-online-manual/html/basics_new_25.htm) · [Bitwig window body](https://www.bitwig.com/userguide/latest/the_window_body) · [Bitwig tablet](https://www.bitwig.com/userguide/latest/working_on_a_tablet_computer) · [Live 12 view options](https://help.ableton.com/hc/en-us/articles/12243771208092) · [Android Automotive ducking](https://source.android.com/docs/automotive/audio/volume-management) · RES-7 sources
