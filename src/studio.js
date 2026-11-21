@@ -213,7 +213,9 @@ function shapePart(notes,part,key){
   ev.forEach(e=>{ e.n=sungPitch(e,key); delete e.c; });
   /* a bass note holds to the next one across a breath (up to a 16th); a rest the singer left stays a rest */
   const legato=gap=>{ for(let i=0;i<ev.length;i++){ const nx=i+1<ev.length?ev[i+1].b:L; if(nx-(ev[i].b+ev[i].d)<=gap+1e-6) ev[i].d=Math.max(ev[i].d,nx-ev[i].b-0.02); } };
-  if(part==='bass'){ const med=ev.map(e=>e.n).sort((a,b)=>a-b)[ev.length>>1], sh=Math.round((40-med)/12)*12; ev.forEach(e=>{ e.n+=sh; e.v=Math.max(e.v,0.8); }); legato(0.25); }
+  /* whole octaves, so the low notes (the lowest fifth of what was sung) sit around E2: a bassline sung in the bass register
+     stays where it is, octave jumps included (the median moved an E2/E3 octave bass down to E1, UX-14) */
+  if(part==='bass'){ const lo=ev.map(e=>e.n).sort((a,b)=>a-b)[Math.floor(ev.length*0.2)], sh=Math.round((40-lo)/12)*12; ev.forEach(e=>{ e.n+=sh; e.v=Math.max(e.v,0.8); }); legato(0.25); }
   else if(part==='chords'){ const k=chordKey(ev,key), out=[];
     /* chord changes land on beats (half bars when the singing is slow); the note sung longest in a slot picks the chord,
        repeats of the same chord merge, and each chord holds to the next one (at least a beat, up to a bar past what was sung) (UX-2) */

@@ -74,7 +74,7 @@ function audioToNotes(buf){
    - vibrato or drift across the half-semitone split one held note into 2-10 short ones;
    - a singer who is a bit flat or sharp all through (25-45 cents) got notes a semitone off;
    - a pitch change with no gap (legato) started 40-80 ms late, a 16th late once quantized.
-   Here each note's pitch is the median of all its frames (after the first 50 ms), pieces of one wobbling note join up, a short
+   Here each note's pitch is the median of all its frames (after the first 50 ms, or 30% of a short note), pieces of one wobbling note join up, a short
    scoop joins the note it slides into, the singer's own tuning is measured over the take (circular mean of every note's
    offset, used when the notes agree on it), and a legato note starts at the first frame on its new pitch.
    c: how far the note sits from its semitone (−0.5..0.5) after that tuning; the take uses it to settle a pitch sung right
@@ -82,12 +82,14 @@ function audioToNotes(buf){
 function tidySung(notes,frames,gate,hs){
   const fm=fr=>fr.f>0&&fr.clar>0.85&&fr.rms>gate?ftom(fr.f):null;
   const at=t=>{ let lo=0, hi=frames.length; while(lo<hi){ const m=(lo+hi)>>1; if(frames[m].t<t) lo=m+1; else hi=m; } return lo; };
-  const pitchOf=(t0,t1)=>{ const ms=[], skip=t1-t0>0.15?0.05:0; for(let k=at(t0+skip);k<frames.length&&frames[k].t<=t1;k++){ const m=fm(frames[k]); if(m!=null) ms.push(m); }
+  const pitchOf=(t0,t1)=>{ const ms=[], skip=Math.min(0.05,(t1-t0)*0.3); for(let k=at(t0+skip);k<frames.length&&frames[k].t<=t1;k++){ const m=fm(frames[k]); if(m!=null) ms.push(m); }
     ms.sort((a,b)=>a-b); return ms.length?ms[ms.length>>1]:null; };
-  const out=notes.map(n=>{ const m=pitchOf(n.t0,n.t1); return Object.assign({},n,{m:m==null?n.n:m}); });
-  for(let i=0;i+1<out.length;i++){ const a=out[i], b=out[i+1]; if(a.n===b.n||b.t0-a.t1>2.5*hs) continue; /* same pitch twice is a re-sung note */
+  const out=notes.map(n=>{ const m=pitchOf(n.t0,n.t1); return Object.assign({},n,{m:m==null?n.n:m,tail:n.n}); });
+  /* tail: the tracker's pitch for the last piece of a joined note. Two pieces it gave the same pitch were split by a new attack
+     (a re-sung note, "da da"), so they stay two notes */
+  for(let i=0;i+1<out.length;i++){ const a=out[i], b=out[i+1]; if(a.tail===b.n||b.t0-a.t1>2.5*hs) continue;
     const wobble=Math.abs(a.m-b.m)<0.7, scoop=a.t1-a.t0<0.09&&b.t1-b.t0>a.t1-a.t0&&b.m>a.m&&b.m-a.m<2.5;
-    if(wobble||scoop){ a.t1=Math.max(a.t1,b.t1); a.pk=Math.max(a.pk,b.pk); const m=pitchOf(a.t0,a.t1); a.m=m==null?b.m:m; a.n=Math.round(a.m); out.splice(i+1,1); i--; } }
+    if(wobble||scoop){ a.t1=Math.max(a.t1,b.t1); a.pk=Math.max(a.pk,b.pk); a.tail=b.n; const m=pitchOf(a.t0,a.t1); a.m=m==null?b.m:m; a.n=Math.round(a.m); out.splice(i+1,1); i--; } }
   let sx=0, sy=0, sw=0; out.forEach(n=>{ const w=n.t1-n.t0, d=n.m-Math.round(n.m); sx+=w*Math.cos(2*Math.PI*d); sy+=w*Math.sin(2*Math.PI*d); sw+=w; });
   let off=out.length>=3&&sw>0&&Math.hypot(sx,sy)/sw>0.6?Math.atan2(sy,sx)/(2*Math.PI):0; if(Math.abs(off)<0.1) off=0;
   out.forEach(n=>{ const f=n.m-off; n.n=Math.round(f); n.c=+(f-n.n).toFixed(2); });

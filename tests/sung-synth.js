@@ -8,7 +8,7 @@
   const rnd = seed => () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
   function synth(notes, o) {
     const sr = o.sr, s = 60 / o.bpm, len = Math.round(o.bars * 4 * s * sr), x = new Float32Array(len), R = rnd(o.seed || 7);
-    const segs = notes.map((e, i) => { const j = (o.jitter || 0) * (2 * R() - 1); return { e, t0: e.b * s + (e.legato && i ? 0 : j), lvl: 0.55 + 0.45 * R() }; });
+    const segs = notes.map((e, i) => { const j = (o.jitter || 0) * (2 * R() - 1); return { e, t0: e.b * s + (e.legato && i ? 0 : j), lvl: 0.55 + 0.45 * R(), det: (o.sloppy || 0) * (2 * R() - 1) }; });
     segs.forEach((g, i) => { const nx = segs[i + 1]; g.t1 = nx && nx.e.legato ? nx.t0 : g.t0 + g.e.len * s * (g.e.legato || (nx && nx.e.legato) ? 1 : 0.8); });
     let ph = 0, drift = 0, hp1 = 0, hp2 = 0, px1 = 0, px2 = 0; const a = o.hpf ? Math.exp(-2 * Math.PI * o.hpf / sr) : 0;
     for (let i = 0, k = 0; i < len; i++) {
@@ -17,7 +17,7 @@
       if (t >= g.t0 && t < g.t1 + 0.04) {
         const dt = t - g.t0, prev = segs[k - 1];
         if (i % 480 === 0) drift = Math.max(-1, Math.min(1, drift + (R() - 0.5) * 0.3));
-        let c = (o.flat || 0) + (o.drift || 0) * drift + (o.vib || 0) * Math.sin(2 * Math.PI * 5.5 * dt) * Math.min(1, Math.max(0, (dt - 0.12) / 0.15));
+        let c = (o.flat || 0) + g.det + (o.drift || 0) * drift + (o.vib || 0) * Math.sin(2 * Math.PI * 5.5 * dt) * Math.min(1, Math.max(0, (dt - 0.12) / 0.15));
         if (g.e.legato && prev) { if (dt < 0.05) c += (prev.e.n - g.e.n) * 100 * (1 - dt / 0.05); } else if (dt < 0.06) c -= (o.scoop || 0) * (1 - dt / 0.06);
         const f = 440 * Math.pow(2, (g.e.n - 69 + c / 100) / 12); ph += f / sr; if (ph > 1e6) ph -= 1e6;
         const env = (g.e.legato && prev ? 1 : Math.min(1, dt / 0.025)) * Math.min(1, Math.max(0, (g.t1 + 0.04 - t) / 0.04));
@@ -25,7 +25,7 @@
           y += am * Math.sin(2 * Math.PI * ph * h); }
         y *= 0.12 * env * g.lvl;
       }
-      y += (R() - 0.5) * 0.004; /* room and mic noise */
+      y += (R() - 0.5) * (o.noise || 0.004); /* room and mic noise */
       if (a) { const y1 = a * (hp1 + y - px1); px1 = y; hp1 = y1; const y2 = a * (hp2 + y1 - px2); px2 = y1; hp2 = y2; y = y2; }
       x[i] = y;
     }
@@ -38,7 +38,9 @@
     const c = ensureAudio(), pcm = synth(notes, Object.assign({ sr: c.sampleRate }, o));
     const raw = audioToNotes(makeBuf(pcm.slice(), c.sampleRate));
     TR.t0 = 5; TAKE.part = part; TAKE.chunks = [{ t: 5, d: pcm }]; TAKE.notes = []; TAKE.open = null; TAKE.micByTake = false; LOOP.state = 'take';
-    TAKE.finish(); loopStop();
+    /* the gapless recorder (UX-10, when merged) hands finish() the take itself */
+    const R = typeof TAKE_REC !== 'undefined' ? TAKE_REC : null, keep = R && R.take; if (R) R.take = (t0, n) => { R.patched = []; const y = new Float32Array(n); y.set(pcm.subarray(0, n)); return y; };
+    try { TAKE.finish(); } finally { if (R) R.take = keep; } loopStop();
     const t = PROJ.tracks.find(t => t.take === part); return { ev: t ? t.events.map(e => ({ b: e.b, d: e.d, n: e.n })) : [], raw: raw.map(r => ({ b: r.t0 / (60 / o.bpm), n: r.n })), key: PROJ.key };
   }
   const NN = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'], nm = n => NN[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
@@ -64,6 +66,10 @@
   const MEL = [[0, 1, 62], [1, .5, 64, 1], [1.5, .5, 66, 1], [2, 1.5, 69, 1], [4, .5, 69], [4.5, .5, 71, 1], [5, 1, 69, 1], [6, 1, 66, 1], [8, .75, 64], [8.75, .75, 62, 1], [9.5, .5, 61, 1], [10, 2, 62, 1], [12.5, .5, 66], [13, .5, 64, 1], [13.5, 2, 62, 1]].map(([b, len, n, l]) => ({ b, len, n, legato: !!l }));
   const ROOTS_AM = [[0, 57], [4, 53], [8, 48], [12, 55]].map(([b, n]) => ({ b, len: 3.6, n }));
   const ROOTS_D = [[0, 50], [4, 45], [8, 47], [12, 54]].map(([b, n]) => ({ b, len: 3.6, n }));
+  const RUN16 = [60, 61, 62, 61, 60, 59, 60, 62, 64, 65, 64, 62, 60, 59, 57, 59].map((n, i) => ({ b: 4 + i * 0.25, len: 0.25, n, legato: i > 0 }));
+  const REPEAT = [0, .5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5].map((b, i) => ({ b, len: 0.45, n: i < 8 ? 45 : 41 }));
+  const OCT = [0, .5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 9, 10, 11, 12, 13, 14, 15].map((b, i) => ({ b, len: i < 16 ? 0.4 : 0.8, n: [40, 52][i % 2] + (i >= 8 && i < 16 ? 5 : 0) }));
+  const AMEL = [[0, 1, 69], [1, .5, 72], [1.5, .5, 71], [2, 2, 69], [4, .5, 67], [4.5, .5, 65], [5, 1, 64], [6, 2, 62], [8, 1, 64], [9, 1, 65], [10, 1, 67], [11, 1, 69], [12, 4, 64]].map(([b, len, n]) => ({ b, len, n }));
   const base = { bpm: 124, bars: 4, jitter: 0.035, vib: 30, drift: 12, scoop: 60 };
   const SC = [
     ['bass E2-A2, song key E minor', 'bass', BASS, { key: { tonic: 4, mode: 'minor' } }],
@@ -75,6 +81,12 @@
     ['melody D major legato, no key', 'melody', MEL, {}],
     ['melody D major, song key A minor', 'melody', MEL, { key: { tonic: 9, mode: 'minor' } }],
     ['melody, singer 35c flat, wide vibrato', 'melody', MEL, { key: { tonic: 2, mode: 'major' }, flat: -35, vib: 45, seed: 13 }],
+    ['fast legato 16th run (semitones)', 'melody', RUN16, { key: { tonic: 0, mode: 'major' }, seed: 17, vib: 20 }],
+    ['repeated notes, re-sung (da da da)', 'bass', REPEAT, { key: { tonic: 9, mode: 'minor' }, seed: 19 }],
+    ['octave-jump bass E2/E3, A2/A3', 'bass', OCT, { key: { tonic: 4, mode: 'minor' }, seed: 21 }],
+    ['sloppy singer ±40c per note, A minor', 'melody', AMEL, { key: { tonic: 9, mode: 'minor' }, sloppy: 40, seed: 23 }],
+    ['big scoops (110c), noisy room', 'melody', AMEL, { key: { tonic: 9, mode: 'minor' }, scoop: 110, noise: 0.03, jitter: 0.05, seed: 29 }],
+    ['bass, noisy laptop, wide vibrato', 'bass', BASS, { key: { tonic: 4, mode: 'minor' }, hpf: 150, weakF0: true, noise: 0.025, vib: 50, seed: 31 }],
     ['chord roots Am F C G, key A minor', 'chords', ROOTS_AM, { key: { tonic: 9, mode: 'minor' } }],
     ['chord roots D A Bm F#m, key A minor', 'chords', ROOTS_D, { key: { tonic: 9, mode: 'minor' } }],
     ['chord roots D A Bm F#m, no key', 'chords', ROOTS_D, {}],
