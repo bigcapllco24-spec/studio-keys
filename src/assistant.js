@@ -59,6 +59,8 @@ function noteChange(said,acts,done,touched){ said=String(said||'').trim(); if(!s
   const what=(done&&done.length?done.join('; '):((BATCH.notes||[]).map(n=>n.text).join(' ')||'nothing changed')).replace(/\s+/g,' ');
   ASSIST.changes.push({said,parts,line:`“${said.slice(0,70)}” → ${what.slice(0,110)}`}); if(ASSIST.changes.length>20) ASSIST.changes.shift();
   const song=acts.some(a=>/^(arrange|section|parts|transition|vibe|style|new_project)$/.test(a.type)||a.type==='mix'&&/^(all|master)$/i.test(String(a.track||'')));
+  /* a request that changed nothing and named no part ("make it shorter" that couldn't be done) keeps the focus (QA, 22 Nov fix 2) */
+  if(!song&&!parts.length&&!(done&&done.length)) return;
   ASSIST.focus=!song&&parts.length===1?parts[0]:null; }
 function projectState(){
   /* the song layout first, so the Worker's 7,000-character cut never drops it */

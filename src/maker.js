@@ -170,6 +170,7 @@ function askFix(t,raw){
   const q=/^\s*(what|which|whats|tell me|do you know|say)\b|\?\s*$/.test(t)||/\bwhat(?:'|’)?s\b|\bwhat (are|is)\b/.test(t);
   if(q&&/\b(chords?|progression)\b/.test(t)&&!/\b(add|give|change|new|different|make|replace|try)\b/.test(t)){ const c=typeof chordsSaid==='function'?chordsSaid(true):null;
     return {actions:[],reply:c?`The chords are ${c}, in ${keyName(projectKey())}. Say “new chords” for others, or “happier chords”.`:'There are no chords yet. Say “add chords” and I’ll tell you what they are.'}; }
+  { const pa=partAsk(t); if(pa) return pa; }
   if(q&&/\bkey\b/.test(t)&&!/\b(change|set|make|put|move)\b/.test(t)) return {actions:[],reply:PROJ.key?`It’s in ${keyName(PROJ.key)}.`:PROJ.tracks.length?`No key is set yet; it sounds like ${keyName(projectKey())}. Say “key F minor” to set one.`:'There’s nothing in the song yet, so no key. Say “key F minor” to set one.'};
   if(q&&/\b(tempo|bpm|how fast)\b/.test(t)&&!/\b(change|set|make)\b/.test(t)) return {actions:[],reply:`It’s at ${Math.round(CTRL.bpm)} BPM.`};
   /* chords named by letter ("make the chords Am F C G", "a minor f c g"): not yet; never a random new track (QA, 21 Nov) */
@@ -177,6 +178,26 @@ function askFix(t,raw){
   if(/\b(chords?|progression|play)\b/.test(t)&&new RegExp('(?:^|[\\s,])'+CH+'(?:(?:[\\s,]+|\\s*-\\s*)'+CH+'){2,}(?=[\\s,.!?]|$)').test(t.replace(/\b(make|the|chords?|progression|to|be|play|please|use|set)\b/g,' ').replace(/\s+/g,' ')))
     return {actions:[],reply:'I can’t play chords you name yet. Say “new chords” for a different progression or “happier chords”, or play them on the keyboard and I’ll keep them as you play them.'};
   return null; }
+/* a question about one part ("is the bass in F sharp or G flat?", "what note is the bass playing?", "is the melody in key?"): an answer from
+   the song, never a change (QA, 22 Nov fix 2). "can you make the bass simpler?" and "why is the bass so loud?" are requests, not questions. */
+function partAsk(t){
+  const q=/^\s*(?:(?:hey|so|ok|okay|and|um)\b[\s,]*)*(is|are|was|were|does|do|did|what|which|whats|what's|what’s|how|where|tell me|do you know)\b/.test(t)||/\?\s*$/.test(t);
+  if(!q||/^\s*(?:(?:hey|so|ok|okay|and)\b[\s,]*)*(can|could|would|will|why|how about|what if|should)\b/.test(t)) return null;
+  if(/\b(add|give|change|new|different|make|replace|try|turn|put|remove|mute|unmute|solo|delete|swap|switch|redo|regenerate|transpose|move|set|please|let'?s|another|too|so (?:loud|quiet|busy|boring))\b/.test(t)) return null;
+  const role=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0]; if(!role||role==='chords') return null; /* the chords have their own answer */
+  const T=[...PROJ.tracks].reverse().find(x=>x.role===role&&x.kind==='notes'), nm={drums:'drums',bass:'bassline',melody:'melody',voice:'vocal'}[role]||role;
+  if(!T) return {actions:[],reply:`There’s no ${nm} in the song yet. Say “add a ${nm==='drums'?'beat':nm}” and I’ll tell you about it.`};
+  const k=projectKey(), say=pc=>typeof pcSay==='function'?pcSay(pc,k):PC_NAMES[mod(pc,12)], kn=say(k.tonic)+' '+k.mode, inst=(INST.get(T.inst)||{}).name;
+  if(role==='drums') return {actions:[],reply:`The drums are ${T.desc?T.desc.replace(/\.$/,''):(inst||'the kit')+', '+T.events.length+' hits in the loop'}. Say “new drums” for another pattern.`};
+  const ev=[...T.events].sort((a,b)=>a.b-b.b), seen=[]; ev.forEach(e=>{ const pc=mod(Math.round(e.n),12); if(!seen.includes(pc)) seen.push(pc); });
+  const S=k.mode==='major'?[0,2,4,5,7,9,11]:[0,2,3,5,7,8,10], out=seen.filter(pc=>!S.includes(mod(pc-k.tonic,12)));
+  const list=L=>L.length>1?L.slice(0,-1).join(', ')+' and '+L[L.length-1]:L[0]||'';
+  if(!ev.length) return {actions:[],reply:`The ${nm} has no notes yet.`};
+  if(/\bin (?:the )?key\b|\bout of key\b|\bwrong notes?\b/.test(t)) return {actions:[],reply:out.length?`Mostly: the ${nm} is in ${kn}, with ${list(out.slice(0,3).map(say))} outside the key. Say “quantize” or play it again if that’s not what you meant.`:`Yes, every note of the ${nm} is in ${kn}.`};
+  /* "F sharp or G flat": the same note, spelled for this key */
+  const em=/\b([a-g])(?: (sharp|flat))?\b.*?\bor\b.*?\b([a-g])(?: (sharp|flat))?\s*\??\s*$/.exec(t), P0={c:0,d:2,e:4,f:5,g:7,a:9,b:11}, pcOf=(l,a)=>mod(P0[l]+(a==='sharp'?1:a==='flat'?-1:0),12);
+  const nmOf=(l,a)=>l.toUpperCase()+(a?' '+a:''), enh=em&&(em[2]||em[4])?(pcOf(em[1],em[2])===pcOf(em[3],em[4])?` ${nmOf(em[1],em[2])} and ${nmOf(em[3],em[4])} are the same note; in ${kn} it’s written ${say(pcOf(em[1],em[2]))}.`:''):'';
+  return {actions:[],reply:`The ${nm} plays ${list(seen.slice(0,6).map(say))}, in ${kn}${inst?', on '+inst:''}.${enh}`}; }
 function partEditFix(t,raw){
   const role=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0], songW=/\b(intro|outro|drop|break|build|section|verse|chorus|bridge)\b/.test(t);
   if(/\b(go back to|back to|bring back|return to|restore|switch back to|undo) (the |my |that )?(previous|last|old|older|earlier|original|first|other)\b|\b(previous|last|old|other|first|original) (one|version|take|chords?|bass ?line|bass|melody|drums?|beat)( was| is| sounded| sounds)? better\b|\bi (liked|prefer(red)?|like|want) the (previous|last|old|other|first|original)\b|^\s*(no,? )?the other one\b|\b(bring|put|change) (it|that|them) back\b/.test(t)&&!songW)
@@ -202,7 +223,9 @@ function partEditFix(t,raw){
 /* "make it softer" right after the bass: the bass (the focus). Song-wide words, transport and arrangement keep their meaning. */
 function focusText(raw){ const f=typeof ASSIST!=='undefined'&&ASSIST.focus, w={drums:'drums',bass:'bass',chords:'chords',melody:'melody'}[f]; if(!w) return raw;
   const t=askText(raw); if((ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0]) return raw;
-  if(/\b(song|track|mix|everything|whole|all|master|volume|tempo|bpm|key|loop|intro|outro|drop|break|build|section|bars?|longer|shorter|faster|slower|swing|bounce)\b/.test(t)) return raw;
+  /* "make it shorter" / "make them longer" right after a part: that part's notes (QA, 22 Nov fix 2); the song or loop only when it says so */
+  if(/\b(song|track|mix|everything|whole|all|master|volume|tempo|bpm|key|loop|intro|outro|drop|break|build|section|bars?|faster|slower|swing|bounce)\b/.test(t)) return raw;
+  if(/\b(longer|shorter)\b/.test(t)&&/\bnotes?\b/.test(t)&&!/\b(it|that|this|them|those)\b/.test(t)) return raw.replace(/\b(?:the )?notes?\b/i,'the '+w+' notes');
   if(/\b(play|stop|pause|save|download|export|bounce|arrange|record|sing|hum|whistle|name|rename|undo|redo|delete|remove|again|mp3|quantize|quantise)\b/.test(t)) return raw;
   if(/\b(it|that|this|them|those)\b/.test(t)) return raw.replace(/\b(it|that|this|them|those)\b/i,'the '+w);
   /* one word after a part ("louder", "a bit softer", "simpler"): that part */

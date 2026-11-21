@@ -230,7 +230,7 @@ function onePart(list,depth){
   const one=G.size===1?[...G][0]:null, oneT=one&&one!=='voice'?partTrack(one):null, out=[], dropped=[];
   const levelOnly=/\b(softer|quieter|louder|less loud|too loud|too quiet|turn (?:it |them |the \w+ )?(?:down|up)|volume|db|kam karo|soft karo)\b/.test(lc)&&!CHANGE_SAID.test(lc)&&!again&&!reshapeSaid(lc);
   /* a question ("which chords are these", "what key is it in") changes nothing, whatever the AI sent with its answer */
-  const asked=!depth&&typeof askFix==='function'&&(()=>{ try{ const q=askFix(said.toLowerCase(),said); return !!(q&&!(q.actions||[]).length); }catch(e){ return false; } })();
+  const askQ=!depth&&typeof askFix==='function'&&(()=>{ try{ const q=askFix(said.toLowerCase(),said); return q&&!(q.actions||[]).length?q:null; }catch(e){ return null; } })(), asked=!!askQ;
   for(let a of list){
     if(kept.size){ const r0=actRole(a);
       if(r0&&kept.has(r0)&&a.type!=='transport'){ dropped.push(a); continue; }
@@ -264,6 +264,8 @@ function onePart(list,depth){
     if(sh&&T) out.push({type:'reshape',track:T.id,do:sh}); /* "make the bass simpler" sent as a simpler drum groove: the bass gets simpler */
     else if(again&&(T||addedOk.has(tgt))) out.push({type:'vary',track:tgt}); }
   if(dropped.length) BATCH.guarded=dropped.map(a=>a.type+':'+actRole(a));
+  /* a question the AI answered with a change: nothing changes, and the reply is the answer from the song */
+  if(asked&&dropped.length&&askQ.reply){ BATCH.local=askQ; return []; }
   let res=out.filter(a=>a.type!=='noop');
   /* everything the AI sent was for other parts or the whole song ("the bass is muddy" sent as a master high-pass): the offline brain's
      one-part change instead, with its own reply */
