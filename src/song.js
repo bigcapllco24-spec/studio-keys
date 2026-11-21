@@ -206,11 +206,12 @@ function songPlay(o={}){ if(!PROJ.tracks.length){ toast('Add a part first, then 
 /* ----- Song scheduler (called by tick() in studio.js while the song plays) -----
    SONG.segs maps audio time to song beats; a jump at the loop brace adds a new segment */
 function songBeatAt(time){ const g=SONG.segs; if(!g.length) return SONG.cursor; let s=g[0]; for(const x of g) if(x.t<=time) s=x; return s.b+(time-s.t)*CTRL.bpm/60; }
-function songStartAt(t,beat){ const E=songBeats(); if(beat>=E-1e-6) beat=0; const lr=songLoopRange(); TR.running=true; TR.t0=t-beat*spb(); TR.schedT=A.ctx.currentTime; SONG.segs=[{t,b:beat}]; SONG.endT=0; SONG.loopAtStart=!!lr; }
+function songStartAt(t,beat){ const E=songBeats(); if(beat>=E-1e-6) beat=0; const lr=songLoopRange(); TR.running=true; TR.t0=t-beat*spb(); TR.schedT=A.ctx.currentTime; SONG.segs=[{t,b:beat}]; SONG.endT=0; SONG.loopAtStart=!!lr; SONG.lr=lr; }
 function songRetempo(now){ if(SONG.segs.length) SONG.segs=[{t:now,b:songBeatAt(now)}]; }
 function songTick(now,ahead){
   if(SONG.endT&&now>=SONG.endT){ loopStop(); return; }
   const s=spb(), E=songBeats(); let t=Math.max(TR.schedT,SONG.segs.length?SONG.segs[0].t:TR.schedT), guard=0;
+  songLoopFollow(t,s);
   while(t<ahead-1e-6&&guard++<4){ const g=SONG.segs[SONG.segs.length-1]; if(!g) break; const b0=g.b+(t-g.t)/s; let b1=g.b+(ahead-g.t)/s, wrap=null; const lr=songLoopRange();
     if(lr&&b0<lr[1]-1e-9&&b1>lr[1]){ b1=lr[1]; wrap=lr[0]; } else if(b1>E) b1=E;
     if(b1>b0) songSchedule(b0,b1,g,s);
@@ -219,6 +220,17 @@ function songTick(now,ahead){
     if(b1>=E-1e-9&&!SONG.endT) SONG.endT=tEnd+2; /* ring out for 2 s, then stop */
     break; }
 }
+/* QA, 17 Nov: the looped section was moved or resized while it played (or the sections before it changed), so the loop
+   range moved under the playhead. Stay in the same spot of the looped section; if that spot is gone (Shorter), go back to
+   the loop's first bar at the same point in the bar, so the groove doesn't stumble. Playing from before the loop still plays
+   into it; deleting the looped section ends the loop (as before). */
+function songLoopFollow(t,s){ const lr=songLoopRange(), pl=SONG.lr; SONG.lr=lr;
+  if(!lr||!pl||(lr[0]===pl[0]&&lr[1]===pl[1])||!SONG.segs.length) return;
+  const g=SONG.segs[SONG.segs.length-1], t0=Math.max(t,g.t), b=g.b+(t0-g.t)/s, first=lr[0]+Math.min(mod(b-lr[0],4),lr[1]-lr[0]-1e-6); let nb=null;
+  if(b>=pl[0]-1e-9&&b<pl[1]+1e-9){ const off=b-pl[0]; nb=off<lr[1]-lr[0]-1e-9?lr[0]+off:first; } /* was inside the loop */
+  else if(b<pl[0]&&b>=lr[1]-1e-9) nb=first; /* was heading into the loop, and the loop is now behind the playhead */
+  if(nb==null||Math.abs(nb-b)<1e-9) return;
+  SONG.segs.push({t:t0,b:nb}); if(SONG.segs.length>4) SONG.segs.shift(); }
 function songSchedule(b0,b1,g,s){ const at=B=>g.t+(B-g.b)*s;
   for(let k=Math.ceil(b0-1e-9);k<b1;k++) if(CTRL.metro) click(at(k),mod(k,4)===0);
   for(const tr of PROJ.tracks){ if(!trackAudible(tr)) continue;

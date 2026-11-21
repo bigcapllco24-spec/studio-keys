@@ -43,6 +43,10 @@ try {
   // 3b. MP3 download: render, encode, decode back
   const mp = await E(async () => { const m = await makeMp3(PROJ.tracks.filter(trackAudible), 4); const u = new Uint8Array(await m.blob.arrayBuffer()); const d = await A.ctx.decodeAudioData(u.buffer.slice(0)); return { size: m.blob.size, sync: u[0] === 0xff && (u[1] & 0xe0) === 0xe0, sec: m.seconds, dec: d.duration }; });
   ok('MP3 download (4 loops, decodes back)', mp.sync && mp.size > 50000 && Math.abs(mp.dec - mp.sec) < 0.5, `${(mp.size / 1024).toFixed(0)} KB, ${mp.dec.toFixed(1)} s`);
+  // UX-13 (QA, 17 Nov): the MP3 carries a LAME gapless header, so it decodes on the beat and exactly one loop long
+  const mg = await E(async () => { const tr = PROJ.tracks.filter(trackAudible), m = await makeMp3(tr, 1), u = new Uint8Array(await m.blob.arrayBuffer()), d = await A.ctx.decodeAudioData(u.buffer.slice(0));
+    return { info: String.fromCharCode(...u.slice(36, 40)), lame: String.fromCharCode(...u.slice(156, 160)), want: Math.round(m.seconds * 44100), got: d.length }; });
+  ok('MP3 is gapless: one loop decodes to exactly the loop length', mg.info === 'Info' && mg.lame === 'LAME' && Math.abs(mg.got - mg.want) <= 88, `${mg.got} of ${mg.want} samples`);
   // 3c. track effects, multi-select, one element at a time
   const fxr = await E(() => { const t = PROJ.tracks.find(t => t.role === 'bass'); const r = runActions([{ type: 'track_fx', track: 'bass', effect: 'reverb', amount: 30 }]);
     if (!FXOPEN.has(t.id)) document.querySelector(`[data-tfx="${t.id}"]`).click(); renderTracks(); const panel = !!document.querySelector('.tfx'); const sel = document.querySelector('.tfx [data-tfxadd]'); sel.value = 'width'; sel.dispatchEvent(new Event('change', { bubbles: true }));
@@ -114,6 +118,13 @@ try {
   ok('"turn <recording name> into chords" transcribes that track',tv.y === 'transcribe:chords:true' && tv.n2 === tv.n + 1 && /chords/.test(tv.r), tv.r);
   const im = await E(() => { const r = runActions([{ type: 'transcribe', to: 'bass' }]); return { tracks: PROJ.tracks.map(t => t.name + ':' + t.kind).join(', '), r: r.join() }; });
   ok('import MIDI + audio, turn audio into a bassline', /Lead:notes/.test(im.tracks) && /sing:audio/.test(im.tracks) && /bassline/.test(im.tracks), im.tracks);
+  // UX-13 (QA, 17 Nov): a 16-bar MIDI file into a 4-bar beat keeps every note, the loop grows to 16 bars, one Undo puts it back
+  const lm = await E(async () => { await newSong('Smoke long MIDI'); runActions([{ type: 'add_drums', style: 'house' }]); setBars(4); undoBoundary(); const n0 = PROJ.tracks[0].events.length;
+    const ev = []; for (let i = 0; i < 64; i++) ev.push({ b: i, d: 0.5, n: 60 + (i % 12), v: 0.8 });
+    await importFile(new File([buildMidi([{ name: 'Long', kind: 'notes', role: 'melody', inst: 'piano', events: ev }], CTRL.bpm, 64, 'long')], 'long16.mid'));
+    const t = PROJ.tracks.find(x => x.name === 'Long'), r = { bars: PROJ.bars, notes: t ? t.events.length : 0, last: t ? Math.max(...t.events.map(e => e.b)) : 0, toast: $('#toast').textContent };
+    undo(); r.undoBars = PROJ.bars; r.undoTracks = PROJ.tracks.length; r.undoDrums = PROJ.tracks[0].events.length === n0; return r; });
+  ok('long MIDI import keeps all notes and grows the loop (one Undo)', lm.bars === 16 && lm.notes === 64 && lm.last === 63 && /loop is now 16 bars/.test(lm.toast) && lm.undoBars === 4 && lm.undoTracks === 1 && lm.undoDrums, JSON.stringify(lm));
   // 6. sing a bassline over the beat (fake microphone sings C E G A C G)
   await E(() => newSong('Smoke sing')); await W(300);
   await E(() => { runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_chords' }]); window.__sayLog = []; const o = ASSIST.say; ASSIST.say = function (m, op) { window.__sayLog.push(m); ASSIST.say = o; return o.call(this, m, op); }; ASSIST.run('let me sing the bassline'); });
@@ -194,6 +205,11 @@ try {
     return { first, sec, range, beat, wrapped }; });
   ok('song: play from bar 33 starts in the Drop', pl.first >= 128 && pl.first < 132 && pl.sec === 'Drop', `first note at beat ${pl.first} (${pl.sec})`);
   ok('song: loop the Break jumps back to its start', JSON.stringify(pl.range) === '[192,256]' && pl.beat >= 192 && pl.beat < 210 && pl.wrapped, `range ${JSON.stringify(pl.range)}, beat ${pl.beat && pl.beat.toFixed(1)}`);
+  // UX-13 (QA, 17 Nov): moving the looped section while it plays keeps playback in it (it used to run on to the end and stop)
+  const lf = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); songLoop('break', { play: false }); songPlay({ from: 'break' }); await W(600);
+    undoBoundary(); songMove('break', 0); await W(1500); const beat = songBeatAt(A.ctx.currentTime), r = { range: songLoopRange(), beat: +beat.toFixed(1), at: songAt(beat).section.name, run: TR.running };
+    loopStop(); undo(); songLoop(null); r.back = songStartOf(songFind('break')); return r; });
+  ok('song: loop survives moving its section while playing', lf.run && JSON.stringify(lf.range) === '[0,64]' && lf.beat > 0 && lf.beat < 64 && lf.at === 'Break' && lf.back === 192, JSON.stringify(lf));
   const mu = await E(() => { const t = PROJ.tracks.find(t => t.take === 'bass' || t.role === 'bass'), s = songFind('drop 2'), a0 = JSON.stringify(t.events); const L = songMakeUnique(s.id, t.id);
     t.patterns.B.events.push({ b: 0.5, d: 0.25, n: 40, v: 0.9 }); saveProject(); const st = songStartOf(s), d1 = songStartOf(songFind('drop')), fl = songFlat(t);
     return { L, same: JSON.stringify(t.events) === a0, inB: fl.some(e => e.n === 40 && Math.abs(e.B - st - 0.5) < 1e-6), inA: fl.some(e => e.n === 40 && Math.abs(e.B - d1 - 0.5) < 1e-6) }; });
