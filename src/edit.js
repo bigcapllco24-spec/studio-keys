@@ -82,20 +82,25 @@ function audioToNotes(buf){
 function tidySung(notes,frames,gate,hs){
   const fm=fr=>fr.f>0&&fr.clar>0.85&&fr.rms>gate?ftom(fr.f):null;
   const at=t=>{ let lo=0, hi=frames.length; while(lo<hi){ const m=(lo+hi)>>1; if(frames[m].t<t) lo=m+1; else hi=m; } return lo; };
+  const out=notes.map(n=>Object.assign({},n,{tail:n.n}));
+  /* 1. a legato change of pitch starts at the first frame already on the new pitch (up to 6 frames, ~65 ms, earlier) */
+  for(let i=1;i<out.length;i++){ const a=out[i-1], b=out[i]; if(a.n===b.n||b.t0-a.t1>2.5*hs) continue;
+    let k=at(b.t0); const k0=k; while(k>0&&k0-k<6&&frames[k-1].t>a.t0+0.06){ const m=fm(frames[k-1]); if(m==null||Math.round(m)!==b.n) break; k--; }
+    if(k<frames.length&&frames[k].t<b.t0){ b.t0=frames[k].t; a.t1=Math.min(a.t1,b.t0); } }
+  /* 2. each note's pitch: the median of its frames, after the first 50 ms (30% of a short note) */
   const pitchOf=(t0,t1)=>{ const ms=[], skip=Math.min(0.05,(t1-t0)*0.3); for(let k=at(t0+skip);k<frames.length&&frames[k].t<=t1;k++){ const m=fm(frames[k]); if(m!=null) ms.push(m); }
     ms.sort((a,b)=>a-b); return ms.length?ms[ms.length>>1]:null; };
-  const out=notes.map(n=>{ const m=pitchOf(n.t0,n.t1); return Object.assign({},n,{m:m==null?n.n:m,tail:n.n}); });
-  /* tail: the tracker's pitch for the last piece of a joined note. Two pieces it gave the same pitch were split by a new attack
-     (a re-sung note, "da da"), so they stay two notes */
+  out.forEach(n=>{ const m=pitchOf(n.t0,n.t1); n.m=m==null?n.n:m; });
+  /* 3. pieces of one note join up: split by vibrato or drift (their pitches under 0.7 semitone apart), or a short scoop into
+     the note. tail: the tracker's pitch for the last piece of a joined note; two pieces it gave the same pitch were split by
+     a new attack (a re-sung note, "da da"), so they stay two notes */
   for(let i=0;i+1<out.length;i++){ const a=out[i], b=out[i+1]; if(a.tail===b.n||b.t0-a.t1>2.5*hs) continue;
     const wobble=Math.abs(a.m-b.m)<0.7, scoop=a.t1-a.t0<0.09&&b.t1-b.t0>a.t1-a.t0&&b.m>a.m&&b.m-a.m<2.5;
-    if(wobble||scoop){ a.t1=Math.max(a.t1,b.t1); a.pk=Math.max(a.pk,b.pk); a.tail=b.n; const m=pitchOf(a.t0,a.t1); a.m=m==null?b.m:m; a.n=Math.round(a.m); out.splice(i+1,1); i--; } }
-  let sx=0, sy=0, sw=0; out.forEach(n=>{ const w=n.t1-n.t0, d=n.m-Math.round(n.m); sx+=w*Math.cos(2*Math.PI*d); sy+=w*Math.sin(2*Math.PI*d); sw+=w; });
+    if(wobble||scoop){ a.t1=Math.max(a.t1,b.t1); a.pk=Math.max(a.pk,b.pk); a.tail=b.n; const m=pitchOf(a.t0,a.t1); a.m=m==null?b.m:m; out.splice(i+1,1); i--; } }
+  /* 4. the singer's own tuning: the circular mean of the notes' offsets (notes of 150 ms or more), when they agree on it */
+  let sx=0, sy=0, sw=0; out.forEach(n=>{ const w=n.t1-n.t0; if(w<0.15) return; const d=n.m-Math.round(n.m); sx+=w*Math.cos(2*Math.PI*d); sy+=w*Math.sin(2*Math.PI*d); sw+=w; });
   let off=out.length>=3&&sw>0&&Math.hypot(sx,sy)/sw>0.6?Math.atan2(sy,sx)/(2*Math.PI):0; if(Math.abs(off)<0.1) off=0;
   out.forEach(n=>{ const f=n.m-off; n.n=Math.round(f); n.c=+(f-n.n).toFixed(2); });
-  for(let i=1;i<out.length;i++){ const a=out[i-1], b=out[i]; if(a.n===b.n||b.t0-a.t1>2.5*hs) continue;
-    let k=at(b.t0); const k0=k; while(k>0&&k0-k<4&&frames[k-1].t>a.t0+0.06){ const m=fm(frames[k-1]); if(m==null||Math.round(m-off)!==b.n) break; k--; }
-    if(k<frames.length&&frames[k].t<b.t0){ b.t0=frames[k].t; a.t1=Math.min(a.t1,b.t0); } }
   return out;
 }
 function transcribeTrack(t,part){
