@@ -51,7 +51,7 @@ function songUniqueName(base,S,except){ S=S||songSections(); base=String(base||'
   const root=base.replace(/\s+\d+$/,''); for(let i=2;i<99;i++){ const n=root+' '+i; if(!taken(n)) return n; } return base; }
 /* keep sections in step with the tracks: drop parts of deleted tracks, switch new tracks on, follow the loop length while
    the song is still one automatic section. Runs before every undo snapshot (edit.js) */
-let songFreshT=0, songFreshIds=[];
+let songFreshT=0, songFreshIds=[]; /* new tracks waiting for one note (a MIDI file adds its tracks one save at a time, UX-7) */
 /* a sung take switches to Loop mode while you sing and comes back to Song mode after it (TAKE.backSong) */
 const songBackSoon=()=>typeof TAKE==='object'&&!!TAKE.backToSong;
 function songSync(){ const p=PROJ; migrateSong(p); const S=p.sections, ids=new Set(p.tracks.map(t=>t.id));
@@ -59,12 +59,13 @@ function songSync(){ const p=PROJ; migrateSong(p); const S=p.sections, ids=new S
   const fresh=p.tracks.filter(t=>!S.some(s=>s.parts[t.id]));
   if(fresh.length){ const sel=songSel(), on=S.length===1||!sel?S:[sel];
     fresh.forEach(t=>S.forEach(s=>{ s.parts[t.id]={on:on.includes(s),variant:'A'}; }));
-    if(on.length<S.length&&(songOn()||songBackSoon())){ songFreshIds=fresh.map(t=>t.id); clearTimeout(songFreshT); songFreshT=setTimeout(songFreshToast,900); } }
+    if(on.length<S.length&&(songOn()||songBackSoon())){ fresh.forEach(t=>{ if(!songFreshIds.includes(t.id)) songFreshIds.push(t.id); }); clearTimeout(songFreshT); songFreshT=setTimeout(songFreshToast,900); } }
   SONG.ver++; }
 /* "“Sung chords” plays in Intro. …", read from the parts as they are when it shows (after a take, back in Song mode) */
 function songFreshToast(){ const S=songSections(), ts=songFreshIds.map(id=>PROJ.tracks.find(t=>t.id===id)).filter(Boolean); songFreshIds=[]; if(!songOn()||!ts.length) return;
   const on=S.filter(s=>ts.some(t=>s.parts[t.id]&&s.parts[t.id].on)); if(!on.length||on.length>=S.length) return;
-  toast(`${ts.map(t=>`“${t.name}”`).join(', ')} play${ts.length>1?'':'s'} in ${on.map(s=>s.name).join(', ')}. Click its empty parts to add it elsewhere.`); }
+  const N=ts.map(t=>`“${t.name}”`), many=N.length>1;
+  toast(`${many?N.slice(0,-1).join(', ')+' and '+N[N.length-1]:N[0]} play${many?'':'s'} in ${on.map(s=>s.name).join(', ')}. Click ${many?'their':'its'} empty parts to add ${many?'them':'it'} elsewhere.`); }
 function songFreshCancel(){ clearTimeout(songFreshT); songFreshIds=[]; }
 function songCopyParts(fromId,toId){ songSections().forEach(s=>{ if(s.parts[fromId]) s.parts[toId]=JSON.parse(JSON.stringify(s.parts[fromId])); }); }
 
@@ -430,7 +431,7 @@ function songStartRename(id){ const el=document.querySelector(`#songStrip .sec[d
     if(L.chip&&L.chip.tok===UNDO.last) songChip(L.chip.text); };
   box.addEventListener('click',e=>{ const el=e.target.closest('.part'); if(!el) return; clearTimeout(pT); if(e.detail===0){ togglePart(el); return; } if(e.detail>1) return; pLast=null; pT=setTimeout(()=>togglePart(el),230); });
   box.addEventListener('dblclick',e=>{ const el=e.target.closest('.part'); if(!el) return; clearTimeout(pT); untogglePart(el.dataset.sid,el.dataset.tid); const t=PROJ.tracks.find(x=>x.id===el.dataset.tid); if(!t) return;
-    songSelect(el.dataset.sid,{cursor:!TR.running}); if(t.kind==='notes') openEditor(t.id,{sid:el.dataset.sid}); else toast('That’s a recording: switch it on or off here. Use “Turn into notes” to edit it as notes.'); });
+    songSelect(el.dataset.sid,{cursor:!TR.running}); if(t.kind==='notes'){ openEditor(t.id,{sid:el.dataset.sid}); edFocus(); } else toast('That’s a recording: switch it on or off here. Use “Turn into notes” to edit it as notes.'); });
   /* the song area takes the keyboard while it has focus; clicking the piano gives the keys back */
   pl.addEventListener('pointerdown',e=>{ if(!songOn()||e.target.closest('input,select,textarea,button,.slane')) return; if(e.target.closest('.th,.tfx')) return; pl.focus({preventScroll:true}); });
   document.addEventListener('pointerdown',e=>{ const a=document.activeElement; if(a&&a!==document.body&&pl.contains(a)&&!pl.contains(e.target)&&!e.target.closest('#songMenu')) a.blur(); },true); /* e.g. the piano: its keys play notes again */
