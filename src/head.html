@@ -680,6 +680,10 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
   .sec.slim .smore{display:none} /* narrow blocks: long-press opens the same menu */
   .sec.slim .sname{padding:4px 3px}
 }
+/* toasts that carry a button (Undo, Flip it) take clicks while they show */
+.toast.act.show{pointer-events:auto}.toast .btn{margin-left:8px}
+/* the on-screen Sustain latch is a real tap target on touch screens; the desktop look is unchanged */
+@media (pointer:coarse){#susBtn{min-height:44px;padding:4px 12px}}
 @media (max-width:860px){.song-head{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:600px){
   .playlist.song .sh-time,.playlist.song .slane,.playlist.song .song-hint,.playlist.song #songAddSec,.playlist.song .sh-l2 .seg,.playlist.song .playhead{display:none!important}

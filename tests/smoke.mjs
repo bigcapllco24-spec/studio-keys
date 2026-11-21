@@ -385,6 +385,20 @@ try {
   ok('controller: sustain pedal holds a note on the Akai and on an unknown keyboard, the on-screen Sustain button too', mi.held0 && mi.free0 && mi.held1 && mi.free1 && mi.latch && mi.latchOff, JSON.stringify(mi));
   ok('controller: an unknown keyboard\'s first knob is picked up and moves an effect', mi.knob[0] === 'fx0' && mi.knob[2] > mi.knob[1] && /Knob 1 →/.test(mi.toast) && mi.start === 'playing' && mi.stop === 'stopped', `${mi.knob.join(' ')} · ${mi.toast}`);
   ok('controller: Akai MPK mini knobs keep CC 70-77 → K1-K8', mi.akai === JSON.stringify(Object.fromEntries([70, 71, 72, 73, 74, 75, 76, 77].map((c, i) => [c, 'fx' + i]))), mi.akai);
+  // UX-15 fix 1: a normal pedal held down while the page connects and then lifted is not flipped; legato pedalling on a reversed pedal flips it (with Undo). Fix 2: Flip acts on its own keyboard's row
+  const pr = await E(async () => { ensureAudio(); const R = {};
+    const mk = (id, name, manufacturer) => ({ id, name, manufacturer, type: 'input', state: 'connected', connection: 'open', onmidimessage: null });
+    const ins = [mk('pa', 'MPK mini 3', 'AKAI'), mk('py', 'Smoke Yamaha', 'Yamaha'), mk('pc', 'Smoke Casio', 'CASIO')]; let T = performance.now() + 1000;
+    const send = (i, d, dt = 0) => { T += dt; ins[i].onmidimessage({ data: new Uint8Array(d), timeStamp: T }); }, ds = i => DEVICES[devKey(ins[i])] || {};
+    attachAccess({ inputs: new Map(ins.map(i => [i.id, i])), outputs: new Map(), onstatechange: null }); M.selected = 'all';
+    send(1, [0xB0, 64, 0]); send(1, [0xB0, 64, 127], 500); send(1, [0x90, 60, 90], 50); send(1, [0x80, 60, 0], 300); R.held = sustained.size === 1; send(1, [0xB0, 64, 0], 1500); R.free = !sustained.size; R.notFlipped = !ds(1).pedalRev;
+    send(2, [0xB0, 64, 0], 500); for (let k = 0; k < 3; k++) { send(2, [0x90, 60 + k, 90], 50); send(2, [0x80, 60 + k, 0], 900); send(2, [0xB0, 64, 127], 300); send(2, [0x90, 65 + k, 90], 60); send(2, [0xB0, 64, 0], 200); send(2, [0x80, 65 + k, 0], 400); }
+    R.casio = !!ds(2).pedalRev && /other way round/.test($('#toast').textContent) && !!$('#toast button'); send(2, [0xB0, 64, 127], 300);
+    send(0, [0xB0, 64, 127], 100); send(0, [0xB0, 64, 0], 100); renderSeen(); const rows = [...document.querySelectorAll('#devSeen [data-pedalflip]')].map(b => b.dataset.pedalflip).join();
+    document.querySelector('#devSeen [data-pedalflip="py"]').click(); R.flip = rows + ' · ' + [ds(0).pedalRev, ds(1).pedalRev, ds(2).pedalRev].map(Boolean).join();
+    attachAccess({ inputs: new Map(), outputs: new Map(), onstatechange: null }); return R; });
+  ok('controller: a pedal held while connecting and then lifted is not flipped; a reversed pedal is flipped from how it is played, with Undo', pr.held && pr.free && pr.notFlipped && pr.casio, JSON.stringify(pr));
+  ok('controller: with two keyboards, Flip changes only the keyboard on its own row', pr.flip === 'pa,py,pc · false,true,true', pr.flip);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
