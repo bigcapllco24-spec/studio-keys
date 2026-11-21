@@ -77,18 +77,25 @@ function songPlaysIn(t,v){ v=v||'A'; return songSections().filter(s=>{ const p=s
 const songCopyEvents=ev=>ev.map(e=>{ const c=Object.assign({},e); delete c.cyc; delete c.raw; return c; });
 
 /* ----- the song timeline: every note of a track in song beats (cached until the next saveProject) ----- */
+/* a hit the drummer feel pushes early (SE-3: 10-25 ms) still belongs to the beat it's pushed from, so a cut (a gap, a kick drop) starts 1/16 beat early */
+const SONG_EARLY=1/16;
 function songFlatReset(){ if(SONG.flatFor!==PROJ||SONG.flatVer!==SONG.ver){ SONG.flat.clear(); SONG.flatFor=PROJ; SONG.flatVer=SONG.ver; } }
 function songFlat(t){ songFlatReset(); let f=SONG.flat.get(t.id); if(f) return f; f=[];
   const S=songSections(), L=PROJ.bars*4, drum=t.kind==='notes'&&(t.role==='drums'||!!(INST.get(t.inst)||{}).drums); let b0=0;
   for(const s of S){ const len=s.bars*4, p=s.parts[t.id], off=s.off||0;
+    /* the transition at the end of a section (AI-1, actions.js): transitionCut says which notes stop (a gap, a kick drop), transitionEvents adds the drum roll, fill and the crash on the next downbeat */
+    const tr=t.kind==='notes'&&s.end&&s.end.to&&s.end.to!=='none', cut=tr&&typeof transitionCut==='function'?songTry(()=>transitionCut(s,t)):null;
     if(p&&p.on&&t.kind==='notes'){ const ev=songPatEvents(t,p.variant), wo=drum&&p.without&&p.without.length?new Set(p.without.flatMap(g=>DRUM_GROUPS[g]||[g])):null;
       for(let k=Math.floor(off/L);k*L-off<len;k++) for(const e of ev){ if(e.b>=L) continue; const rb=k*L+e.b-off; if(rb<0||rb>=len) continue; if(wo&&wo.has(drumPiece(e.n))) continue;
-        f.push({B:b0+rb,d:Math.min(e.d,len-rb),n:e.n,v:e.v}); }
-      if(drum&&s.end&&s.end.to&&s.end.to!=='none'&&typeof transitionEvents==='function'){ try{ (transitionEvents(s,t)||[]).forEach(e=>{ if(e.b>=0&&e.b<len) f.push({B:b0+e.b,d:Math.min(e.d||0.25,len-e.b),n:e.n,v:e.v==null?0.8:e.v}); }); }catch(err){ console.warn('transition',err); } }
+        let d=Math.min(e.d,len-rb); if(cut&&cut.length){ let skip=false; for(const c of cut){ if(c.only&&!(drum&&c.only.includes(drumPiece(e.n)))) continue; if(rb>=c.from-SONG_EARLY){ skip=true; break; } if(!c.only) d=Math.min(d,c.from-rb); } if(skip) continue; }
+        f.push({B:b0+rb,d,n:e.n,v:e.v}); }
     }
+    if(drum&&tr&&typeof transitionEvents==='function'){ const more=S[S.length-1]!==s?4:0, gap=(cut||[]).filter(c=>!c.only).reduce((a,c)=>Math.min(a,c.from),len);
+      (songTry(()=>transitionEvents(s,t))||[]).forEach(e=>{ if(e.b>=0&&e.b<len+more&&!(e.b>=gap-SONG_EARLY&&e.b<len)) f.push({B:b0+e.b,d:Math.max(0.05,Math.min(e.d||0.25,len+more-e.b)),n:e.n,v:e.v==null?0.8:e.v}); }); }
     b0+=len; }
   f.sort((a,b)=>a.B-b.B); SONG.flat.set(t.id,f); return f; }
 /* audio tracks: where the clip starts in each section it plays in, and how many beats it may run */
+function songTry(fn){ try{ return fn(); }catch(err){ console.warn('transition',err); return null; } }
 function songAudioSegs(t){ songFlatReset(); const key='a:'+t.id; let f=SONG.flat.get(key); if(f) return f; f=[];
   const S=songSections(), L=PROJ.bars*4, st=t.start||0; let b0=0;
   for(const s of S){ const len=s.bars*4, p=s.parts[t.id], off=s.off||0;
@@ -103,7 +110,9 @@ function songAt(beat){ const S=songSections(); let b=0; beat=Math.max(0,beat||0)
   return null; }
 
 /* ----- edits: each one is a single undo step through saveProject ----- */
-function songEdit(fn,o={}){ if(typeof undoBoundary==='function') undoBoundary(); const S=songSections(); const r=fn(S); if(o.structure) S.forEach(s=>delete s.auto); saveProject(); renderTracks(); uiLoop(); return r; }
+/* SONG.batch (set by runActions for one assistant request): edits land in memory and runActions saves once, so the whole request is one undo step */
+function songEdit(fn,o={}){ if(SONG.batch){ const S=songSections(), r=fn(S); if(o.structure) S.forEach(s=>delete s.auto); SONG.ver++; return r; }
+  if(typeof undoBoundary==='function') undoBoundary(); const S=songSections(); const r=fn(S); if(o.structure) S.forEach(s=>delete s.auto); saveProject(); renderTracks(); uiLoop(); return r; }
 function songAdd(o={}){ const src=o.copyOf?songFind(o.copyOf):null; let made=null;
   songEdit(S=>{ const kind=SONG_KINDS.includes(o.kind)?o.kind:src?src.kind:songKindOf(o.name||'');
     const s={id:songNewId(S),name:songUniqueName(o.name||(src?src.name:SONG_KIND_NAME[kind]||'Section'),S),kind,bars:clamp(Math.round(+o.bars||(src?src.bars:8)),1,64),end:src&&src.end?Object.assign({},src.end):null,parts:{}};
@@ -154,8 +163,13 @@ function songFind(ref){ const S=songSections(); if(ref==null||ref==='') return n
   if(typeof ref==='object') return S.find(s=>s===ref||s.id===ref.id)||null;
   if(typeof ref==='number') return S[ref-1]||null;
   const raw=String(ref).trim(), q=raw.toLowerCase().replace(/^(the|my|our)\s+/,'').replace(/\s+(section|part)$/,'').trim();
-  let s=S.find(x=>x.id===raw)||S.find(x=>x.name.toLowerCase()===q); if(s) return s;
+  /* a bare kind word ("the break", "drop") uses the rule below even when a section is named exactly that: the one playing, else the last touched, else the first (AI-1) */
+  const bare=q===(SONG_KIND_NAME[songKindOf(q)]||'').toLowerCase()&&S.filter(x=>x.kind===songKindOf(q)).length>1;
+  let s=S.find(x=>x.id===raw)||(bare?null:S.find(x=>x.name.toLowerCase()===q)); if(s) return s;
   if(/^\d+$/.test(q)) return S[+q-1]||null;
+  { const m=/^(?:section|part) (\d+)$/.exec(q); if(m) return S[+m[1]-1]||null; }
+  if(/^(this|this one|current|here|now)$/.test(q)){ const now=TR.running&&songOn()&&A.ctx?songAt(songBeatAt(A.ctx.currentTime)):null; return now?now.section:songSel()||S[0]; }
+  if(/^(last|final|end)$/.test(q)) return S[S.length-1]; if(/^(first|start|beginning)$/.test(q)) return S[0];
   let ord=null; const w=q.replace(/\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|last|final)\b/,m=>{ ord=SONG_ORD[m]; return ''; }).trim();
   const num=/(\d+)$/.exec(w); if(num&&ord==null) ord=+num[1];
   const kind=songKindOf(w.replace(/\d+/g,'')); const word=w.replace(/\d+/g,'').trim();
@@ -171,7 +185,7 @@ function songSummary(){ const S=songSections(); if(!songArranged()) return `none
   const line=S.map((s,i)=>{ const on=PROJ.tracks.filter(t=>s.parts[t.id]&&s.parts[t.id].on);
     const plain=t=>{ const p=s.parts[t.id]; return (p.variant||'A')==='A'&&!(p.without&&p.without.length); };
     const list=PROJ.tracks.length&&on.length===PROJ.tracks.length&&on.every(plain)?'all':on.length?on.map(t=>{ const p=s.parts[t.id]; return label(t)+(p.without&&p.without.length?'-'+p.without.join('-'):'')+((p.variant||'A')!=='A'?' ('+p.variant+')':''); }).join(', '):'silent';
-    return `${i+1} ${s.name} ${s.bars} [${list}]`+(s.end&&s.end.to&&s.end.to!=='none'?` >${s.end.to} ${s.end.bars||1}`:''); }).join(' | ');
+    return `${i+1} ${s.name} ${s.bars} [${list}]`+(s.end&&s.end.to&&s.end.to!=='none'?` >${s.end.to} ${s.end.bars||1}${s.end.gap?' +gap':''}`:''); }).join(' | ');
   const now=TR.running&&songOn()&&A.ctx?songAt(songBeatAt(A.ctx.currentTime)):null, lp=SONG.view.loop?songLoopLabel():'';
   return `${line} · ${songLenText()} · ${songOn()?'Song':'Loop'} mode${now?' · playing: '+now.section.name:''}${lp?' · looping: '+lp:''}`; }
 
@@ -248,7 +262,7 @@ function songApplyFlash(){ const F=SONG.flash; if(!F||performance.now()>F.until)
 /* the chip names one change and its Undo undoes exactly that change: it remembers the undo state right after the change,
    and any newer change hides it (songChipNote, called by the undo history). o.undo:false = a note with no Undo (looping is not a change) */
 let songChipT=0, songChipTok=null;
-function songChip(text,o={}){ const c=$('#songChip'); if(!c) return; $('#songChipT').textContent=text; c.title=text;
+function songChip(text,o={}){ if(SONG.batch){ SONG.batchChip=text; return; } const c=$('#songChip'); if(!c) return; $('#songChipT').textContent=text; c.title=text;
   songChipTok=o.undo===false||typeof UNDO==='undefined'?null:UNDO.last; const u=$('#songChipU'); if(u) u.hidden=!songChipTok;
   c.hidden=false; clearTimeout(songChipT); songChipT=setTimeout(songChipHide,7000); }
 function songChipHide(){ const c=$('#songChip'); if(c) c.hidden=true; songChipTok=null; clearTimeout(songChipT); }

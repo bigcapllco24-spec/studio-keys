@@ -34,7 +34,9 @@ try {
   await W(300); const un = await E(() => { undo(); return PROJ.tracks.find(t => t.role === 'chords').events.length; });
   ok('note editor copy/paste and undo', ed.open && ed.n1 === ed.n0 + 3 && un === ed.n0, `${ed.n0}→${ed.n1}→${un}`);
   // 3a. velocity lane fits in the editor box; dragging a selected bar moves all selected notes in one undo step (UX-2)
-  await W(400); const vl = await E(() => { const t = PROJ.tracks.find(t => t.role === 'chords'); openEditor(t.id); $('#editor').scrollIntoView({ block: 'center' }); t.events.forEach((e, i) => e.v = i % 2 ? 0.5 : 0.7); ED.sel = new Set(t.events.slice(0, 6)); drawEditor(); saveProject();
+  await W(400); await E(() => { const t = PROJ.tracks.find(t => t.role === 'chords'); openEditor(t.id); $('#editor').scrollIntoView({ block: 'center' }); t.events.forEach((e, i) => e.v = i % 2 ? 0.5 : 0.7); ED.sel = new Set(t.events.slice(0, 6)); drawEditor(); saveProject(); });
+  await W(400); // QA: measure after the page settles (on a busy machine the drag missed the bar: flaky FAIL 15 Nov)
+  const vl = await E(() => { const t = PROJ.tracks.find(t => t.role === 'chords'); $('#editor').scrollIntoView({ block: 'center' });
     const w = $('#edWrap'), G = edGeom(), cr = $('#edCanvas').getBoundingClientRect(), e = t.events[0], vy = cr.top + G.gh + 8;
     return { fits: w.scrollHeight <= w.clientHeight && cr.top + G.gh + 8 + ED.velH <= innerHeight, x: cr.left + G.K + e.b * G.bw + 1, y0: vy + 3 + 0.3 * (ED.velH - 6), y1: vy + 3 + 0.1 * (ED.velH - 6), u0: UNDO.stack.length }; });
   await W(300); await p.mouse.move(vl.x, vl.y0); await p.mouse.down(); await p.mouse.move(vl.x, vl.y1, { steps: 4 }); await p.mouse.up(); await W(200);
@@ -252,7 +254,9 @@ try {
   const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
   await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(1500);
   await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 15000 }).catch(() => {}); // keepLastSong is async: wait for it on a busy machine
-  const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null; try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r) await loadNamed(id);
+  const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null;
+    for (let i = 0; i < 30; i++) { try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r && r.name === 'Before reload') break; await new Promise(q => setTimeout(q, 500)); } // QA: keepLastSong may still be writing on a busy machine (flaky FAIL 15 Nov)
+    if (r) await loadNamed(id);
     return { n0, name0, listed: !!r, name: PROJ.name, n: PROJ.tracks.length, s: songSections().length, label: $('#saveState').textContent }; }, before.id);
   ok('song: opening the app starts a new empty song; the last one reopens from the list intact', rl.n0 === 0 && rl.listed && rl.name === 'Before reload' && rl.n === before.n && rl.s === before.s, `new song had ${rl.n0} tracks; reopened "${rl.name}" ${rl.n} tracks, ${rl.s} sections`);
   // QA, 13 Nov: after opening a song from the list, Undo must step back inside that song, never to the empty song opened before it
@@ -310,6 +314,54 @@ try {
         const bpm0 = CTRL.bpm; await handleRequest(s); loopStop(); R[s] = { bpm: CTRL.bpm - bpm0, back: drums().recipe.back }; }
       return R; } finally { ASSIST.engine = eng; } });
   ok('"faster" about a part keeps the tempo, "add a snare roll" keeps the clap', n23['make the bass faster'].bpm === 0 && n23['faster chords'].bpm === 0 && n23['make it faster'].bpm === 5 && n23['add a snare roll'].back !== 'snare' && n23['add a snare'].back === 'snare', JSON.stringify(n23));
+  // AI-1: the song by voice (offline parser through handleRequest): sections, lengths, parts, a second drop, a gap, Undo, one undo step per request
+  const ai1 = await E(async () => { const eng = ASSIST.engine, R = {}; ASSIST.engine = null;
+    const say = async t => { const u0 = UNDO.stack.length; await handleRequest(t); loopStop(); return UNDO.stack.length - u0; };
+    try { await newSong('Smoke AI-1'); runActions([{ type: 'vibe', ref: 'Stephan Bodzin' }, { type: 'add_drums', ref: 'Stephan Bodzin' }, { type: 'add_bass' }, { type: 'add_chords' }]); loopStop();
+      R.s1 = await say('make an 8-bar intro, then build up and drop'); R.lay1 = songSections().map(s => s.name + ' ' + s.bars).join(' · '); R.mode = SONG.view.mode;
+      const last = [...document.querySelectorAll('#asChat .bub.as')].pop(); R.map = last && last.querySelectorAll('.as-map i').length; R.chip = !$('#songChip').hidden && !$('#songChipU').hidden;
+      R.s2 = await say('make it a full track'); R.full = songBars();
+      const b0 = songFind('break').bars; R.s3 = await say('make the break longer'); R.brk = songFind('break').bars - b0;
+      await say('drop the drums in the outro'); const dr = PROJ.tracks.find(t => t.role === 'drums'); R.outro = !!songFind('outro').parts[dr.id].on;
+      await say('remove the second drop'); const n0 = songSections().length; R.s4 = await say('add a second drop'); R.tail = songSections().slice(-3).map(s => s.name).join(','); R.added = songSections().length - n0;
+      await say('drop se pehle thoda silence daal do'); const S = songSections(), d2 = songFind('drop 2'), pre = S[S.indexOf(d2) - 1], end = songStartOf(pre) + pre.bars * 4;
+      R.gap = pre.end && pre.end.to; R.inGap = PROJ.tracks.filter(t => t.kind === 'notes' && t.role !== 'drums').reduce((a, t) => a + songFlat(t).filter(e => e.B >= end - 1 && e.B < end).length, 0) + songFlat(dr).filter(e => e.B >= end - 1 && e.B < end).length;
+      undo(); undo(); R.undo = songSections().length === n0 && !songFind('drop 2');
+      R.loop = localBrain('make the loop 8 bars').actions.map(a => a.type + ':' + a.bars).join();
+      /* QA 15 Nov: the gap before a drop must be silent with the drums playing. Count every note that starts in the last beat, including hits the drummer pushes up to 1/16 early */
+      await say('make it a full track'); const SB = songSections(), bu = SB.find(s => s.kind === 'build'), bEnd = songStartOf(bu) + bu.bars * 4;
+      const early = () => PROJ.tracks.filter(t => t.kind === 'notes').reduce((a, t) => a + songFlat(t).filter(e => e.B >= bEnd - 1.0625 && e.B < bEnd).length, 0);
+      R.gapRoll = bu.end && bu.end.gap ? early() : 'no gap'; await say('add some silence before the first drop'); const bu2 = songSections().find(s => s.kind === 'build'); R.gapKick = (bu2.end && bu2.end.to) + ':' + early();
+      await newSong('Smoke AI-1b'); const u0 = UNDO.stack.length; runActions([{ type: 'vibe', ref: 'Ben Böhmer' }, { type: 'add_drums' }, { type: 'add_bass' }, { type: 'add_chords' }, { type: 'add_melody' }, { type: 'arrange', template: 'full' }, { type: 'transport', do: 'play' }]); loopStop(); R.one = UNDO.stack.length - u0; R.oneLen = songBars();
+    } finally { ASSIST.engine = eng; } return R; });
+  ok('AI-1: "8-bar intro, then build up and drop" → Intro 8 · Build 8 · Drop 16 in Song mode, with the song map and one Undo chip', ai1.lay1 === 'Intro 8 · Build 8 · Drop 16' && ai1.mode === 'song' && ai1.map === 3 && ai1.chip && ai1.s1 === 1, JSON.stringify({ lay: ai1.lay1, map: ai1.map, steps: ai1.s1 }));
+  ok('AI-1: "full track" is 96 bars; "make the break longer" adds 8; "drop the drums in the outro" switches them off', ai1.full === 96 && ai1.brk === 8 && ai1.outro === false && ai1.s2 === 1 && ai1.s3 === 1, JSON.stringify({ full: ai1.full, brk: ai1.brk, outro: ai1.outro }));
+  ok('AI-1: "add a second drop" (after the break) adds Drop 2 before the Outro; Hinglish silence = a gap before it; Undo goes back', ai1.tail === 'Break,Drop 2,Outro' && ai1.added === 1 && ai1.s4 === 1 && ai1.gap === 'kickdrop' && ai1.inGap <= 1 && ai1.undo, JSON.stringify({ tail: ai1.tail, gap: ai1.gap, notesInGap: ai1.inGap, undo: ai1.undo }));
+  ok('AI-1: "make the loop 8 bars" still sets the loop; arrange with four new parts is one undo step (Böhmer: long break)', ai1.loop === 'bars:8' && ai1.one === 1 && ai1.oneLen >= 96, JSON.stringify({ loop: ai1.loop, steps: ai1.one, bars: ai1.oneLen }));
+  ok('AI-1: the gap before the drop is empty: no hit starts in the last beat, even one the drummer pushes early (roll + gap, kick drop)', ai1.gapRoll === 0 && ai1.gapKick === 'kickdrop:0', JSON.stringify({ rollGap: ai1.gapRoll, kickdrop: ai1.gapKick }));
+  // AI-1 fix 1 (QA 15 Nov): Hinglish verb last, "make it longer/shorter", the reply guard, a section mute → parts, and the AI's own extra roll keeping the gap
+  const ai1c = await E(async () => { const eng = ASSIST.engine, of = window.fetch, R = {}, dr = () => PROJ.tracks.find(t => t.role === 'drums');
+    const steps = async (t, j) => { const u0 = UNDO.stack.length; if (j) { ASSIST.engine = 'workers-ai'; window.fetch = async () => new Response(JSON.stringify(j), { status: 200 }); } try { await handleRequest(t); } finally { window.fetch = of; ASSIST.engine = null; } loopStop(); return UNDO.stack.length - u0; };
+    const full = async () => { await newSong('Smoke AI-1c'); runActions([{ type: 'vibe', ref: 'Stephan Bodzin' }, { type: 'add_drums', ref: 'Stephan Bodzin' }, { type: 'add_bass' }, { type: 'add_chords' }]); loopStop(); await steps('make it a full track'); };
+    const reply = () => ASSIST.history[ASSIST.history.length - 1].content, names = () => songSections().map(s => s.name).join(',');
+    try { ASSIST.engine = null; await full();
+      R.hs = await steps('drop ke baad break daal do'); const S = songSections(), di = S.findIndex(s => s.kind === 'drop'); R.hAdd = S.length === 7 && S[di + 1].kind === 'break';
+      R.hs += await steps('outro mein drums mat bajao'); R.hOut = !songFind('outro').parts[dr().id].on;
+      await full(); R.ls = await steps('make it longer'); R.longer = songBars(); R.ls += await steps('make it shorter'); R.shorter = songBars(); R.phr = songSections().map(x => x.bars).join(',');
+      await full(); await steps('make the break longer', { reply: 'The break is 8 bars longer now. Want a filter sweep into the second drop?', actions: [{ type: 'section', do: 'length', section: 'break', change: 8 }] }); R.guard = /snare roll/.test(reply()) && !/sweep/i.test(reply());
+      await steps('drop the drums in the outro', { reply: 'Drums are out of the outro.', actions: [{ type: 'mix', track: 'drums', mute: true }] }); R.mute = !dr().mute && !songFind('outro').parts[dr().id].on && !!songFind('drop').parts[dr().id].on;
+      await newSong('Smoke AI-1d'); runActions([{ type: 'vibe', ref: 'Stephan Bodzin' }, { type: 'add_drums', ref: 'Stephan Bodzin' }, { type: 'add_bass' }]); loopStop();
+      await steps('make an 8-bar intro, then build up and drop', { reply: 'Intro, build and drop.', actions: [{ type: 'arrange', template: 'custom', sections: [{ name: 'Intro', bars: 8 }, { name: 'Build' }, { name: 'Drop' }] }, { type: 'transition', section: 'Build', to: 'snareroll' }, { type: 'transport', do: 'play' }] }); /* real Llama 3.3 output, 15 Nov */
+      const bu = songFind('build'); R.llmGap = JSON.stringify(bu.end);
+      /* fix 2: "out of the build" mutes the section only; a drop the AI adds after the Break is numbered in song order */
+      await full(); const bs = () => PROJ.tracks.find(t => t.role === 'bass'); await steps('take the bass out of the build', { reply: 'ok', actions: [{ type: 'mix', track: 'bass', mute: true }] }); R.outOf = !bs().mute && !songFind('build').parts[bs().id].on && !!songFind('drop').parts[bs().id].on;
+      await steps('break ke baad ek aur drop daal do', { reply: 'ok', actions: [{ type: 'section', do: 'add', name: 'Drop 3', after: 'Break' }, { type: 'parts', section: 'Drop 3', in: ['all'] }, { type: 'transition', section: 'Break', to: 'snareroll' }] }); R.order = names(); R.brkEnd = JSON.stringify(songFind('break').end);
+    } finally { ASSIST.engine = eng; window.fetch = of; } return R; });
+  ok('AI-1: offline Hinglish with the verb last ("drop ke baad break daal do", "outro mein drums mat bajao"), one undo step each', ai1c.hAdd && ai1c.hOut && ai1c.hs === 2, JSON.stringify({ add: ai1c.hAdd, outro: ai1c.hOut, steps: ai1c.hs }));
+  ok('AI-1: "make it longer" on a 96-bar song is about 4 minutes, "make it shorter" goes back under 3', ai1c.longer >= 120 && ai1c.longer <= 136 && ai1c.shorter < 96 && ai1c.ls === 2, JSON.stringify({ longer: ai1c.longer, shorter: ai1c.shorter }));
+  ok('AI-1: the AI\'s "filter sweep" offer becomes a snare roll; its "mute the drums" said about the outro only takes them out of the outro', ai1c.guard && ai1c.mute, JSON.stringify({ guard: ai1c.guard, mute: ai1c.mute }));
+  ok('AI-1: when the AI adds its own snare roll to a new layout, the Build still ends in a beat of silence', /"gap":true/.test(ai1c.llmGap) || /kickdrop/.test(ai1c.llmGap), ai1c.llmGap);
+  ok('AI-1: "make it shorter" keeps 8/16/32-bar phrases; "take the bass out of the build" (AI mix mute) takes it out of the Build only; an added drop is numbered in song order and the Break keeps its gap', /^((8|16|32),)*(8|16|32)$/.test(ai1c.phr) && ai1c.outOf && /Break,Drop 2,Drop 3,Outro/.test(ai1c.order) && /"gap":true/.test(ai1c.brkEnd), JSON.stringify({ phrases: ai1c.phr, outOf: ai1c.outOf, order: ai1c.order, brk: ai1c.brkEnd }));
   // AI-8: Basic mode: compound genres, unsolo/unmute, quantize, two requests in one sentence, the artist the user named
   const a8 = await E(async () => { const eng = ASSIST.engine, R = {};
     try { ASSIST.engine = null;

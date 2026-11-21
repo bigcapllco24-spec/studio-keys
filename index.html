@@ -314,6 +314,11 @@ input[type=checkbox]{accent-color:var(--accent)}
 .bub.as{align-self:flex-start;background:var(--t3);border:1px solid var(--line)}
 .bub .done{display:flex;flex-wrap:wrap;gap:4px}
 .bub .done i{font:normal 500 11px var(--mono);color:var(--signal);border:1px solid color-mix(in srgb,var(--signal) 40%,transparent);border-radius:5px;padding:1px 6px}
+/* AI-1: the mini song map under a reply that changed the song (section colours come from .k-* in the Song view) */
+.as-map{display:flex;gap:2px;width:100%;min-width:200px;margin-top:3px}
+.as-map i{flex:1 1 0;min-width:0;overflow:hidden;white-space:nowrap;font:normal 500 10px var(--mono);color:var(--ink);background:var(--sc,var(--t5));border:1px solid transparent;border-radius:5px;padding:2px 5px}
+.as-map i b{display:block;font:600 11px var(--body);overflow:hidden;text-overflow:ellipsis}
+.as-map i.ch{border-color:var(--signal)}
 .as-form{display:flex;gap:8px}
 .as-form .input{font-size:15px;padding:10px 12px}
 .as-opts{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:var(--muted)}
@@ -3191,24 +3196,24 @@ const GROOVES={
 
 /* artist references: genre, tempo, key, groove tweaks and the sounds that suit them */
 const ARTISTS=[
-  ['Ben Böhmer|ben bohmer|bohmer|boehmer','melodichouse',122,'F minor',{perc:2,shaker:true,energy:3,back:'clap'},{kit:'kitMelodic',bass:'subbass',chords:'darkpad',lead:'mhpluck'},'warm, emotional melodic house: soft clap, shuffled hats and shakers, rolling sub bass, lush pads and plucked arps'],
-  ['Stephan Bodzin|bodzin','melodictechno',124,'A minor',{perc:1,ride:true,energy:4,shaker:false},{kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'mhpluck'},'dark, hypnotic melodic techno: driving 16th hats and ride, a rolling analog bass sequence and a big arpeggiated lead'],
-  ['Lane 8','melodichouse',122,'C minor',{perc:1,energy:3},{kit:'kitMelodic',bass:'rollbass',chords:'pad',lead:'mhpluck'},'deep, bittersweet melodic house with soft drums and warm chords'],
-  ['Yotto','melodichouse',122,'G minor',{energy:3,perc:2},{kit:'kitMelodic',bass:'rollbass',chords:'darkpad',lead:'mhpluck'},'airy melodic house with bouncy bass and dreamy arps'],
-  ['Tale Of Us|tale of us','melodictechno',123,'D minor',{energy:3,perc:1},{kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'strings'},'cinematic, slow-burning melodic techno'],
-  ['Anyma','melodictechno',124,'F minor',{energy:4},{kit:'kitDeepTechno',bass:'rollbass',chords:'supersaw',lead:'lead'},'big, futuristic melodic techno with huge synth leads'],
-  ['Afterlife|Massano|Argy|Innellea|Kevin de Vries|kevin de vries|Adriatique|Mathame|Colyn','melodictechno',124,'A minor',{energy:4},{kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'mhpluck'},'Afterlife-style melodic techno: dark, driving and euphoric'],
-  ['Rüfüs Du Sol|rufus du sol|rufus','melodichouse',120,'A minor',{energy:3,perc:1},{kit:'kitMelodic',bass:'moog',chords:'darkpad',lead:'mhpluck'},'moody, live-feel melodic house'],
-  ['Monolink|Nora En Pure|nora en pure','melodichouse',120,'D minor',{energy:2,perc:2},{kit:'kitMelodic',bass:'subbass',chords:'pad',lead:'mhpluck'},'deep, organic melodic house'],
+  ['Ben Böhmer|ben bohmer|bohmer|boehmer','melodichouse',122,'F minor',{perc:2,shaker:true,energy:3,back:'clap'},{kit:'kitMelodic',bass:'subbass',chords:'darkpad',lead:'mhpluck'},'warm, emotional melodic house: soft clap, shuffled hats and shakers, rolling sub bass, lush pads and plucked arps',{brk:['chords','melody','voice'],breakX:2,into:'fill',gap:true,note:'slow layering, a long break, a fill and a gap instead of snare rolls'}],
+  ['Stephan Bodzin|bodzin','melodictechno',124,'A minor',{perc:1,ride:true,energy:4,shaker:false},{kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'mhpluck'},'dark, hypnotic melodic techno: driving 16th hats and ride, a rolling analog bass sequence and a big arpeggiated lead',{intro:['drums'],build:['drums','bass'],leadDrops:true,into:'snareroll',roll:2,gap:true,note:'drums-only intro, bass in the build, the big arp lead only in the drops, a short roll and a gap before each drop'}],
+  ['Lane 8','melodichouse',122,'C minor',{perc:1,energy:3},{kit:'kitMelodic',bass:'rollbass',chords:'pad',lead:'mhpluck'},'deep, bittersweet melodic house with soft drums and warm chords',{intro:['drums','chords'],introX:1.5,brk:['chords','voice'],into:'fill',note:'a long soft intro, a break on the chords, fills instead of rolls'}],
+  ['Yotto','melodichouse',122,'G minor',{energy:3,perc:2},{kit:'kitMelodic',bass:'rollbass',chords:'darkpad',lead:'mhpluck'},'airy melodic house with bouncy bass and dreamy arps',{intro:['drums','chords'],introX:1.5,brk:['chords','voice'],into:'fill',note:'a long soft intro, a break on the chords, fills instead of rolls'}],
+  ['Tale Of Us|tale of us','melodictechno',123,'D minor',{energy:3,perc:1},{kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'strings'},'cinematic, slow-burning melodic techno',{intro:['drums'],brk:['chords','melody','voice'],breakX:1.5,into:'riser',roll:4,gap:true,note:'a lean intro, the lead teased in a long break, a riser and a short silence before the drop'}],
+  ['Anyma','melodictechno',124,'F minor',{energy:4},{kit:'kitDeepTechno',bass:'rollbass',chords:'supersaw',lead:'lead'},'big, futuristic melodic techno with huge synth leads',{intro:['drums'],brk:['chords','melody','voice'],breakX:1.5,into:'riser',roll:4,gap:true,note:'a lean intro, the lead teased in a long break, a riser and a short silence before the drop'}],
+  ['Afterlife|Massano|Argy|Innellea|Kevin de Vries|kevin de vries|Adriatique|Mathame|Colyn','melodictechno',124,'A minor',{energy:4},{kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'mhpluck'},'Afterlife-style melodic techno: dark, driving and euphoric',{intro:['drums'],brk:['chords','melody','voice'],breakX:1.5,into:'riser',roll:4,gap:true,note:'a lean intro, the lead teased in a long break, a riser and a short silence before the drop'}],
+  ['Rüfüs Du Sol|rufus du sol|rufus','melodichouse',120,'A minor',{energy:3,perc:1},{kit:'kitMelodic',bass:'moog',chords:'darkpad',lead:'mhpluck'},'moody, live-feel melodic house',{intro:['drums','chords'],introX:1.5,brk:['chords','voice'],into:'fill',note:'a long soft intro, a break on the chords, fills instead of rolls'}],
+  ['Monolink|Nora En Pure|nora en pure','melodichouse',120,'D minor',{energy:2,perc:2},{kit:'kitMelodic',bass:'subbass',chords:'pad',lead:'mhpluck'},'deep, organic melodic house',{intro:['drums','chords'],introX:1.5,brk:['chords','voice'],into:'fill',note:'a long soft intro, a break on the chords, fills instead of rolls'}],
   ['Keinemusik|&ME|andme|Adam Port|adam port|Rampa|Black Coffee|black coffee','afro',120,'A minor',{energy:3,perc:3},{kit:'kitBongos',bass:'subbass',chords:'kalimba',lead:'flute'},'afro house: rolling percussion, shakers and a hypnotic bass'],
   ['Solomun|Kölsch|kolsch|Maceo Plex|maceo plex','melodichouse',123,'A minor',{energy:4},{kit:'kitMelodic',bass:'rollbass',chords:'darkpad',lead:'mhpluck'},'driving, melodic club house'],
   ['Bicep','progressive',125,'E minor',{energy:4,perc:2},{kit:'kitMelodic',bass:'rollbass',chords:'supersaw',lead:'mhpluck'},'breakbeat-tinged euphoric electronica with rave chords'],
   ['Fred again|fred again..|fred again','ukg',134,'F minor',{energy:3,ghost:0.4},{kit:'kitKit3',bass:'subbass',chords:'piano',lead:'mhpluck'},'emotional garage-house with chopped vocals and piano'],
   ['Four Tet|four tet|Jamie xx|jamie xx|Floating Points|floating points','organichouse',124,'D minor',{energy:3,perc:3},{kit:'kitMelodic',bass:'subbass',chords:'kalimba',lead:'mhpluck'},'organic, percussive electronica'],
   ['Burial|Disclosure|Sammy Virji|sammy virji|Interplanetary Criminal|interplanetary criminal','ukg',132,'G minor',{energy:3},{kit:'kitKit3',bass:'reese',chords:'organ',lead:'lead'},'shuffling UK garage with swung hats and ghost snares'],
-  ['Fisher|Chris Lake|chris lake|John Summit|john summit|Dom Dolla|dom dolla|Mau P|mau p','techhouse',127,'A minor',{energy:4,perc:2},{kit:'kit909',bass:'moog',chords:'organ',lead:'lead'},'punchy tech house: rolling bass, busy percussion and a big groove'],
-  ['Charlotte de Witte|charlotte de witte|Amelie Lens|amelie lens|Adam Beyer|adam beyer|I Hate Models|i hate models','techno',134,'A minor',{energy:5,ride:true},{kit:'kitDeepTechno',bass:'acid',chords:'supersaw',lead:'acid'},'hard, driving warehouse techno'],
-  ['Boris Brejcha|boris brejcha','melodictechno',126,'C minor',{energy:4,perc:2},{kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'lead'},'high-tech minimal: bouncy bass and playful synth leads'],
+  ['Fisher|Chris Lake|chris lake|John Summit|john summit|Dom Dolla|dom dolla|Mau P|mau p','techhouse',127,'A minor',{energy:4,perc:2},{kit:'kit909',bass:'moog',chords:'organ',lead:'lead'},'punchy tech house: rolling bass, busy percussion and a big groove',{brk:['drums-kick','chords','melody','voice'],breakBars:8,into:'snareroll',roll:4,note:'a short break that keeps the hats and percussion, a 4-bar roll and a bass-heavy drop'}],
+  ['Charlotte de Witte|charlotte de witte|Amelie Lens|amelie lens|Adam Beyer|adam beyer|I Hate Models|i hate models','techno',134,'A minor',{energy:5,ride:true},{kit:'kitDeepTechno',bass:'acid',chords:'supersaw',lead:'acid'},'hard, driving warehouse techno',{brk:['drums-kick','chords','melody'],into:'riser',roll:4,note:'long phrases, a break that keeps the hats, and a riser into the drop'}],
+  ['Boris Brejcha|boris brejcha','melodictechno',126,'C minor',{energy:4,perc:2},{kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'lead'},'high-tech minimal: bouncy bass and playful synth leads',{brk:['drums-kick','chords','melody'],into:'snareroll',roll:2,note:'a break that keeps the hats and a short roll into the drop'}],
   ['Peggy Gou|peggy gou|Purple Disco Machine|purple disco machine|Daft Punk|daft punk|Dua Lipa|dua lipa','nudisco',120,'A minor',{energy:3,perc:2},{kit:'kitKit3',bass:'slapbass',chords:'eguitar',lead:'strings'},'nu-disco: four-to-the-floor, octave bass and funky guitar'],
   ['Kaytranada','deephouse',112,'D minor',{energy:3,ghost:0.4,swing:0.15},{kit:'kitKit8',bass:'moog',chords:'epiano',lead:'epiano'},'swung, funky house-hop with bouncy bass'],
   ['Avicii|Calvin Harris|calvin harris|Swedish House Mafia|swedish house mafia|Martin Garrix|martin garrix|Alesso','progressive',126,'A minor',{energy:4},{kit:'kit909',bass:'pluckbass',chords:'supersaw',lead:'lead'},'big-room progressive house with supersaw chords'],
@@ -3228,7 +3233,10 @@ const ARTISTS=[
   ['Arijit Singh|arijit|Pritam|A R Rahman|a.r. rahman|ar rahman|Vishal Shekhar|vishal-shekhar','bollywood',96,'A minor',{energy:3},{kit:'kitKit3',bass:'bass',chords:'strings',lead:'flute'},'Bollywood pop with strings and tabla-style percussion'],
   ['Taylor Swift|taylor swift|Ed Sheeran|ed sheeran|Harry Styles|harry styles|Olivia Rodrigo|olivia rodrigo','pop',110,'C major',{energy:3},{kit:'kitKit3',bass:'bass',chords:'piano',lead:'guitar'},'modern pop'],
   ['Coldplay|Imagine Dragons|imagine dragons|Arctic Monkeys|arctic monkeys','rock',116,'E minor',{energy:4},{kit:'kitAcoustic',bass:'bass',chords:'eguitar',lead:'piano'},'anthemic band sound']
-].map(([names,style,bpm,key,mods,sounds,desc])=>({names:names.split('|'),name:names.split('|')[0],style,bpm,key,mods,sounds,desc}));
+].map(([names,style,bpm,key,mods,sounds,desc,arr])=>({names:names.split('|'),name:names.split('|')[0],style,bpm,key,mods,sounds,desc,arr:arr||null}));
+/* arr (AI-1): how the artist arranges a track, used by the assistant's "make it a full track" (actions.js songShape).
+   intro/build/brk: the parts in those sections (drums-kick = drums without the kick); introX/breakX: longer intro/break; breakBars: a fixed break length;
+   leadDrops: the melody only plays in the drops; into: the transition into each drop (snareroll, riser, fill, kickdrop); roll: its bars; gap: a beat of silence before the drop */
 const normName=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9& ]+/g,' ').replace(/\s+/g,' ').trim();
 /* the name a person used for a table row: "Black Coffee" (not the row's first name, Keinemusik), "Massano". A lower-case alias is a
    spelling of the capitalised name before it ("bohmer" → Ben Böhmer). Null if the text names none of the row's artists. */
@@ -3963,18 +3971,25 @@ function songPlaysIn(t,v){ v=v||'A'; return songSections().filter(s=>{ const p=s
 const songCopyEvents=ev=>ev.map(e=>{ const c=Object.assign({},e); delete c.cyc; delete c.raw; return c; });
 
 /* ----- the song timeline: every note of a track in song beats (cached until the next saveProject) ----- */
+/* a hit the drummer feel pushes early (SE-3: 10-25 ms) still belongs to the beat it's pushed from, so a cut (a gap, a kick drop) starts 1/16 beat early */
+const SONG_EARLY=1/16;
 function songFlatReset(){ if(SONG.flatFor!==PROJ||SONG.flatVer!==SONG.ver){ SONG.flat.clear(); SONG.flatFor=PROJ; SONG.flatVer=SONG.ver; } }
 function songFlat(t){ songFlatReset(); let f=SONG.flat.get(t.id); if(f) return f; f=[];
   const S=songSections(), L=PROJ.bars*4, drum=t.kind==='notes'&&(t.role==='drums'||!!(INST.get(t.inst)||{}).drums); let b0=0;
   for(const s of S){ const len=s.bars*4, p=s.parts[t.id], off=s.off||0;
+    /* the transition at the end of a section (AI-1, actions.js): transitionCut says which notes stop (a gap, a kick drop), transitionEvents adds the drum roll, fill and the crash on the next downbeat */
+    const tr=t.kind==='notes'&&s.end&&s.end.to&&s.end.to!=='none', cut=tr&&typeof transitionCut==='function'?songTry(()=>transitionCut(s,t)):null;
     if(p&&p.on&&t.kind==='notes'){ const ev=songPatEvents(t,p.variant), wo=drum&&p.without&&p.without.length?new Set(p.without.flatMap(g=>DRUM_GROUPS[g]||[g])):null;
       for(let k=Math.floor(off/L);k*L-off<len;k++) for(const e of ev){ if(e.b>=L) continue; const rb=k*L+e.b-off; if(rb<0||rb>=len) continue; if(wo&&wo.has(drumPiece(e.n))) continue;
-        f.push({B:b0+rb,d:Math.min(e.d,len-rb),n:e.n,v:e.v}); }
-      if(drum&&s.end&&s.end.to&&s.end.to!=='none'&&typeof transitionEvents==='function'){ try{ (transitionEvents(s,t)||[]).forEach(e=>{ if(e.b>=0&&e.b<len) f.push({B:b0+e.b,d:Math.min(e.d||0.25,len-e.b),n:e.n,v:e.v==null?0.8:e.v}); }); }catch(err){ console.warn('transition',err); } }
+        let d=Math.min(e.d,len-rb); if(cut&&cut.length){ let skip=false; for(const c of cut){ if(c.only&&!(drum&&c.only.includes(drumPiece(e.n)))) continue; if(rb>=c.from-SONG_EARLY){ skip=true; break; } if(!c.only) d=Math.min(d,c.from-rb); } if(skip) continue; }
+        f.push({B:b0+rb,d,n:e.n,v:e.v}); }
     }
+    if(drum&&tr&&typeof transitionEvents==='function'){ const more=S[S.length-1]!==s?4:0, gap=(cut||[]).filter(c=>!c.only).reduce((a,c)=>Math.min(a,c.from),len);
+      (songTry(()=>transitionEvents(s,t))||[]).forEach(e=>{ if(e.b>=0&&e.b<len+more&&!(e.b>=gap-SONG_EARLY&&e.b<len)) f.push({B:b0+e.b,d:Math.max(0.05,Math.min(e.d||0.25,len+more-e.b)),n:e.n,v:e.v==null?0.8:e.v}); }); }
     b0+=len; }
   f.sort((a,b)=>a.B-b.B); SONG.flat.set(t.id,f); return f; }
 /* audio tracks: where the clip starts in each section it plays in, and how many beats it may run */
+function songTry(fn){ try{ return fn(); }catch(err){ console.warn('transition',err); return null; } }
 function songAudioSegs(t){ songFlatReset(); const key='a:'+t.id; let f=SONG.flat.get(key); if(f) return f; f=[];
   const S=songSections(), L=PROJ.bars*4, st=t.start||0; let b0=0;
   for(const s of S){ const len=s.bars*4, p=s.parts[t.id], off=s.off||0;
@@ -3989,7 +4004,9 @@ function songAt(beat){ const S=songSections(); let b=0; beat=Math.max(0,beat||0)
   return null; }
 
 /* ----- edits: each one is a single undo step through saveProject ----- */
-function songEdit(fn,o={}){ if(typeof undoBoundary==='function') undoBoundary(); const S=songSections(); const r=fn(S); if(o.structure) S.forEach(s=>delete s.auto); saveProject(); renderTracks(); uiLoop(); return r; }
+/* SONG.batch (set by runActions for one assistant request): edits land in memory and runActions saves once, so the whole request is one undo step */
+function songEdit(fn,o={}){ if(SONG.batch){ const S=songSections(), r=fn(S); if(o.structure) S.forEach(s=>delete s.auto); SONG.ver++; return r; }
+  if(typeof undoBoundary==='function') undoBoundary(); const S=songSections(); const r=fn(S); if(o.structure) S.forEach(s=>delete s.auto); saveProject(); renderTracks(); uiLoop(); return r; }
 function songAdd(o={}){ const src=o.copyOf?songFind(o.copyOf):null; let made=null;
   songEdit(S=>{ const kind=SONG_KINDS.includes(o.kind)?o.kind:src?src.kind:songKindOf(o.name||'');
     const s={id:songNewId(S),name:songUniqueName(o.name||(src?src.name:SONG_KIND_NAME[kind]||'Section'),S),kind,bars:clamp(Math.round(+o.bars||(src?src.bars:8)),1,64),end:src&&src.end?Object.assign({},src.end):null,parts:{}};
@@ -4040,8 +4057,13 @@ function songFind(ref){ const S=songSections(); if(ref==null||ref==='') return n
   if(typeof ref==='object') return S.find(s=>s===ref||s.id===ref.id)||null;
   if(typeof ref==='number') return S[ref-1]||null;
   const raw=String(ref).trim(), q=raw.toLowerCase().replace(/^(the|my|our)\s+/,'').replace(/\s+(section|part)$/,'').trim();
-  let s=S.find(x=>x.id===raw)||S.find(x=>x.name.toLowerCase()===q); if(s) return s;
+  /* a bare kind word ("the break", "drop") uses the rule below even when a section is named exactly that: the one playing, else the last touched, else the first (AI-1) */
+  const bare=q===(SONG_KIND_NAME[songKindOf(q)]||'').toLowerCase()&&S.filter(x=>x.kind===songKindOf(q)).length>1;
+  let s=S.find(x=>x.id===raw)||(bare?null:S.find(x=>x.name.toLowerCase()===q)); if(s) return s;
   if(/^\d+$/.test(q)) return S[+q-1]||null;
+  { const m=/^(?:section|part) (\d+)$/.exec(q); if(m) return S[+m[1]-1]||null; }
+  if(/^(this|this one|current|here|now)$/.test(q)){ const now=TR.running&&songOn()&&A.ctx?songAt(songBeatAt(A.ctx.currentTime)):null; return now?now.section:songSel()||S[0]; }
+  if(/^(last|final|end)$/.test(q)) return S[S.length-1]; if(/^(first|start|beginning)$/.test(q)) return S[0];
   let ord=null; const w=q.replace(/\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|last|final)\b/,m=>{ ord=SONG_ORD[m]; return ''; }).trim();
   const num=/(\d+)$/.exec(w); if(num&&ord==null) ord=+num[1];
   const kind=songKindOf(w.replace(/\d+/g,'')); const word=w.replace(/\d+/g,'').trim();
@@ -4057,7 +4079,7 @@ function songSummary(){ const S=songSections(); if(!songArranged()) return `none
   const line=S.map((s,i)=>{ const on=PROJ.tracks.filter(t=>s.parts[t.id]&&s.parts[t.id].on);
     const plain=t=>{ const p=s.parts[t.id]; return (p.variant||'A')==='A'&&!(p.without&&p.without.length); };
     const list=PROJ.tracks.length&&on.length===PROJ.tracks.length&&on.every(plain)?'all':on.length?on.map(t=>{ const p=s.parts[t.id]; return label(t)+(p.without&&p.without.length?'-'+p.without.join('-'):'')+((p.variant||'A')!=='A'?' ('+p.variant+')':''); }).join(', '):'silent';
-    return `${i+1} ${s.name} ${s.bars} [${list}]`+(s.end&&s.end.to&&s.end.to!=='none'?` >${s.end.to} ${s.end.bars||1}`:''); }).join(' | ');
+    return `${i+1} ${s.name} ${s.bars} [${list}]`+(s.end&&s.end.to&&s.end.to!=='none'?` >${s.end.to} ${s.end.bars||1}${s.end.gap?' +gap':''}`:''); }).join(' | ');
   const now=TR.running&&songOn()&&A.ctx?songAt(songBeatAt(A.ctx.currentTime)):null, lp=SONG.view.loop?songLoopLabel():'';
   return `${line} · ${songLenText()} · ${songOn()?'Song':'Loop'} mode${now?' · playing: '+now.section.name:''}${lp?' · looping: '+lp:''}`; }
 
@@ -4134,7 +4156,7 @@ function songApplyFlash(){ const F=SONG.flash; if(!F||performance.now()>F.until)
 /* the chip names one change and its Undo undoes exactly that change: it remembers the undo state right after the change,
    and any newer change hides it (songChipNote, called by the undo history). o.undo:false = a note with no Undo (looping is not a change) */
 let songChipT=0, songChipTok=null;
-function songChip(text,o={}){ const c=$('#songChip'); if(!c) return; $('#songChipT').textContent=text; c.title=text;
+function songChip(text,o={}){ if(SONG.batch){ SONG.batchChip=text; return; } const c=$('#songChip'); if(!c) return; $('#songChipT').textContent=text; c.title=text;
   songChipTok=o.undo===false||typeof UNDO==='undefined'?null:UNDO.last; const u=$('#songChipU'); if(u) u.hidden=!songChipTok;
   c.hidden=false; clearTimeout(songChipT); songChipT=setTimeout(songChipHide,7000); }
 function songChipHide(){ const c=$('#songChip'); if(c) c.hidden=true; songChipTok=null; clearTimeout(songChipT); }
@@ -4811,6 +4833,7 @@ function brainCore(raw,sws){
   { const lv=levelFix(t); if(lv) return lv; }
   if(/^\s*(undo|undo that|go back|revert( that)?|take that back)\b/.test(t)) return {actions:[{type:'undo'}]};
   if(/^\s*(redo|redo that)\b/.test(t)) return {actions:[{type:'redo'}]};
+  { const sb=songBrain(raw,t); if(sb) return sb; }
   if(/\b(voice note|record (my )?voice|just record( me)?|record (some )?audio)\b/.test(t)) return {actions:[{type:'sing',part:'voice'}]};
   if(singRole) return {actions:[{type:'sing',part:singRole}]};
   if(/^\s*(again|redo|one more time|try that again|retake)\b/.test(t) && LAST_TAKE.part) return {actions:[{type:'again'}]};
@@ -4861,6 +4884,93 @@ function brainCore(raw,sws){
   else if(/\b(play|start|listen|let'?s hear|hear it)\b/.test(t)) A.push({type:'transport',do:'play'});
   return {actions:A};
 }
+/* ---------- the song by voice, offline (AI-1): "8-bar intro, then build up and drop", "make the break longer", "drop the drums in the outro",
+   "add a second drop", "silence before the drop", "loop the break", "play from the second drop", Hinglish "lamba / chhota / hata do / daal do / se pehle".
+   Runs before the loop-length rule, so "8-bar intro" is a section and "make the loop 8 bars" still sets the loop. Returns null when it isn't about the song layout. */
+const SB_PART='drums?|beat|kicks?|hats|claps?|snares?|perc|percussion|shakers?|bass ?line|bass|sub|chords?|pads?|keys|strings|choir|melody|lead|arp|pluck|vocals?|voice|everything|all';
+const SB_NOSONG='There’s no song layout yet. Say “make it a full track” or “8-bar intro, then build up and drop” first.';
+function songBrain(raw,t0){
+  let t=' '+t0.replace(/[.,!?;]+/g,' , ').replace(/\bbuild[\s-]?ups?\b/g,'build').replace(/\bbreak[\s-]?downs?\b/g,'break').replace(/\b(doosr[aie]|dusr[aie])\b/g,'second').replace(/\b(pehl[ai]|pahl[ai])\b/g,'first').replace(/\b(teesr[aie]|tisr[aie])\b/g,'third')
+    .replace(/\b(\d{1,2})[\s-]?bars?\b/g,'$1 bar').replace(/\b(drop|break|verse|chorus|build|hook|intro|outro) (one|two|three|four)\b/g,(m,a,b)=>a+' '+{one:1,two:2,three:3,four:4}[b]).replace(/\s+/g,' ')+' ';
+  const S=songSections(), arr=songArranged(), has=k=>S.some(s=>s.kind===k);
+  const SEC='intro|build|drop|break|outro|verse|chorus|bridge'+(has('hook')?'|hook':''), ORD='(?:(first|second|third|fourth|1st|2nd|3rd|4th|last|final) )?';
+  const secRe=new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))?\\b`,'g'), ref=m=>m&&m[1]?(m[0]?m[0]+' '+m[1]:m[1]+(m[2]?' '+m[2]:'')):null; /* [ordinal, section, number] → "second drop", "drop 2", "break" */
+  const secAt=re=>{ const m=t.match(re); return m?ref(m.slice(1)):null; };
+  const anySec=[...t.matchAll(secRe)];
+  const artist=artistIn(raw), needArr=r=>arr?r:{actions:[],reply:SB_NOSONG};
+  const PREP=`(?:in|of|from|into|to|during|for|on|inside) (?:the |my |this )?${ORD}(${SEC})s?(?: (\\d))?\\b`, HIN=`\\b${ORD}(${SEC})s?(?: (\\d))? (?:se|mein|me|main|ke|ka|ki|ko)\\b`;
+  const inSec=secAt(new RegExp('\\b'+PREP))||secAt(new RegExp(HIN));
+  let m;
+  /* whole song: play, loop */
+  if(/\b(play|hear|listen to|start) (the |my )?(whole|full|entire|complete) (song|track|thing)\b|\bstop looping\b|\bloop (the )?(whole|full|entire) (song|track)\b|\bplay (it |the song )?from the (start|top|beginning)\b/.test(t)) return needArr({actions:[{type:'loop_section',section:'song'}]});
+  if((m=t.match(new RegExp(`\\bloop (?:the |this |that )?${ORD}(${SEC})s?(?: (\\d))?\\b`)))) return needArr({actions:[{type:'loop_section',section:ref(m.slice(1))}]});
+  /* Hinglish puts the verb last: "break ko loop karo", "drop 2 se play karo" */
+  if((m=t.match(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:ko |pe |par )?(?:loop|repeat) (?:karo|kar do|kardo|kar|chalao|pe rakho)\\b`)))) return needArr({actions:[{type:'loop_section',section:ref(m.slice(1))}]});
+  if((m=t.match(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? se (?:play|start|chalao|bajao|shuru|suno)\\b`)))) return needArr({actions:[{type:'transport',do:'play',from:ref(m.slice(1))}]});
+  if((m=t.match(new RegExp(`\\b(?:play|start|go|jump|skip)(?: it)? (?:from|at|to) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`)))) return needArr({actions:[{type:'transport',do:'play',from:ref(m.slice(1))}]});
+  /* the whole layout */
+  const mins=t.match(/\b(?:make|turn|stretch|cut) (?:the (?:whole )?(?:song|track)|it|this) (?:to |into )?(?:about |around |roughly )?(\d+(?:\.\d+)?) ?(?:min|mins|minutes?)\b|\b(\d+(?:\.\d+)?) ?minutes? (?:long|song|track|version)\b/);
+  const fullW=/\b(full|whole|complete|proper|club|extended|dj|entire) (track|song|version|mix|edit|arrangement)\b|\barrange (it|this|the song|my song|the track|everything)\b|\b(make|turn) (it|this|the loop) (into )?(a |the )?(song|track|full song)\b|\b(club|extended|dj|short) (version|mix|edit)\b|\bsong (bana|banao|bana do)\b|\bpoora gaana\b/.test(t);
+  if(mins&&!/\b(mp3|download|export|bounce)\b/.test(t)) return PROJ.tracks.length?{actions:[{type:'arrange',minutes:+(mins[1]||mins[2]),template:'full'},{type:'transport',do:'play'}]}:null;
+  if(fullW){ const tpl=CLUB_WORDS.test(t)?'club':SHORT_WORDS.test(t)&&!/\b(full|whole|complete)\b/.test(t)?'short':'full', ar={type:'arrange',template:tpl,ref:artist?artist.name:undefined};
+    if(!PROJ.tracks.length) return artist?{actions:[{type:'vibe',ref:artist.name},{type:'add_drums',ref:artist.name},ar,{type:'transport',do:'play'}]}:{actions:[],reply:'There’s nothing to arrange yet. Start with a beat: say “make a house beat” or name an artist.'};
+    return {actions:(artist&&artist.name!==PROJ.ref?[{type:'vibe',ref:artist.name}]:[]).concat([ar,{type:'transport',do:'play'}])}; }
+  /* a list of sections: "make an 8-bar intro, then build up and drop" (a new layout) */
+  const seq=[...t.matchAll(new RegExp(`(?:(\\d{1,2}) bar )?(?:an? |the )?(${SEC}|silence|gap)\\b`,'g'))].map(x=>({bars:x[1]?+x[1]:undefined,name:x[2]}));
+  const isSeq=seq.filter(x=>!/silence|gap/.test(x.name)).length>=2&&/\b(then|followed by|and|into|,)\b|,/.test(t)&&!/\b(after|before|move|longer|shorter|remove|delete|loop|play|rename|copy|duplicate|pehle|baad)\b/.test(t)&&!new RegExp(`\\b(${SB_PART})\\b`).test(t.replace(/\bbuild\b/g,''))&&!/\b(first|second|third|another|last)\b/.test(t);
+  if(isSeq&&PROJ.tracks.length) return {actions:[{type:'arrange',template:'custom',sections:seq.map(x=>({name:x.name,bars:x.bars}))},{type:'transport',do:'play'}]};
+  /* the whole song longer or shorter: about a minute either way, like the AI does (arrange minutes) */
+  if(arr&&!anySec.length&&(m=t.match(/\b(?:make|let|get) (?:it|this|the (?:whole |full )?(?:song|track|arrangement)|everything) (?:a (?:bit|little) |a lot |much |way )?(longer|shorter)\b|\b(?:song|gaana|gana|track) (?:ko )?(?:thoda )?(lamba|chhota|chota) (?:karo|kar do|kardo|banao|bana do)\b/))){
+    const cur=songSecs(songBars())/60, down=/short|chhota|chota/.test(m[1]||m[2]), mins=down?(cur>1.5?Math.max(1,Math.round(cur)-1):cur/2):Math.round(cur)+1;
+    return {actions:[{type:'arrange',minutes:+mins.toFixed(2)},{type:'transport',do:'play'}]}; }
+  if(!anySec.length&&!/\b(silence|gap|riser|roll|fill)\b/.test(t)) return null;
+  /* transitions: "a riser before the drop", "drop se pehle thoda silence daal do", "a fill at the end of the intro", "no roll before the drop" */
+  const TR=/\b(snare roll|drum roll|roll|riser|uplifter|fill|drum fill|crash|cymbal|silence|gap|pause|kick drop|filter sweep|filter|sweep|transition)\b/;
+  if((m=t.match(TR))&&(anySec.length||/\b(before|pehle)\b/.test(t))){ const w=m[1]; const before=secAt(new RegExp(`\\b(?:before|into|leading into|in front of|up to) (?:the |my )?${ORD}(${SEC})s?(?: (\\d))?\\b`))||secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:se|ke|ki|ka) pehle\\b`))||(/\b(before|pehle)\b/.test(t)&&!anySec.length?'drop':null);
+    const at=before?null:secAt(new RegExp(`\\b(?:at the end of|end of|after|in|on|to) (?:the |my )?${ORD}(${SEC})s?(?: (\\d))?\\b`))||secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:ke (?:baad|end)|mein|me)\\b`));
+    if(before||at){ const none=/\b(no|remove|without|take out|lose|kill|delete|hata)\b/.test(t)&&w!=='silence'&&w!=='gap'; const to=none||w==='transition'?(none?'none':'snareroll'):w==='silence'||w==='gap'||w==='pause'?'kickdrop':w;
+      const bars=(t.match(new RegExp(`\\b(\\d{1,2}) bar (?:snare |drum )?(?:${w})\\b`))||[])[1];
+      return needArr({actions:[{type:'transition',section:at||undefined,before:before||undefined,to,bars:bars?+bars:undefined}]}); } }
+  /* parts in a section: "take the kick out of the intro and bring the bass in", "drop the drums in the outro", "only pads in the break", "intro se kick hata do" */
+  const partRe=new RegExp(`\\b(${SB_PART})\\b`,'g');
+  const vary=/\b(different|its own|own|new|fresh|variation|change it up|switch it up|alag)\b/.test(t);
+  if(vary&&anySec.length&&!/\b(add|insert|another)\b/.test(t)){ const sec=inSec||ref(anySec[anySec.length-1].slice(1)), ps=[...t.replace(new RegExp(`\\b(${SEC})\\b`,'g'),' ').matchAll(partRe)].map(x=>x[1]);
+    const pick=ps.length?ps:[PROJ.tracks.some(x=>x.role==='melody')?'melody':PROJ.tracks.some(x=>x.role==='chords')?'chords':PROJ.tracks.some(x=>x.role==='bass')?'bass':'drums'];
+    return needArr({actions:[{type:'parts',section:sec,vary:pick}]}); }
+  if(inSec){ const body=t.replace(new RegExp('\\b'+PREP,'g'),' ').replace(new RegExp(HIN,'g'),' ');
+    const clauses=body.split(/,|\band (?=(?:bring|take|drop|remove|add|put|mute|kill|cut|keep|lose|pull|no|without|only|just|let)\b)|\bthen\b|\bbut\b|\bplus\b/);
+    const act={in:[],out:[],only:[]};
+    clauses.forEach(c=>{ const ps=[...c.matchAll(partRe)].map(x=>x[1].replace(/ /g,'')); if(!ps.length) return;
+      const k=/\b(only|just|sirf)\b/.test(c)?'only':/\b(take|drop|remove|mute|kill|cut|pull|lose|without|no|hata|hatao|nikal|nikalo|out|off|stop|mat|band|bandh|nahi|nahin|bina)\b/.test(c)?'out':/\b(bring|add|put|keep|with|daal|dalo|daalo|want|back|in|on|start|enter|play|bajao|chalao|bajne)\b/.test(c)?'in':null; if(k) act[k].push(...ps); });
+    if(act.in.length||act.out.length||act.only.length){ const a={type:'parts',section:inSec}; ['in','out','only'].forEach(k=>{ if(act[k].length) a[k]=[...new Set(act[k])]; }); return needArr({actions:[a]}); } }
+  const one=anySec.length?ref(anySec[0].slice(1)):null;
+  /* longer / shorter: "make the break longer", "intro 8 bars shorter", "break ko lamba karo" */
+  if((m=t.match(/\b(longer|shorter|extend|lengthen|shorten|stretch|trim|double|halve|lamba|lambi|lambaa|chhota|chhoti|chota|choti)\b/))&&one){ const n=(t.match(/\b(?:by )?(\d{1,2}) (?:more )?bar\b/)||[])[1], down=/short|trim|halve|chhot|chot/.test(m[1]), s=findSec(one);
+    if(/double|halve/.test(m[1])&&s) return needArr({actions:[{type:'section',do:'length',section:one,bars:m[1]==='double'?s.bars*2:s.bars/2}]});
+    return needArr({actions:[{type:'section',do:'length',section:one,change:(down?-1:1)*(n?+n:8)}]}); }
+  /* add a section, Hinglish with the verb last: "drop ke baad break daal do", "dusra drop add karo", "ek aur drop daal do" */
+  if((m=t.match(new RegExp(`\\b(?:(?:a|an|ek|ek aur|aur ek|another|one more|new|naya|nayi) )?(?:(?:second|third|fourth|2nd|3rd|4th) )?(?:(\\d{1,2}) bar )?(${SEC}) (?:bhi |aur )?(?:daal do|daalo|dalo|daal|add karo|add kar do|add kardo|add karna|laga do|lagao|bana do|banao|chahiye|jodo|jod do)\\b`)))){
+    const after=secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? ke baad\\b`))||secAt(new RegExp(`\\b(?:after) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`)), before=secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:se|ke) pehle\\b`));
+    if(!arr&&PROJ.tracks.length) return {actions:[{type:'arrange',template:'custom',sections:m[2]==='outro'?[{name:'Main',bars:Math.max(8,PROJ.bars)},{name:'Outro',bars:m[1]?+m[1]:8}]:[{name:m[2],bars:m[1]?+m[1]:undefined},{name:'Main',bars:Math.max(8,PROJ.bars)}]}]};
+    return needArr({actions:[{type:'section',do:'add',name:m[2],after:after||undefined,before:before||undefined,bars:m[1]?+m[1]:undefined}]}); }
+  /* add a section: "add a second drop", "add a break after the first drop", "add an outro" */
+  if((m=t.match(new RegExp(`\\b(?:add|insert|put in|throw in|make|create|daal|dalo|daalo)\\b(?: me| us)?(?: (?:a|an|another|one more|a new|new|some))?(?: (?:second|third|fourth|2nd|3rd|4th))? (?:\\d{1,2} bar )?(${SEC}|silence|gap)\\b`)))&&!(new RegExp(`\\b(${SB_PART})\\b`).test(t.replace(/\bbuild\b/g,'')))){
+    const after=secAt(new RegExp(`\\b(?:after|ke baad) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`))||secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? ke baad\\b`)), before=secAt(new RegExp(`\\bbefore (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`))||secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:se|ke) pehle\\b`));
+    const bars=(t.match(new RegExp(`\\b(\\d{1,2}) bar (?:${m[1]})\\b`))||[])[1];
+    if(arr&&bars&&has(songKindOf(m[1]))&&/\b(make|create)\b/.test(t)&&!/\b(another|second|third|new|one more)\b/.test(t)) return {actions:[{type:'section',do:'length',section:m[1],bars:+bars}]}; /* "make an 8-bar intro" when there is one */
+    if(!arr&&PROJ.tracks.length&&!/silence|gap/.test(m[1])) return {actions:[{type:'arrange',template:'custom',sections:m[1]==='outro'?[{name:'Main',bars:Math.max(8,PROJ.bars)},{name:'Outro',bars:bars?+bars:8}]:[{name:m[1],bars:bars?+bars:undefined},{name:'Main',bars:Math.max(8,PROJ.bars)}]}]};
+    return needArr({actions:[{type:'section',do:'add',name:m[1],after:after||undefined,before:before||undefined,bars:bars?+bars:undefined}]}); }
+  /* exact length: "make the drop 16 bars", "16 bar break" (in a song with a layout), "intro ko 8 bar karo" */
+  if((m=t.match(new RegExp(`\\b(?:make|set|change|turn) (?:the )?${ORD}(${SEC})s?(?: (\\d))? (?:to |into )?(\\d{1,2}) bar\\b`)))) return needArr({actions:[{type:'section',do:'length',section:ref(m.slice(1)),bars:+m[4]}]});
+  if((m=t.match(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:to |ko |should be |is |at )?(\\d{1,2}) bar\\b`)))||(arr&&(m=t.match(new RegExp(`\\b(\\d{1,2}) bar ${ORD}(${SEC})\\b`))))){
+    if(m.length===5) return needArr({actions:[{type:'section',do:'length',section:ref(m.slice(1)),bars:+m[4]}]});
+    return {actions:[{type:'section',do:'length',section:ref([m[2],m[3]]),bars:+m[1]}]}; }
+  /* remove / duplicate / move / rename */
+  if((m=t.match(new RegExp(`\\b(?:remove|delete|cut out|cut|get rid of|lose|drop|scrap|hata do|hatao) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`)))||(m=t.match(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:hata do|hatao|nikal do)\\b`)))) return needArr({actions:[{type:'section',do:'remove',section:ref(m.slice(1))}]});
+  if((m=t.match(new RegExp(`\\b(?:duplicate|copy|repeat|clone) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`)))) return needArr({actions:[{type:'section',do:'duplicate',section:ref(m.slice(1))}]});
+  if((m=t.match(new RegExp(`\\bmove (?:the )?${ORD}(${SEC})s?(?: (\\d))? (?:to )?(after|before) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`)))) return needArr({actions:[{type:'section',do:'move',section:ref(m.slice(1,4)),[m[4]]:ref(m.slice(5,8))}]});
+  if((m=raw.match(/\brename (?:the )?(.+?) (?:to|as) ["“]?([^"”]+?)["”]?\s*$/i))&&findSec(m[1])) return needArr({actions:[{type:'section',do:'rename',section:m[1],name:m[2]}]});
+  return null; }
 /* a tempo said without "bpm": "house beat at 120", "a techno groove at 135 with claps", "make it 128" (60-200 only; never "at bar 3",
    "at 50%", "at 8 bars", "swing at 60") */
 function tempoAt(t,genre){ let m=t.match(/\b(?:at|@)\s*(\d{2,3}(?:\.\d)?)\b(?!\s*(?:%|percent|bars?|beats?|db|hz|k\b|khz|seconds?|secs?|minutes?|mins?|times|x\b|notes?|swing|th\b))/);
@@ -5058,6 +5168,8 @@ function askShadow(acts){ const saved=PROJ.tracks.map(t=>[t,t.mute,t.solo,t.vol]
     if(a.db!=null&&isFinite(+a.db)) T.vol=clamp(T.vol*Math.pow(10,clamp(+a.db,-24,12)/40),0,1); if(a.change!=null&&isFinite(+a.change)) T.vol=clamp(T.vol+(+a.change)/100,0,1); }
   return ()=>saved.forEach(([t,m,so,v])=>{ t.mute=m; t.solo=so; t.vol=v; }); }
 function localBrain(raw){
+  /* a typed "Keys, make an 8-bar intro…": the assistant's name isn't the part "keys" (speech already strips it) */
+  { const nm=String((typeof ASSIST!=='undefined'&&ASSIST.name)||'Keys').trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); if(nm) raw=String(raw||'').replace(new RegExp('^\\s*(?:(?:hey|hi|ok|okay|yo)\\s+)?'+nm+'\\s*[,:!–—-]\\s*|^\\s*(?:hey|hi|ok|okay|yo)\\s+'+nm+'\\b\\s*|^\\s*'+nm+'\\s+(?=(?:make|add|turn|arrange|give|let|put|take|drop|loop|play|remove|bring|can|could|please|stretch|move|rename|duplicate)\\b)','i'),''); }
   const segs=splitAsks(raw); if(!segs) return brainOne(raw);
   const R=[];
   for(const g of segs){ let L; g.said=g.said||g.text;
@@ -5306,12 +5418,12 @@ const ACT={
     if(t.role==='drums'&&t.recipe&&typeof swingSaid==='function'&&swingSaid(LAST_TEXT.text)!=null){ const prev=+t.recipe.swing||0, v=swingOver({},prev);
       if(v!==undefined){ const d=regenTrack(t,{recipe:{swing:v}}); BATCH.swingShown=true; return d?`${swingWords(v,prev)}; ${t.name}: ${d}`:null; } }
     const d=regenTrack(t); return d?`${t.name}: ${d}`:null; },
-  add_bass(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'bass')||(artist&&artist.sounds.bass)||STYLES[s].bass, I=loadI(id), seed=+a.seed||newSeed();
+  add_bass(a){ a=Object.assign({},a,{instrument:instSaid(a)}); const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'bass')||(artist&&artist.sounds.bass)||STYLES[s].bass, I=loadI(id), seed=+a.seed||newSeed();
     addPart({role:'bass',inst:id,gen:true,name:'Bassline',events:genBass(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},Object.assign({},a,{replace:a.replace!==false&&!a.new})); return `Bassline on ${I.name} in ${keyName(projectKey())}`; },
-  add_chords(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.chords)||STYLES[s].chords, I=loadI(id), seed=+a.seed||newSeed();
+  add_chords(a){ a=Object.assign({},a,{instrument:instSaid(a)}); const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.chords)||STYLES[s].chords, I=loadI(id), seed=+a.seed||newSeed();
     const held=/choir|strings|pad|organ|cello|brass|darkpad/i.test(id+' '+I.name), cs=held&&!/pads|seventh|sustain/.test(STYLES[s].chordStyle)?'pads':undefined;
     const t=addPart({role:'chords',inst:id,gen:true,name:a.instrument?I.name:'Chords',events:genChords(s,L_(),seed,cs),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name} in ${keyName(projectKey())}`; },
-  add_melody(a){ const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.lead)||STYLES[s].lead||'lead', I=loadI(id), seed=+a.seed||newSeed();
+  add_melody(a){ a=Object.assign({},a,{instrument:instSaid(a)}); const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.lead)||STYLES[s].lead||'lead', I=loadI(id), seed=+a.seed||newSeed();
     const t=addPart({role:'melody',inst:id,gen:true,name:a.instrument?I.name:'Melody',events:genMelody(L_(),seed,s),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name}`; },
   tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
   bars(a){ setBars(+a.bars||+a.value||4); return `${PROJ.bars} bars`; },
@@ -5329,7 +5441,9 @@ const ACT={
     return `${list.length} notes on ${t.name}`; },
   instrument(a){ const t=findTrack(a.track); if(!t||t.kind!=='notes') return; const id=resolveInst(a.instrument||a.value,t.role==='drums'?'drums':t.role==='bass'?'bass':null); if(!id) return;
     const I=INST.get(id); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); t.inst=id; return `${t.name} now on ${I.name}`; },
-  mix(a){ const ref=String(a.track||'').toLowerCase().trim();
+  mix(a){ const sw=a.mute!=null&&a.volume==null&&a.change==null&&a.db==null&&songArranged()&&secSaid(); /* "drop the drums in the outro" sent as a mute: that is one section, not the whole song */
+    if(sw) return ACT.parts({section:sw,[a.mute?'out':'in']:[a.track]});
+    const ref=String(a.track||'').toLowerCase().trim();
     /* the whole song ("turn it down a bit", "make it louder"): every part's fader moves by the same dB, so it is part of the song and
        Undo restores it exactly. The master fader itself is a studio setting outside Undo, so relative moves on "master" come here too. */
     if(/^(all|song|the song|whole song|the whole song|everything|mix|the mix)$/.test(ref)||ref==='master'&&a.volume==null&&(a.db!=null||a.change!=null)){
@@ -5351,7 +5465,8 @@ const ACT={
     return `${chName(id)}: ${out.join(', ')||'unchanged'}`; },
   fx(a){ const want=String(a.effect||'').toLowerCase().replace(/[-_]/g,' '); const type=Object.keys(FX_LIB).find(k=>FX_LIB[k].name.toLowerCase()===want||k===want.replace(/ /g,''))||Object.keys(FX_LIB).find(k=>FX_LIB[k].name.toLowerCase().includes(want)||want.includes(k));
     if(!type) return; let i=FX.slots.findIndex(s=>s.type===type); if(i<0){ i=7; FX.setType(i,type); } FX.set(i,clamp((+a.amount)/100,0,1)); return `${FX_LIB[type].name} ${Math.round(FX.slots[i].amount*100)}%`; },
-  remove(a){ const t=findTrack(a.track||a.value); if(!t) return;
+  remove(a){ const ref=a.track||a.value; if(!PROJ.tracks.some(t=>t.name.toLowerCase()===String(ref||'').toLowerCase())&&songArranged()&&findSec(ref)) return; /* "remove the second drop" sent as a track: the section action does it */
+    const t=findTrack(ref); if(!t) return;
     /* "remove the reverb from the chords" turns the reverb off; the part stays (QA, 16 Nov: the AI or the parser deleted the track) */
     const fw=fxOffSaid(LAST_TEXT.text,t); if(fw) return ACT.track_fx({track:t.id,effect:fw,remove:true});
     removeTrack(t.id); return `Removed ${t.name}`; },
@@ -5359,7 +5474,11 @@ const ACT={
     t.events.forEach(e=>{ let b=Math.round(e.b/q)*q; if(b>=L&&e.b<L) b=0; if(Math.abs(b-e.b)>1e-6) moved++; e.b=b; e.d=Math.max(q,Math.round(e.d/q)*q); });
     return `Quantized ${t.name} to ${gridName(q)} (${moved} of ${t.events.length} notes moved)`; },
   transpose(a){ const t=findTrack(a.track); if(!t||(INST.get(t.inst)||{}).percussive) return; const s=Math.round(+a.semitones||0); t.events.forEach(e=>e.n+=s); return `${t.name} ${s>0?'up':'down'} ${Math.abs(s)}`; },
-  transport(a){ const d=String(a.do||a.value||'').toLowerCase(); if(/stop|pause/.test(d)){ loopStop(); return 'Stopped'; } if(/rec/.test(d)){ recordPress(); return 'Recording'; } if(PROJ.tracks.length && !TR.running){ loopPlay(); return 'Playing'; } },
+  transport(a){ const d=String(a.do||a.value||'').toLowerCase(); if(/stop|pause/.test(d)){ loopStop(); return 'Stopped'; }
+    /* "play from the second drop": from = a section (name, "drop 2", "second drop", number in the list) or a bar ("bar 33") */
+    if(a.from!=null&&a.from!==''&&!/rec/.test(d)){ if(!songArranged()){ loopPlay(); return 'Playing'; } const f=String(a.from).toLowerCase(), bar=/^bar\s*(\d+)$/.exec(f);
+      if(bar||/^(start|top|beginning|the start|the top|the beginning|1)$/.test(f)){ songPlay({from:bar?+bar[1]:1}); return bar?`Playing from bar ${bar[1]}`:'Playing the song from the start'; }
+      const s=findSec(a.from); if(!s){ songNote(`I couldn’t find “${a.from}” in the song.`); return; } songPlay({from:s}); return `Playing from ${s.name}`; } if(/rec/.test(d)){ recordPress(); return 'Recording'; } if(PROJ.tracks.length && !TR.running){ loopPlay(); return 'Playing'; } },
   sing(a){ const raw=String(a.part||a.role||a.track||'melody').toLowerCase(); const part=/voice|audio|note/.test(raw)&&!/melody/.test(raw)?'voice':/bass/.test(raw)?'bass':/chord|pad|harmon/.test(raw)?'chords':'melody';
     BATCH.take=part; return part==='voice'?`Recording a voice note after the count-in: ${PROJ.bars} bars`:`Sing the ${part==='bass'?'bassline':part==='chords'?'chord roots (one note per chord)':'melody'} after the count-in: ${PROJ.bars} bars`; },
   convert(a){ const t=findTrack(a.track||'melody'); if(!t||t.kind!=='notes'||(INST.get(t.inst)||{}).percussive) return; const to=/bass/.test(a.to||'')?'bass':/chord|pad/.test(a.to||'')?'chords':'melody';
@@ -5397,6 +5516,236 @@ const ACT={
   new_project(a){ newSong(a.name); return 'New song'; },
   rename(a){ if(!a.name) return; PROJ.name=String(a.name).slice(0,60); saveProject(); return `Song renamed to “${PROJ.name}”`; }
 };
+/* ---------- the song by voice (AI-1): arrange, section, parts, transition, loop_section, transport from ----------
+   Works on the shared layout in song.js (songTemplate, songAdd, songFind …). runActions sets SONG.batch, so one request is one undo step,
+   and shows one Undo chip in the song view for it. The owner's rules (14 Nov): "full track" is about 3 minutes (16-bar sections) unless
+   the user says club, extended or DJ (32-bar sections, about 6 minutes); arranging never adds parts, it suggests them; transitions are drum
+   transitions (a riser is a snare roll plus a crash, and Keys says so). */
+const SONG_ACTS=new Set(['arrange','section','parts','transition','loop_section']);
+const SEC_BARS={intro:8,build:8,drop:16,break:16,verse:16,chorus:16,bridge:8,hook:8,outro:8,other:8};
+const SONG_FAM={
+  electronic:[['Intro','intro',16],['Build','build',16],['Drop','drop',16],['Break','break',16],['Drop 2','drop',16],['Outro','outro',16]],
+  pop:[['Intro','intro',8],['Verse','verse',16],['Chorus','chorus',16],['Verse 2','verse',16],['Chorus 2','chorus',16],['Bridge','bridge',8],['Chorus 3','chorus',16],['Outro','outro',8]],
+  hiphop:[['Intro','intro',8],['Hook','hook',8],['Verse','verse',16],['Hook 2','hook',8],['Verse 2','verse',16],['Hook 3','hook',8],['Outro','outro',8]],
+  dnb:[['Intro','intro',16],['Build','build',16],['Drop','drop',32],['Break','break',16],['Build 2','build',16],['Drop 2','drop',32],['Outro','outro',16]],
+  dnbClub:[['Intro','intro',32],['Build','build',16],['Drop','drop',32],['Break','break',32],['Build 2','build',16],['Drop 2','drop',32],['Outro','outro',32]]
+};
+const CLUB_WORDS=/\b(club|extended|dj|long version|longer version|6 ?min(ute)?s?|six minutes?)\b/, SHORT_WORDS=/\b(short|reel|reels|sketch|teaser|quick|30 ?sec(ond)?s?)\b/;
+function songFamily(style){ const s=style||PROJ.style||'house';
+  return /^(dnb|liquid|dubstep)$/.test(s)?'dnb':/^(hiphop|boombap|trap|drill|lofi)$/.test(s)?'hiphop':/^(pop|rock|bollywood|punjabi|bhangra|reggaeton)$/.test(s)?'pop':'electronic'; }
+const snapBars=(b,step=4)=>clamp(Math.round((+b||0)/step)*step||step,4,64);
+const said=()=>normName(LAST_TEXT.text||'');
+/* the section the user's own words name ("in the outro", "outro mein", "from the second drop"), or null */
+const SEC_RE='((?:first|second|third|last|1st|2nd|3rd) )?(intro|build ?up|build|drop|breakdown|break|outro|chorus|verse|bridge|hook)( \\d+| two| three)?';
+function secSaid(){ const t=said(); let m=t.match(new RegExp('\\b(?:in|during|for|from|throughout|out of) (?:the )?'+SEC_RE+'\\b'))||t.match(new RegExp('\\b'+SEC_RE+' (?:mein|me|main|ke liye|ke lie|se(?! (?:pehle|pahle|phele|baad)))\\b')); return m?((m[1]||'')+m[2]+(m[3]||'')).trim():null; }
+/* the user's words name a transition ("roll", "fill", "silence", "riser" …): only then does an AI transition next to a new layout count (fix 2) */
+const TRANS_WORDS=/\b(rolls?|snare ?rolls?|fills?|silence|silent|gaps?|pauses?|risers?|uplifters?|sweeps?|crash|kick ?drop|transitions?|khamoshi|chup|breath)\b/;
+const noGapSaid=()=>/\b(no|without|remove|lose|skip|take out|hata\w*) (?:the |a )?(gap|silence|pause)\b|\b(gap|silence|pause) (?:hata\w*|nahi|mat)\b/.test(said());
+const songNote=(text,unless)=>{ (BATCH.notes=BATCH.notes||[]).push({text,unless}); };
+/* "the break" when there are two: the one playing, else the one touched last (the selected one), else the first (songFind) */
+function findSec(ref){ if(ref==null||ref==='') return null; if(typeof ref==='object'&&!ref.id&&ref.index!=null) ref=+ref.index;
+  return songFind(typeof ref==='string'?ref.replace(/\bthe\s+/g,'').trim():ref); }
+function secName(ref){ const k=songKindOf(String(ref||'').replace(/\d+/g,'')); return k==='other'?String(ref||'Section').replace(/\b(first|second|third|fourth|another|new|one more|a|an|the)\b/gi,'').trim().replace(/^\w/,c=>c.toUpperCase())||'Section':SONG_KIND_NAME[k]; }
+const isGap=n=>/\b(silence|silent|gap|pause|quiet|stop|break in the beat)\b/i.test(String(n||''));
+/* which tracks a word means: drums, kick (a piece inside the one drums track), bass, chords, melody, voice, all, or a track name */
+const PIECE_WORD={kick:'kick',kicks:'kick',bd:'kick',hats:'hats',hat:'hats',hihat:'hats',hihats:'hats','hi-hats':'hats',clap:'clap',claps:'clap',snare:'snare',snares:'snare',perc:'perc',percussion:'perc',congas:'perc',shaker:'hats',shakers:'hats',crash:'crash',ride:'ride'};
+const ROLE_OF={drums:'drums',drum:'drums',beat:'drums',groove:'drums',bass:'bass',bassline:'bass',sub:'bass',chords:'chords',chord:'chords',pad:'chords',pads:'chords',keys:'chords',harmony:'chords',strings:'chords',choir:'chords',melody:'melody',lead:'melody',arp:'melody',pluck:'melody',hook:'melody',voice:'voice',vocal:'voice',vocals:'voice'};
+function partTargets(w){ const k=String(w||'').toLowerCase().replace(/^the\s+/,'').trim(); if(!k) return [];
+  if(/^(all|everything|every part|the lot|all parts)$/.test(k)) return PROJ.tracks.map(t=>({t}));
+  const isDrum=t=>['drums','hats','perc'].includes(songRole(t));
+  if(PIECE_WORD[k]){ const own=PROJ.tracks.filter(t=>songRole(t)===(PIECE_WORD[k]==='perc'?'perc':'hats')&&PIECE_WORD[k]!=='kick'); if(own.length&&/hats|perc/.test(PIECE_WORD[k])) return own.map(t=>({t}));
+    return PROJ.tracks.filter(t=>songRole(t)==='drums').map(t=>({t,piece:PIECE_WORD[k]})); }
+  const r=ROLE_OF[k]; if(r) return PROJ.tracks.filter(t=>r==='drums'?isDrum(t):songRole(t)===r).map(t=>({t}));
+  const t=findTrack(k); return t?[{t}]:[]; }
+const PIECES=['kick','clap','snare','hats','perc'];
+function partSet(s,t,on,piece){ const p=Object.assign({on:false,variant:'A'},s.parts[t.id]||{}); let wo=new Set(p.without||[]);
+  if(piece){ if(on){ if(!p.on){ wo=new Set(PIECES.filter(x=>x!==piece)); p.on=true; } else wo.delete(piece); } else { if(!p.on) return; wo.add(piece); if(PIECES.every(x=>wo.has(x))) p.on=false; } }
+  else { p.on=!!on; if(on) wo=new Set(); }
+  songSetPart(s.id,t.id,{on:p.on,without:p.on&&wo.size?[...wo]:null}); }
+/* a fresh generated version of a part, without touching the track's main pattern */
+function freshEvents(t){ if(!t||!t.gen) return null; const keep={events:t.events,seed:t.seed,desc:t.desc,recipe:t.recipe}; let ev=null; try{ if(regenTrack(t)) ev=t.events; } finally{ Object.assign(t,keep); } return ev; }
+/* transitions: the end of a section into the next one */
+function endFor(to,bars,o={}){ to=String(to||'').toLowerCase().replace(/[\s_-]+/g,'');
+  const k=/riser|rise|uplift|whoosh|noise/.test(to)?'riser':/filter|sweep/.test(to)?'fill':/roll|snare|buildup/.test(to)?'snareroll':/kick|gap|silen|pause|stop|dropout|breath/.test(to)?'kickdrop':/fill|tom/.test(to)?'fill':/crash|cymbal|impact/.test(to)?'crash':/none|off|no|remove|nothing/.test(to)?'none':null;
+  if(!k) return null; if(k==='none') return {to:'none'};
+  const max=o.max||64, def=k==='snareroll'||k==='riser'?(o.club?8:4):1, lim=k==='snareroll'||k==='riser'?[2,8]:k==='fill'?[1,2]:[1,1];
+  const want=Math.round(+bars||def), b=Math.min(max,clamp(want,lim[0],lim[1])); const e={to:k,bars:Math.max(1,b)}; if(o.gap) e.gap=true; if(o.crash===false) e.crash=false; e.asked=want; return e; }
+const END_WORD={snareroll:'snare roll',riser:'snare roll and crash (a stand-in for a riser)',fill:'drum fill',kickdrop:'kick drop and a beat of silence',crash:'crash'};
+function setEnd(s,e,why){ songEdit(()=>{ if(!e||e.to==='none') s.end=null; else { const c=Object.assign({},e); delete c.asked; s.end=c; } }); SONG.view.sel=s.id;
+  const S=songSections(), nx=S[S.indexOf(s)+1]; if(!e||e.to==='none') return `${s.name}: no transition`;
+  if(e.asked&&e.asked!==e.bars&&e.to!=='crash') songNote(`The ${END_WORD[e.to].split(' (')[0]} is ${e.bars} bar${e.bars>1?'s':''}${e.to==='kickdrop'?', so the drop still hits':''}.`);
+  if(why==='riser') songNote('Risers aren’t in the studio yet, so it’s a snare roll with a crash.',/roll/i);
+  if(why==='filter') songNote('Filter sweeps aren’t in the studio yet, so it’s a drum fill.',/fill/i);
+  return `${s.name}: ${e.to==='kickdrop'?'kick drop':END_WORD[e.to].split(' (')[0]}${e.to==='snareroll'||e.to==='riser'?' '+e.bars+' bars':''}${e.gap?' + a beat of silence':''}${nx?' into '+nx.name:''}`; }
+/* default transitions for a whole layout (family, artist hint, club length) */
+function songAutoEnds(S,fam,hint,club){ hint=hint||{};
+  S.forEach((s,i)=>{ const nx=S[i+1]; if(!nx){ s.end=null; return; } let e=null;
+    if(fam==='electronic'||fam==='dnb'){
+      if(nx.kind==='drop'){ const into=hint.into||'snareroll'; e=endFor(into,/fill|kick/.test(into)?1:hint.roll||(s.kind==='break'&&club?8:4),{gap:hint.gap||s.kind==='break',max:s.bars,club}); }
+      else if(s.kind==='drop'||s.kind==='intro') e=endFor('fill',1);
+      else if(nx.kind==='build') e=endFor('fill',1); }
+    else if(fam==='pop'){ if(nx.kind==='chorus') e=endFor(s.kind==='bridge'?'snareroll':'fill',2,{max:s.bars}); else if(s.kind==='chorus') e=endFor('crash',1); }
+    else if(fam==='hiphop'){ if(nx.kind==='hook'||nx.kind==='chorus') e=endFor('kickdrop',1,{crash:false}); }
+    if(e){ delete e.asked; s.end=e; } else s.end=null; }); }
+/* the artist's way of arranging (ARTISTS[].arr): which parts play in the intro, build and break, longer intros and breaks */
+function songShape(S,hint,club){ if(!hint) return; const roleIn=(list,t)=>{ const r=songRole(t), base=['drums','hats','perc'].includes(r)?'drums':r; for(const w of list){ const [k,wo]=w.split('-'); if(k===base) return {on:true,without:base==='drums'&&wo?[wo]:null}; } return {on:false}; };
+  const apply=(kind,list)=>{ if(!list) return; S.filter(s=>s.kind===kind).forEach(s=>PROJ.tracks.forEach(t=>{ const r=roleIn(list,t), p=s.parts[t.id]||{variant:'A'}; s.parts[t.id]=Object.assign({},p,{on:r.on}); if(r.without) s.parts[t.id].without=r.without; else if(!r.on||!p.on) delete s.parts[t.id].without; })); };
+  apply('intro',hint.intro); apply('build',hint.build); apply('break',hint.brk);
+  if(hint.leadDrops) S.forEach(s=>PROJ.tracks.filter(t=>songRole(t)==='melody').forEach(t=>{ if(s.parts[t.id]) s.parts[t.id].on=s.kind==='drop'; }));
+  S.forEach(s=>{ if(s.kind==='intro'&&hint.introX) s.bars=snapBars(s.bars*hint.introX,8); if(s.kind==='break'){ if(hint.breakBars) s.bars=snapBars(hint.breakBars*(club?2:1)); else if(hint.breakX) s.bars=snapBars(s.bars*hint.breakX,8); } });
+  /* nothing would play (say a drums-only intro in a song with no drums): play what the template chose instead */
+  S.forEach(s=>{ if(PROJ.tracks.length&&!PROJ.tracks.some(t=>s.parts[t.id]&&s.parts[t.id].on)) PROJ.tracks.forEach(t=>s.parts[t.id]=songDefaultPart(t,s.kind)); if(!PROJ.tracks.some(t=>s.parts[t.id].on)) PROJ.tracks.forEach(t=>s.parts[t.id]={on:true,variant:'A'}); }); }
+/* the whole song to about N minutes: every section stays an 8, 16 or 32-bar phrase (64 only for very long ones), the way DJs count; never under about a minute
+   unless the user asked for seconds or a reel (QA fix 2: "shorter" gave 12-bar drops and a 0.5-minute song). Each section can take the phrase just under or
+   just over its share; of those layouts the one closest to the time asked wins ("shorter" lands at or under it, "longer" at or over), keeping each section
+   near its share, the drops matched and longest, and builds at 16 bars or less */
+const PHRASES=[8,16,32,64];
+function songScaleTo(minutes){ const S=songSections(), have=songBars(); if(!have) return null; let mins=clamp(+minutes||0,0.25,12);
+  if(mins<1&&!/\b(\d+ ?sec\w*|seconds?|reels?|teaser|short version)\b/.test(said())){ mins=1; if(songSecs(have)<=75) songNote('It’s about a minute already, the shortest a full song goes here.'); }
+  const want=Math.round(mins*60*CTRL.bpm/240), f=want/have, dir=want<have?-1:1, ideal=S.map(s=>Math.max(4,s.bars*f));
+  const opts=ideal.map(x=>{ const P=PHRASES.filter(p=>p<64||x>=48), lo=[...P].reverse().find(p=>p<=x)||P[0], hi=P.find(p=>p>=x)||P[P.length-1]; return lo===hi?[lo]:[lo,hi]; });
+  const score=B=>{ const tot=B.reduce((a,b)=>a+b,0), err=Math.abs(tot-want)/want, wrong=Math.max(0,dir*(want-tot))/want; let shape=0, pen=0;
+    const drops=B.filter((b,i)=>S[i].kind==='drop'), dmin=drops.length?Math.min(...drops):0;
+    B.forEach((b,i)=>{ shape+=Math.abs(Math.log2(b/ideal[i])); if(S[i].kind==='build'&&b>16) pen+=0.1; if(S[i].kind!=='drop'&&dmin&&b>dmin) pen+=0.05; });
+    if(drops.length>1&&drops.some(b=>b!==drops[0])) pen+=0.1; return 3*err+3*wrong+shape/B.length+pen; };
+  let best=opts.map(o=>o[0]), bs=Infinity;
+  if(opts.length<=12){ const n=opts.length, walk=(i,B)=>{ if(i===n){ const v=score(B); if(v<bs-1e-9){ bs=v; best=B.slice(); } return; } for(const b of opts[i]){ B.push(b); walk(i+1,B); B.pop(); } }; walk(0,[]); }
+  else best=ideal.map(x=>PHRASES.filter(p=>p<64||x>=48).reduce((a,p)=>Math.abs(p-x)<Math.abs(a-x)?p:a,8));
+  const tot=best.reduce((a,b)=>a+b,0);
+  if(dir<0&&tot>want*1.15&&best.every(b=>b===8)&&S.length>3) songNote('Every part is already 8 bars, so it can’t get shorter without losing one. Say “remove the break” to cut a part.');
+  songEdit(S=>{ S.forEach((s,i)=>{ s.bars=best[i]; if(s.end&&s.end.bars>s.bars) s.end.bars=Math.max(1,Math.min(s.end.bars,s.bars/2)); }); },{structure:true});
+  const mm=Math.round(songSecs(songBars())/30)/2; return `About ${mm} minute${mm===1?'':'s'}: ${S.map(s=>s.name+' '+s.bars).join(' · ')} · ${songLenText()}`; }
+function songMainSel(){ const S=songSections(), m=S.find(s=>s.kind==='drop')||S.find(s=>s.kind==='chorus'||s.kind==='hook')||S[0]; if(m){ SONG.view.sel=m.id; songViewSave(); } }
+/* the instrument guard: with a known artist, an instrument the user didn't say is the AI's guess; the artist's sound wins */
+function instSaid(a){ if(!a.instrument||!LAST_TEXT.text||!findArtist(a.ref||a.artist||a.like)) return a.instrument; const t=' '+LAST_TEXT.text.toLowerCase()+' ', id=resolveInst(a.instrument), I=id&&INST.get(id);
+  if(t.includes(String(a.instrument).toLowerCase())||(I&&t.includes(I.name.toLowerCase()))||INST_WORDS.some(([k,re])=>k===id&&re.test(t))) return a.instrument; return undefined; }
+
+/* drum notes for a transition, in beats from the start of the section (song.js songFlat adds them; up to 4 beats past the end for the crash) */
+function transitionEvents(s,t){ const e=s.end; if(!e||!e.to||e.to==='none') return []; if(PROJ.tracks.find(x=>songRole(x)==='drums')!==t) return []; /* one drums track plays the transition */ const len=s.bars*4, S=songSections(), last=S[S.length-1]===s, out=[];
+  const has=n=>[t.events].concat(Object.values(t.patterns||{}).map(p=>p.events)).some(ev=>ev&&ev.some(x=>x.n===n)), sn=has(38)?38:has(39)?39:has(40)?40:38;
+  if(e.to==='snareroll'||e.to==='riser'){ const B=Math.min(s.bars,clamp(Math.round(+e.bars||4),1,8)), st=len-B*4, R=e.to==='riser';
+    for(let b=st;b<len-1e-6;){ const f=(b-st)/(B*4), step=len-b<=1+1e-6?0.125:(R?(f<0.3?0.5:0.25):(f<0.25?1:f<0.5?0.5:0.25)); out.push({b,d:Math.min(0.2,step),n:sn,v:+(0.3+0.68*Math.min(1,f+step/(B*4))).toFixed(3)}); b=+(b+step).toFixed(4); }
+    if(R) for(let b=len-4;b<len-1e-6;b+=0.5) out.push({b,d:0.4,n:46,v:+(0.35+0.5*(b-len+4)/4).toFixed(3)}); }
+  else if(e.to==='fill'){ const B=clamp(Math.round(+e.bars||1),1,2), st=len-2-(B-1)*2;
+    for(let b=st;b<len-1-1e-6;b+=0.25) out.push({b,d:0.2,n:sn,v:+(0.5+0.25*(b-st)/(len-1-st)).toFixed(3)});
+    [50,48,47,45].forEach((n,i)=>out.push({b:len-1+i*0.25,d:0.25,n,v:0.85})); }
+  if(!last&&e.crash!==false) out.push({b:len,d:2,n:49,v:0.9});
+  return out; }
+/* which notes stop for a transition: [{from, only}] in beats from the section start; only = drum pieces (drums tracks), none = every note of the track. songFlat starts each cut 1/16 beat early (SONG_EARLY) so hits the drummer pushes early stay out */
+function transitionCut(s,t){ const e=s.end; if(!e||!e.to||e.to==='none') return null; const len=s.bars*4, drum=t.role==='drums'||!!(INST.get(t.inst)||{}).drums, out=[];
+  if(e.to==='kickdrop'){ if(drum) out.push({from:len-4,only:['kick']}); else if(songRole(t)==='bass') out.push({from:len-4}); out.push({from:len-1}); }
+  /* a beat of silence after a roll: the kick also sits out the beat before it, because deep kicks ring for about 3 beats (kitDeepTechno 1.4 s) and would fill the gap */
+  else if(e.gap){ if(drum) out.push({from:len-2,only:['kick']}); out.push({from:len-1}); }
+  return out; }
+
+Object.assign(ACT,{
+  arrange(a){
+    if(!PROJ.tracks.length){ songNote('There’s nothing to arrange yet. Start with a beat: say “make a house beat” or name an artist.'); return; }
+    BATCH.arranged=true;
+    const t=said(), named=a.ref&&findArtist(a.ref)&&(!t||findArtist(a.ref).names.some(n=>t.includes(normName(n)))), artist=named?findArtist(a.ref):findArtist(PROJ.ref);
+    const style=(named&&artist.style)||PROJ.style||(artist&&artist.style)||'house', fam=songFamily(style), hint=fam==='electronic'?(artist&&artist.arr)||null:null;
+    if(a.minutes&&songArranged()&&!(a.sections&&a.sections.length)){ const r=songScaleTo(a.minutes); return r; }
+    let kind=String(a.template||'').toLowerCase(); if(Array.isArray(a.sections)&&a.sections.length) kind='custom';
+    if(kind!=='custom'){ const club=t?CLUB_WORDS.test(t):/club|extended|dj|long/.test(kind), short=t?SHORT_WORDS.test(t)&&!/\b(full|whole|complete)\b/.test(t):/short|reel|sketch/.test(kind); kind=club?'club':short?'short':'full'; }
+    let secs, label;
+    if(kind==='custom'){ const list=[]; let gapAfter=-1;
+      a.sections.forEach(x=>{ const nm=typeof x==='string'?x:(x&&(x.name||x.kind))||''; if(isGap(nm)){ gapAfter=list.length-1; return; } const k=songKindOf(nm);
+        list.push({name:secName(nm),kind:k,bars:snapBars((x&&x.bars)||SEC_BARS[k])}); });
+      if(!list.length) return; secs=list; secs.gapAfter=gapAfter; label='Your song'; }
+    else if(kind==='short'){ secs=SONG_TEMPLATES.short.secs.map(([name,k,bars])=>({name,kind:k,bars})); label='Short version'; }
+    else { const base=fam==='dnb'&&kind==='club'?SONG_FAM.dnbClub:SONG_FAM[fam]; secs=base.map(([name,k,bars])=>({name,kind:k,bars:kind==='club'&&fam==='electronic'?32:bars})); label=kind==='club'?'Club track':'Full track'; }
+    songTemplate(secs);
+    const S=songSections(), club=kind==='club';
+    songEdit(S=>{ if(kind!=='short') songShape(S,hint,club);
+      songAutoEnds(S,fam,hint,club); if(kind==='short') S.forEach(s=>s.end=null);
+      if(secs.gapAfter>=0&&S[secs.gapAfter]){ const e=endFor('kickdrop',1); delete e.asked; S[secs.gapAfter].end=e; } },{structure:true});
+    if(kind==='club'&&fam!=='electronic'&&fam!=='dnb') songScaleTo(6);
+    if(a.minutes) songScaleTo(a.minutes);
+    songMainSel(); SONG.cursor=0;
+    const miss=[!PROJ.tracks.some(t=>songRole(t)==='bass')&&'a bassline',!PROJ.tracks.some(t=>songRole(t)==='chords')&&'chords'].filter(Boolean);
+    if(miss.length) songNote(miss.length>1?'There’s no bassline or chords yet: want them? Say “add a bassline”.':miss[0]==='chords'?'There are no chords yet: want some? Say “add chords”.':'There’s no bassline yet: want one? Say “add a bassline”.',/bass|chord/i);
+    return `${label}${hint&&named?' like '+artist.name:''}: ${S.map(s=>s.name+' '+s.bars).join(' · ')} · ${songLenText()}`; },
+  section(a){ const d=String(a.do||a.action||a.value||'').toLowerCase();
+    if(/^(add|insert|new|create)/.test(d)) return songAddSec(a);
+    if(!songArranged()&&!/rename/.test(d)){ songNote('There’s no song layout yet. Say “make it a full track” first.'); return; }
+    const s=findSec(a.section||a.name); if(!s){ songNote(`I couldn’t find ${a.section?'“'+a.section+'”':'that section'} in the song.`); return; }
+    if(/^(remove|delete|cut|drop|kill)/.test(d)){ if(songSections().length<2) return; songRemove(s.id); return `Removed ${s.name}`; }
+    if(/^(dup|copy|repeat|clone)/.test(d)){ const S=songSections(), tg=a.after?findSec(a.after):null, at=tg?S.indexOf(tg)+1:S.indexOf(s)+1; const c=songAdd({copyOf:s.id,at,chip:false}); songAutoAround(c); songRenumber([c.kind]); return `Copied ${s.name} to ${c.name}`; }
+    if(/^(move)/.test(d)){ const S=songSections(), tg=findSec(a.after||a.before); if(!tg||tg===s) return; const rest=S.filter(x=>x!==s); const at=rest.indexOf(tg)+(a.after?1:0); if(!songMove(s.id,at)){ songNote(`${s.name} is already ${a.after?'after':'before'} ${tg.name}.`); return; } SONG.view.sel=s.id; return `Moved ${s.name} ${a.after?'after':'before'} ${tg.name}`; }
+    if(/^(rename|name)/.test(d)){ const was=s.name; if(!a.name||!songRename(s.id,a.name)) return; return `Renamed ${was} to ${s.name}`; }
+    /* length: bars (an exact number) or change (+8, -8); "longer" with no number = 8 more bars */
+    const was=s.bars; let want=a.bars!=null&&a.bars!==''?+a.bars:a.change!=null&&a.change!==''?was+(+String(a.change).replace(/[^\d.-]/g,'')||0):was+(/short|less|cut|trim|minus/.test(d)?-8:8);
+    if(a.bars!=null&&/longer|more|add|extend/.test(d)&&+a.bars<=16&&+a.bars<was) want=was+(+a.bars); /* "8 bars longer" sent as bars:8 */
+    const b=snapBars(want); if(b===was){ return `${s.name} stays ${was} bars`; }
+    if(Math.abs(b-want)>=1) songNote(`${s.name} is now ${b} bars.`);
+    songResize(s.id,b); SONG.view.sel=s.id; return `${s.name}: ${was} → ${b} bars`; },
+  parts(a){ if(!songArranged()){ songNote('There’s no song layout yet. Say “make it a full track” first.'); return; }
+    const all=/^(all|every|everywhere|whole|song)/i.test(String(a.section||'')), list=all?songSections():[findSec(a.section||'this')].filter(Boolean);
+    if(!list.length){ songNote(`I couldn’t find ${a.section?'“'+a.section+'”':'that section'} in the song.`); return; }
+    const arr=x=>(Array.isArray(x)?x:x==null?[]:[x]).map(String), said_=[]; const missing=[];
+    for(const s of list){
+      const only=arr(a.only); if(only.length){ const keep=new Map(); only.forEach(w=>{ const tg=partTargets(w); if(!tg.length) missing.push(w); tg.forEach(x=>{ const k=keep.get(x.t)||{pieces:[]}; if(x.piece) k.pieces.push(x.piece); else k.whole=true; keep.set(x.t,k); }); });
+        if(keep.size){ PROJ.tracks.forEach(t=>{ const k=keep.get(t); if(!k){ partSet(s,t,false); return; } if(k.whole) partSet(s,t,true); else { songSetPart(s.id,t.id,{on:true,without:PIECES.filter(p=>!k.pieces.includes(p))}); } }); said_.push('only '+only.join(', ')); } }
+      arr(a.out).forEach(w=>{ const tg=partTargets(w); if(!tg.length){ missing.push(w); return; } tg.forEach(x=>partSet(s,x.t,false,x.piece)); said_.push(w+' out'); });
+      arr(a.in).forEach(w=>{ const tg=partTargets(w); if(!tg.length){ missing.push(w); return; } tg.forEach(x=>partSet(s,x.t,true,x.piece)); said_.push(w+' in'); });
+      arr(a.vary).forEach(w=>{ const tg=partTargets(w).filter(x=>x.t.kind==='notes'); if(!tg.length){ missing.push(w); return; }
+        tg.forEach(({t})=>{ const L=songMakeUnique(s.id,t.id); if(!L) return; const ev=freshEvents(t); if(ev) songEdit(()=>{ t.patterns[L].events=ev; }); });
+        said_.push(`its own ${tg.map(x=>x.t.name.toLowerCase()).join(', ')}${tg.some(x=>x.t.gen)?'':' (a copy to edit; your own part isn’t regenerated)'}`); });
+      SONG.view.sel=s.id; }
+    if(missing.length) songNote(`There’s no ${[...new Set(missing)].join(' or ')} in this song yet.`);
+    if(!said_.length) return; const nm=all?'Whole song':list[0].name; return `${nm}: ${[...new Set(said_)].join(', ')}`; },
+  transition(a){ if(!songArranged()){ songNote('There’s no song layout yet. Say “make it a full track” first.'); return; }
+    /* a new layout already has its transitions (a roll and a beat of silence into each drop); a transition the AI adds next to it, when the user didn't ask for one, would replace them (QA fix 2) */
+    if(BATCH.arranged&&said()&&!TRANS_WORDS.test(said())) return;
+    const S=songSections(); let s=a.section!=null&&a.section!==''?findSec(a.section):null;
+    if(!s&&a.before){ const n=findSec(a.before); s=n?S[S.indexOf(n)-1]||null:null; }
+    if(!s&&(a.into||a.before)){ const n=findSec(a.into||a.before); s=n?S[S.indexOf(n)-1]||null:null; }
+    if(!s){ const d=S.find((x,i)=>i&&x.kind==='drop'); s=d?S[S.indexOf(d)-1]:null; }
+    if(!s){ songNote('I couldn’t tell which part that transition goes on.'); return; }
+    const w=String(a.to||a.kind||'snareroll').toLowerCase(), e=endFor(w,a.bars,{max:s.bars}), was=s.end;
+    /* a roll with no length keeps the roll that is there; a roll with no gap field keeps the beat of silence that is there (QA fix 2: Llama's bare "snareroll" wiped it) */
+    if(e&&(e.to==='snareroll'||e.to==='riser')&&was){ const hadRoll=was.to==='snareroll'||was.to==='riser';
+      if((a.bars==null||a.bars==='')&&hadRoll){ e.bars=Math.min(s.bars,was.bars||e.bars); delete e.asked; }
+      if(a.gap==null&&(was.gap||was.to==='kickdrop')&&!noGapSaid()) e.gap=true; }
+    if(!e){ songNote(`I can do a snare roll, a drum fill, a kick drop with a gap, or a crash.`); return; }
+    /* Llama sometimes sends a roll and then a crash for the same section ("riser" = roll + crash): the roll already ends on a crash, so keep it */
+    BATCH.ends=BATCH.ends||{}; const prev=BATCH.ends[s.id]; if(prev&&(e.to==='crash'||a.gap===true&&e.to===prev)){ if(a.gap===true&&s.end){ songEdit(()=>{ s.end.gap=true; }); } return; } BATCH.ends[s.id]=e.to;
+    if(a.gap===true&&e.to!=='kickdrop') e.gap=true;
+    const sd=said(); return setEnd(s,e,/riser|rise|uplift/.test(w)||(e.to==='snareroll'&&/\b(risers?|uplifters?)\b/.test(sd))?'riser':/filter|sweep/.test(w)||(e.to==='fill'&&/\bsweeps?\b/.test(sd))?'filter':null); },
+  loop_section(a){ const r=String(a.section==null?a.value||'':a.section);
+    if(!songArranged()||/^(song|whole|all|full|none|off|stop|everything|entire)/i.test(r)||!r){ songLoop(null); if(songArranged()){ if(!songOn()) songMode('song',{noPlay:true}); songPlay({from:1}); return 'Playing the whole song'; } if(!TR.running) loopPlay(); return 'Playing the loop'; }
+    const s=findSec(r); if(!s){ songNote(`I couldn’t find “${r}” in the song.`); return; } songLoop(s.id); if(!TR.running) songPlay(); return `Looping ${s.name}`; }
+});
+/* "add a second drop": copies the first drop, with a break before it when there isn't one, placed before the outro */
+function songAddSec(a){ const raw=String(a.name||a.section||'Section'); const S=songSections();
+  if(isGap(raw)){ let s=a.after?findSec(a.after):null; if(!s&&a.before){ const n=findSec(a.before); s=n?S[S.indexOf(n)-1]:null; } return ACT.transition({section:s?s.id:undefined,to:'kickdrop'}); } /* "add a silence before the drop" is a gap, not a section */
+  const kind=songKindOf(raw.replace(/\d+/g,'')), name=secName(raw), same=S.filter(s=>s.kind===kind&&kind!=='other');
+  const tgA=a.after?findSec(a.after):null, tgB=a.before?findSec(a.before):null, outro=[...S].reverse().find(s=>s.kind==='outro');
+  let at=tgA?S.indexOf(tgA)+1:tgB?S.indexOf(tgB):kind==='intro'?0:kind==='outro'||!outro?S.length:S.indexOf(outro);
+  if(!songArranged()&&(kind==='intro'||kind==='build')) at=0;
+  const made=[]; const bars=a.bars?snapBars(a.bars):null;
+  if(kind==='drop'&&same.length&&!(S[at-1]&&(S[at-1].kind==='break'||S[at-1].kind==='build'))){ const br=S.find(s=>s.kind==='break'); made.push(songAdd(br?{copyOf:br.id,name:'Break',at,chip:false}:{name:'Break',kind:'break',bars:16,at,chip:false})); at++; }
+  made.push(same.length&&['drop','chorus','hook','verse','break','build'].includes(kind)?songAdd({copyOf:same[0].id,name,at,chip:false,bars:bars||undefined}):songAdd({name,kind,bars:bars||SEC_BARS[kind],at,chip:false}));
+  if(bars) songEdit(()=>{ made[made.length-1].bars=bars; },{structure:true});
+  made.forEach(songAutoAround); songRenumber(made.map(s=>s.kind)); const S2=songSections(), last=made[made.length-1], nx=S2[S2.indexOf(last)+1];
+  return `Added ${made.map(s=>s.name+' ('+s.bars+' bars)').join(' and ')}${nx?' before '+nx.name:''}`; }
+/* sections of one kind are numbered in song order (Drop, Drop 2, Drop 3), as long as they all still have their plain names */
+function songRenumber(kinds){ if(BATCH.acting){ (BATCH.renum=BATCH.renum||[]).push(...kinds); return; } const S=songSections(), was=new Map(S.map(s=>[s.id,s.name]));
+  songEdit(()=>{ [...new Set(kinds)].forEach(k=>{ const base=SONG_KIND_NAME[k]; if(!base||k==='other') return; const all=S.filter(s=>s.kind===k), re=new RegExp('^'+base+'(?: \\d+)?$','i');
+    if(all.length<2||!all.every(s=>re.test(s.name))) return; all.forEach((s,i)=>{ s.name=i?base+' '+(i+1):base; }); }); });
+  const ren=new Map(); S.forEach(s=>{ if(was.get(s.id)!==s.name) ren.set(was.get(s.id),s.name); }); return ren; }
+/* the replies were written with the names before renumbering: swap old names for new ones in one pass (Drop 3 ↔ Drop 2) */
+function songRenamed(list,ren){ if(!ren||!ren.size) return list; const keys=[...ren.keys()].sort((a,b)=>b.length-a.length).map(k=>k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+  const re=new RegExp('\\b('+keys.join('|')+')\\b(?! ?\\d)','g'); return list.map(x=>typeof x==='string'?x.replace(re,m=>ren.get(m)||m):x); }
+/* after a section is added or copied: the section before it and the new one get the usual transition if they have none */
+function songAutoAround(s){ const S=songSections(), i=S.indexOf(s); if(i<0) return; const fam=songFamily(), art=findArtist(PROJ.ref), hint=fam==='electronic'&&art?art.arr:null;
+  songEdit(()=>{ const tmp=S.map(x=>Object.assign({},x)); songAutoEnds(tmp,fam,hint,false); [i-1,i].forEach(j=>{ if(j>=0&&S[j]&&!S[j].end&&tmp[j].end) S[j].end=tmp[j].end; }); }); }
+/* one request = one undo step: song edits wait in memory (SONG.batch) and everything is saved once at the end.
+   Arrangement actions run after the parts they arrange, and playback after both */
+function orderActions(list){ const rank=a=>{ const t=a.type; return t==='arrange'?1:t==='section'||t==='parts'||t==='transition'?2:t==='loop_section'||t==='transport'||t==='export'||t==='sing'||t==='again'?3:0; };
+  return list.map((a,i)=>({a,i,r:rank(a)})).sort((x,y)=>x.r-y.r||x.i-y.i).map(x=>x.a); }
+/* actions whose whole effect is in the song (PROJ and the tempo), so "the undo history didn't move" means "nothing changed"; neutral ones (play, loop) never change it */
+const NOOP_PURE=new Set(['arrange','section','parts','transition','groove','hats','tempo','bars','key','style','instrument','quantize','transpose']), NOOP_NEUTRAL=new Set(['transport','loop_section']);
 /* which part of what the user said is about effect k: "set the chords reverb to 20 and add some delay" → "add some delay" for the delay.
    A half without a verb of its own ("…and delay to the chords") reads with the half before it. null when the effect isn't named. */
 const FX_WORDS={hp:/\b(low ?cut|high ?pass|rumble)\b/,lp:/\b(high ?cut|low ?pass)\b/,rev:/\b(reverb|verb|room|hall|space|wet|wetter|dry|drier)\b/,dly:/\b(delay|echo(es)?)\b/,duck:/\b(sidechain|side chain|pump\w*|duck\w*)\b/,drive:/\b(drive|saturat\w*|distort\w*|grit\w*|warm\w*)\b/,comp:/\b(compress\w*|glue|punch\w*)\b/,width:/\b(width|wide\w*|stereo|spread)\b/};
@@ -5439,14 +5788,27 @@ function fxPartSaid(text,t){ const FXW='reverb|verb|delay|echo|sidechain|side ch
   for(const c of cl){ const fw=off(c); if(fw&&!part(' '+c+' ')) return {fx:fw}; }
   return null; }
 function runActions(list){
-  const done=[]; let changed=false; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
+  const done=[], songDone=[], kinds=[]; let changed=false; BATCH={startBpm:CTRL.bpm,notes:[]}; if(typeof undoBoundary==='function') undoBoundary(); const last0=typeof UNDO!=='undefined'?UNDO.last:null;
   /* done.segs[i]: which half of a two-part sentence each result came from (offline "mute the drums and solo the bass") */
   done.segs=[]; const u0=typeof UNDO!=='undefined'?(UNDO.pushes||0):-1;
-  for(const raw of list||[]){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; try{ const r=ACT[a.type](a); if(r){ done.push(r); done.segs.push(a.seg); changed=true; } }catch(e){ console.warn('action failed',a,e); } }
+  const acts=orderActions((list||[]).map(normAction).filter(a=>a&&ACT[a.type])), before=songSnapshot();
+  SONG.batch=true; SONG.batchChip=null; BATCH.acting=true;
+  try{ for(const a of acts){ try{ const r=ACT[a.type](a); if(r){ done.push(r); done.segs.push(a.seg); kinds.push([a.type,r]); changed=true; if(SONG_ACTS.has(a.type)||(a.type==='transport'&&a.from!=null)) songDone.push(r); } }catch(e){ console.warn('action failed',a,e); } } }
+  finally{ BATCH.acting=false; }
+  /* new sections are numbered in song order once every action has run, so the AI's later actions still find "Drop 3" by the name it gave */
+  try{ if(BATCH.renum){ const ren=songRenumber(BATCH.renum); if(ren&&ren.size){ const d2=songRenamed(done,ren), s2=songRenamed(songDone,ren); done.splice(0,done.length,...d2); songDone.splice(0,songDone.length,...s2); BATCH.notes.forEach(n=>{ n.text=songRenamed([n.text],ren)[0]; }); } } }
+  finally{ SONG.batch=false; }
   if(changed){ saveProject(); renderTracks(); uiLoop(); }
   /* one request is one Undo step, even when a slow machine saves the parts more than 120 ms apart (QA, 16 Nov: "add a melody" left 2 steps).
      Count the steps this request pushed (the history drops its oldest step at 120, so its length can stay the same): keep the first, drop the rest. */
   const n=u0>=0?(UNDO.pushes||0)-u0:0; if(n>1&&UNDO.stack.length>1){ UNDO.stack.splice(Math.max(1,UNDO.stack.length-(n-1))); if(typeof undoButtons==='function') undoButtons(); }
+  /* a request whose edits changed nothing (it was already like that): the reply must not say "Done" or claim changes (QA fix 2) */
+  const edits=kinds.filter(([t])=>!NOOP_NEUTRAL.has(t));
+  if(changed&&last0!=null&&typeof UNDO!=='undefined'&&UNDO.last===last0&&edits.length&&edits.every(([t])=>NOOP_PURE.has(t))) BATCH.same=edits.filter(([t,r])=>/^(transition|parts)$/.test(t)&&!/\bstays\b/.test(r)).map(x=>x[1]).slice(0,2);
+  /* the song view flashes what changed and shows one Undo chip for the whole request; the reply bubble gets a small song map */
+  if(songDone.length){ const text=songDone.join(' · ').slice(0,180), after=songSnapshot(); let ch={sections:[],parts:[]};
+    if(after!==before) ch=songFlashDiff(before,text)||ch; else songChip(text,{undo:false});
+    BATCH.song={changed:[...new Set(ch.sections.concat(ch.parts.map(p=>p[0])))]}; }
   return done;
 }
 
@@ -5718,7 +6080,7 @@ const SRc=window.SpeechRecognition||window.webkitSpeechRecognition;
 const ASSIST={
   name:store.get('asName','Keys'), listening:false, voice:store.get('asVoice',true), hum:store.get('asHum',true),
   engine:null, rec:null, awakeUntil:0, speaking:false, busy:false, history:[], humNotes:[], humLast:0, speechAt:0,
-  say(msg,opts={}){ addBubble('as',msg,opts.chips); if(this.voice && opts.speak!==false) speak(msg); },
+  say(msg,opts={}){ addBubble('as',msg,opts.chips,opts.map); if(this.voice && opts.speak!==false) speak(msg); },
   run(text){ return handleRequest(text); },
   onMicNote(n,on){ if(ASSIST.listening||LOOP.state==='take') showSung(n,on); humNote(n,on); }
 };
@@ -5728,9 +6090,9 @@ function isSpeechy(text){ const w=(String(text).toLowerCase().match(/[a-z']+/g)|
 function showSung(n,on){ const box=$('#asNotes'); if(!box) return; if(on){ ASSIST.sung=(ASSIST.sung||[]).concat(n).slice(-14); }
   box.hidden=false; box.innerHTML=`<span class="as-mic${on?' live':''}">🎤 ${on?noteName(n):'listening'}</span>`+(ASSIST.sung||[]).map((x,i,a)=>`<i${i===a.length-1&&on?' class="now"':''}>${noteName(x)}</i>`).join('');
   clearTimeout(ASSIST.sungT); ASSIST.sungT=setTimeout(()=>{ if(!MIC.active&&LOOP.state!=='take'){ box.hidden=true; ASSIST.sung=[]; } },6000); }
-function addBubble(who,text,chips){
+function addBubble(who,text,chips,map){
   const box=$('#asChat'); const d=document.createElement('div'); d.className='bub '+who;
-  d.innerHTML=`<span class="who">${who==='me'?'You':esc(ASSIST.name)}</span><span>${esc(text)}</span>${chips&&chips.length?`<span class="done">${chips.map(c=>`<i>${esc(c)}</i>`).join('')}</span>`:''}`;
+  d.innerHTML=`<span class="who">${who==='me'?'You':esc(ASSIST.name)}</span><span>${esc(text)}</span>${chips&&chips.length?`<span class="done">${chips.map(c=>`<i>${esc(c)}</i>`).join('')}</span>`:''}${map||''}`;
   box.appendChild(d); while(box.children.length>14) box.firstChild.remove(); box.scrollTop=box.scrollHeight;
 }
 function setOrb(state,text){ const o=$('#asOrb'); o.dataset.state=state; $('#asStatus').textContent=text; }
@@ -5744,6 +6106,9 @@ function speak(msg){
     speechSynthesis.speak(u); }catch(e){ ASSIST.speaking=false; }
 }
 function afterSpeak(fn){ const t0=performance.now(); const w=()=>{ if(ASSIST.speaking&&performance.now()-t0<9000) return setTimeout(w,150); setTimeout(fn,250); }; w(); }
+/* the mini song map under a reply that changed the song (AI-1): blocks sized by bars, the changed ones outlined. The Undo is the chip in the song view */
+function songMapHTML(changed){ if(typeof songArranged!=='function'||!songArranged()) return ''; const S=songSections(), sh=S.length>4?songShortNames(S):null, ch=new Set(changed||[]);
+  return `<span class="as-map" role="img" aria-label="${esc('Song: '+S.map(s=>s.name+' '+s.bars+' bars').join(', '))}">${S.map(s=>`<i class="k-${s.kind}${ch.has(s.id)?' ch':''}" style="flex-grow:${s.bars}" title="${esc(s.name)} · ${s.bars} bars"><b>${esc(sh?sh[s.id]:s.name)}</b>${s.bars}</i>`).join('')}</span>`; }
 /* what to suggest next, one element at a time */
 function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
   if(!PROJ.tracks.length) return `Start with “drums”, name an artist, or hum an idea.`;
@@ -5751,9 +6116,18 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
   if(!has('bass')) return `Bassline next? Say “add a bassline”, or sing it: “let me sing the bassline”.`;
   if(!has('chords')) return `Chords next? Say “add chords”, or “let me sing the chords”.`;
   if(!has('melody')) return `A melody or hook next? Add one, or hum it while it plays.`;
-  return `Shape it with effects (“more reverb on the chords”), mix it, or download the MP3.`; }
+  if(typeof songArranged==='function'&&songArranged()){ const S=songSections(), n=k=>S.filter(s=>s.kind===k).length, out=S.find(s=>s.kind==='outro'), d=PROJ.tracks.find(t=>t.role==='drums');
+    /* a different pair each time, and only moves that still make sense for this layout */
+    /* never the move the user just asked for (QA fix 2: "make the break longer" got the tip "make the break longer") */
+    const u=normName(LAST_TEXT.text||''), just=[/\bbreak\b.*\b(longer|lamba|lambi|extend)|\b(longer|extend)\b.*\bbreak\b/,/\b(second|2nd|another|one more|dusra|ek aur)\b.*\bdrop\b|\bdrop 2\b/,/\b(second|2nd|drop 2)\b.*\b(different|vary|change|alag)\b|\bdrop 2\b/,/\boutro\b.*\bdrums?\b|\bdrums?\b.*\boutro\b/,/\b(roll|riser|silence|gap|fill)\b/,/\bkick\b.*\bintro\b|\bintro\b.*\bkick\b/];
+    const ideas=[n('break')&&'“make the break longer”',n('drop')<2&&'“add a second drop”',n('drop')>=2&&'“make the second drop different”',out&&d&&out.parts[d.id]&&out.parts[d.id].on&&'“drop the drums in the outro”',n('drop')&&'“a snare roll before the drop”','“take the kick out of the intro”'].map((x,i)=>x&&!(u&&just[i].test(u))&&x).filter(Boolean);
+    if(!ideas.length) ideas.push('“play the whole song”'); const k=ASSIST.history.length%ideas.length;
+    const two=[ideas[k],ideas[(k+1)%ideas.length]].filter((x,i,a)=>x&&a.indexOf(x)===i);
+    return `Shape the song: ${two.join(', ')}, or download the MP3.`; }
+  return `Shape it with effects (“more reverb on the chords”), mix it, make it a full track, or download the MP3.`; }
 function projectState(){
-  return {name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:PROJ.key?keyName(PROJ.key):`auto (${keyName(projectKey())})`,style:PROJ.style||null,playing:TR.running,
+  /* the song layout first, so the Worker's 7,000-character cut never drops it */
+  return {arrangement:typeof songSummary==='function'?songSummary():null,name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:PROJ.key?keyName(PROJ.key):`auto (${keyName(projectKey())})`,style:PROJ.style||null,playing:TR.running,
     tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute,soloed:!!t.solo,generated:!!t.gen})),
     taste:TASTE.profile?{artists:(TASTE.profile.artists||[]).slice(0,12),styles:(TASTE.profile.styles||[]).map(s=>s.style),playlists:(TASTE.profile.playlists||[]).map(p=>p.name+(p.style?' ('+p.style+')':'')).slice(0,8)}:null,
     vibe:PROJ.ref||null,
@@ -5778,10 +6152,20 @@ async function handleRequest(text){
       done=runActions(j.actions||[]); reply=j.reply||'';
     }catch(e){ console.warn('assistant AI failed, using offline brain',e); const L=localBrain(text); done=runActions(L.actions); reply=brainReply(L,done); }
   } else { const L=localBrain(text); done=runActions(L.actions); reply=brainReply(L,done); }
+  /* the AI sometimes offers a riser or a filter sweep as the next step; the studio has neither yet (D3), so offer what it has */
+  if(reply&&!/\b(riser|sweep|uplifter)\b/i.test(text)) reply=reply.replace(/[^.!?]*\b(risers?|uplifters?|(?:filter |noise )?sweeps?)\b[^.!?]*\?/gi,()=>!songArranged()?'':/\broll/i.test(text)?' Want the second drop to be different?':' Want a snare roll into the drop?').replace(/\s+/g,' ').trim();
+  /* nothing changed (it was already like that): say so, or say why (an executor note), and keep the AI's question if it asked one (QA fix 2) */
+  if(BATCH.same){ const q=(reply.match(/[^.!?]*\?\s*$/)||[''])[0].trim(), why=(BATCH.notes||[]).map(n=>n.text); BATCH.notes=[];
+    reply=(why.length?why.join(' '):`It’s already like that, so nothing changed${BATCH.same.length?': '+BATCH.same.join(', '):''}.`)+' '+(q||nextStep()); }
+  /* what the executor knows and the AI didn't: a clamped length, a riser played as a roll, a missing part (AI-1) */
+  const notes=(BATCH.notes||[]).filter(n=>!(n.unless&&n.unless.test(reply))).map(n=>n.text);
+  if(reply&&notes.length) reply=reply.replace(/\s*$/,'')+' '+notes.join(' ');
+  else if(!reply&&!done.length&&notes.length) reply=notes.join(' ');
   /* while a sung take is about to start, no next-step hint: the part doesn't exist yet, and the hint would suggest singing it again */
-  if(!reply) reply=done.length?'Done: '+done.join(', ')+'.'+(BATCH.take?'':' '+nextStep()):`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
+  if(!reply) reply=done.length?('Done: '+done.join(', ')+'.'+(notes.length?' '+notes.join(' '):'')+(BATCH.take||notes.some(n=>/\bSay “/.test(n))?'':' '+nextStep())).trim():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
   ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false; LAST_TEXT.text='';
-  if(BATCH.take){ ASSIST.say(reply,{chips:done,speak:false}); if(ASSIST.voice) speak('Sing after the count-in.'); } else ASSIST.say(reply,{chips:done}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());
+  const map=BATCH.song?songMapHTML(BATCH.song.changed):'';
+  if(BATCH.take){ ASSIST.say(reply,{chips:done,speak:false,map}); if(ASSIST.voice) speak('Sing after the count-in.'); } else ASSIST.say(reply,{chips:done,map}); if(!ASSIST.voice) setOrb(ASSIST.listening?'listening':'idle',idleText());
   if(BATCH.take){ const part=BATCH.take; LAST_TAKE.part=part; afterSpeak(()=>TAKE.start(part)); }
 }
 /* the offline reply: a two-part sentence's reply is built after its actions ran, so it can say what each half did or skipped */
