@@ -40,7 +40,7 @@ function setKey(k){
   $('#keySel').value=k?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks();
 }
 $('#keySel').innerHTML='<option value="">Key: auto</option>'+['major','minor'].map(m=>PC_NAMES.map((n,i)=>`<option value="${i}:${m}">${n} ${m}</option>`).join('')).join('');
-$('#keySel').addEventListener('change',e=>{ const v=e.target.value; setKey(v?{tonic:+v.split(':')[0],mode:v.split(':')[1]}:null); });
+$('#keySel').addEventListener('change',e=>{ const v=e.target.value; PROJ.keyBy=v?'you':undefined; setKey(v?{tonic:+v.split(':')[0],mode:v.split(':')[1]}:null); }); /* keyBy: a key you chose stays when you sing (UX-14) */
 $('#barsSel').addEventListener('change',e=>setBars(+e.target.value));
 $('#projName').addEventListener('input',e=>{ PROJ.name=e.target.value.slice(0,60)||'Untitled song'; saveProject(); });
 $('#addBars').onclick=()=>setBars(PROJ.bars*2);
@@ -269,11 +269,12 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     if(part==='voice'){ const n=PROJ.tracks.filter(t=>/^Voice note/.test(t.name)).length+1; const at=makeTrack({kind:'audio',role:'voice',inst:null,name:'Voice note '+n,events:[],cyc:0,start:0,trim:0}); PROJ.tracks.push(at); AUD.set(at.id,makeBuf(pcm,sr)); IDB.put('aud:'+at.id,{sr,data:pcm},'audio').catch(()=>{});
       this.chunks=[]; this.notes=[]; LOOP.state='playing'; saveProject(); renderTracks(); uiLoop(); $('#micStatus').textContent=`Saved “${at.name}”.`; this.backSong();
       ASSIST.say(`Saved “${at.name}”. It plays with the loop. Say “${ASSIST.name}, turn the voice note into a bassline” to play it on an instrument.`,{chips:[at.name]}); return; }
-    /* the key follows the singing when nothing else sets it: no key yet, or only a style's default key and no other part with
-       notes (drums only), and the take clearly sits in another key. The take itself is never moved to a key (UX-14) */
+    /* the key follows the singing when nothing else sets it: no key yet, or only a style's or artist's key (not one you chose)
+       with no other part with notes (drums only), and the take clearly sits in another key. The take itself is never moved
+       to a key (UX-14) */
     const others=PROJ.tracks.some(t=>t.kind==='notes'&&t.take!==part&&t.role!=='drums'&&!(INST.get(t.inst)||{}).drums&&t.events.length);
     if(notes.length>=3){ const k=part==='chords'?chordKey(notes,null):detectKey(notes);
-      if(k&&(!PROJ.key||!others&&keyFit(notes,PROJ.key)<0.85&&keyFit(notes,k)>=0.9)){ PROJ.key=null; setKey(k); } }
+      if(k&&(!PROJ.key||PROJ.keyBy!=='you'&&!others&&keyFit(notes,PROJ.key)<0.85&&keyFit(notes,k)>=0.9)){ PROJ.key=null; setKey(k); } }
     notes=shapePart(notes,part,PROJ.key);
     notes.forEach(e=>e.cyc=0);
     const prevTake=PROJ.tracks.find(t=>t.take===part), prevParts=prevTake?JSON.stringify(songSections().map(s=>[s.id,s.parts[prevTake.id]])):null;

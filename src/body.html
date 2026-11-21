@@ -295,7 +295,7 @@
   <!-- SING -->
   <section class="panel voice" id="sing" aria-labelledby="voiceH">
     <div class="panel-head"><h2 id="voiceH">Sing to play</h2><span class="tag">Microphone</span></div>
-    <p class="lede">Sing or hum one note at a time. Studio Keys finds the pitch, shows the note and plays it on your sound. To put a melody into your song, hum to the assistant, or press “Record a sung take” in the Studio to sing over the beat: your notes become a track and your voice is saved as its own track. Use headphones so the speakers don’t feed back into the mic.</p>
+    <p class="lede">Sing or hum one note at a time. Studio Keys finds the pitch, shows the note and plays it on your sound. To put a melody into your song, hum to the assistant, or press “Record a sung take” in the Studio to sing over the beat: your notes become a track, kept as you sang them. Use headphones so the speakers don’t feed back into the mic.</p>
     <div class="voice-grid">
       <div class="notecard">
         <div class="row" style="justify-content:space-between"><span class="lbl-sm" style="color:var(--signal)">Detected note</span><span id="micHz">— Hz</span></div>
@@ -310,7 +310,7 @@
           <label class="hint" for="micZone">Play on <select class="select inline" id="micZone"><option value="keys">Keys sound</option><option value="pads">Pads sound</option><option value="none">Nothing (show notes only)</option></select></label>
           <label class="hint" for="micOct">Octave <select class="select inline" id="micOct"><option value="-24">−2</option><option value="-12">−1</option><option value="0" selected>0</option><option value="12">+1</option><option value="24">+2</option></select></label>
           <label class="hint" for="micSens">Sensitivity <input type="range" id="micSens" min="0" max="100" value="60" style="width:110px"></label>
-          <label class="hint" for="micSnap"><input type="checkbox" id="micSnap" checked> Snap to the song’s key</label>
+          <label class="hint" for="micSnap" title="For playing live here. Sung takes and hums always keep the notes you sang."><input type="checkbox" id="micSnap" checked> Snap live notes to the key</label>
         </div>
         <div class="status" id="micStatus">Microphone off.</div>
         <canvas id="micRoll" aria-label="Sung notes over the last 8 seconds"></canvas>
