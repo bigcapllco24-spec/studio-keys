@@ -318,7 +318,7 @@ async function saveNamed(quiet){
     DETACH=null; store.set('detached',null); } /* Save after deleting the open song puts it back (QA, 16 Nov); quiet saves keep skipping */
   /* the record is taken now, before any wait, so it can't pick up a song opened or copied meanwhile */
   const key=PROJ.id, rec={key,name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,song:songArranged()?songLenText():null,tracks:PROJ.tracks.length,savedAt:Date.now(),proj:Object.assign(serialize(PROJ),{bpm:CTRL.bpm})};
-  if(quiet&&!rec.tracks){ let ex=null; try{ ex=await IDB.get(key,'projects'); }catch(e){} if(!ex) return false; } /* an untouched new song doesn't go into the list */
+  if(quiet&&!rec.tracks){ let ex=null; try{ ex=await IDB.get(key,'projects'); }catch(e){} if(!ex){ if(PROJ.id===key) $('#saveState').textContent='Saves automatically'; return false; } } /* an untouched new song doesn't go into the list (and never stays on "Saving…", UX-18) */
   try{ await IDB.put(key,rec,'projects'); SAVE_FAIL=''; if(PROJ.id!==key) return true;
     $('#saveState').textContent='Saved '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); if(!quiet) toast(`Saved “${rec.name}”`); return true; }
   catch(e){ SAVE_FAIL=(e&&e.message)||'storage is blocked'; if(PROJ.id===key) $('#saveState').textContent='Not saved'; if(!quiet) toast('Couldn’t save in this browser: '+SAVE_FAIL); return false; }
