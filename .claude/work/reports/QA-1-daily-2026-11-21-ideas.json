@@ -1,0 +1,14 @@
+[
+  {
+    "text": "Name the chords you want: \"make the chords Am F C G\", \"i–VI–III–VII\" or \"Fm Db Ab Eb\", and Keys plays exactly those, voiced for the style, with the bass and melody following.",
+    "why": "Producers often know the progression in their head, or took it from a song they love (the owner's free pass). Today named chords are ignored and you get random ones on a new track. It's the fastest way to \"make the song in my head\" without singing."
+  },
+  {
+    "text": "\"Another one, but keep the kick and clap\": re-roll only some drum sounds and lock the rest (keep the kick, new hats; keep the groove, new percussion).",
+    "why": "A melodic-house producer usually likes the kick/clap pocket and wants fresh hats or percussion. Today \"another one\" rolls the whole kit (78-98% of hits kept in my runs, but the producer can't choose which ones), so a good kick pattern gets lost to a better shaker."
+  },
+  {
+    "text": "After a sung take, show the sung pitch line faintly behind the notes in the editor, and mark the notes that were moved to the key, so the singer can drag a note back to what they sang.",
+    "why": "The owner's top complaint is that sung parts don't keep his notes. Even with UX-10/UX-14, key-snapping and quantizing will move some notes (40% of the fixture's notes moved in F minor). Seeing what was heard against what was kept builds trust, and fixing a note becomes one drag."
+  }
+]

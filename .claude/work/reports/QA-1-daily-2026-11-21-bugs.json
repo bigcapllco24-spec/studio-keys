@@ -1,0 +1,44 @@
+[
+  {
+    "area": "assistant",
+    "severity": "high",
+    "text": "\"New chords\" doesn't change the chords once there's a melody. Keys replies \"New chord progression (i–vi–i–vii); bass and melody follow it\", and the bass and melody are rewritten for the new progression, but the Chords part stays note-for-note the same. The chords now clash with the bass and melody, and the reply is wrong. It happens for \"new chords\", \"different chords\", \"try other chords\", \"another chord progression\" and \"give me another one on the chords\", in Loop and Song view. Without a melody it works.",
+    "steps": "1. New song. Type \"make a beat like Ben Böhmer\", then \"add a bassline\", \"add some chords\", \"add a melody\".\n2. Type \"new chords\" 5 times.\n3. Open the Chords editor after each one.\nResult: the Chords notes are identical all 5 times (bars: Ab-C-Eb-F-G, Ab-C-Eb-F-G, Ab-C-Db-F-Eb, G-Bb-Db-Eb-F). The progression goes [0,0,5,6] → [0,5,0,6] → [0,3,6,5] → [0,5,3,4] → [0,3,4,0] → [0,6,5,6], and the bass (and melody) follow each one.\nWith only drums, bass and chords, \"new chords\" does change the chords.\nLikely cause: `vary` (src/actions.js) regenerates the gen parts in track order, and `chordPlan()` (src/music.js) builds the chords from `melodyNotes()`, so they are fitted to the old melody before the melody is redone. Owners: assistant-dev (actions.js), sound-engine-dev (music.js)."
+  },
+  {
+    "area": "assistant",
+    "severity": "high",
+    "text": "Asking to change a part adds a second copy of it, and the old one keeps playing. The standards say \"replace only when the user says replace or change\", but the offline brain sends add_chords/add_melody and makes a new track. Examples: \"change the chords\", \"replace the chords\", \"change the melody\", \"change the chords to something happier\", \"make the chords shorter\", \"make the chords longer\", \"make the chords warmer\", \"the melody is too busy\", \"put the chords on a piano\" (adds a Grand Piano track instead of moving the chords to piano). After a few comments the 4-part loop had Chords, Chords 2, Chords 3, Chords 4, Grand Piano, Melody and Melody 2 all playing together. This is close to AI-9 (one comment should change only that part), so fold it in if you prefer, but it's a separate fix in the parser: change/replace means replace.",
+    "steps": "1. New song: \"make a beat like Ben Böhmer\", \"add a bassline\", \"add some chords\", \"add a melody\".\n2. Type \"change the chords\".\nResult: Keys says \"Chords 2 (new track) on Deep Pad\". Both chord tracks play.\n3. Type \"make the chords shorter\" → Chords 3. \"the melody is too busy\" → Melody 2. \"put the chords on a piano\" → a new Grand Piano track (the original Chords stay on Deep Pad).\nCompare: \"switch the bass to an 808\" correctly changes the bass instrument and adds nothing. \"change the bass\" correctly replaces the bassline.\nOwner: assistant-dev (src/maker.js, src/actions.js addPart)."
+  },
+  {
+    "area": "studio",
+    "severity": "medium",
+    "text": "In the Ableton zip, the stems don't add up to the Mix. Each stem goes through the master glue and limiter on its own. Dropped together into Ableton at 0 dB (what the README suggests), they peak at +6.0 dBFS (clipping) and sound 1.8 dB louder and more squashed than Mix.wav. What's left after subtracting the summed stems from the mix is only 9.6 dB below the mix.",
+    "steps": "1. Make a 4-part loop (Stephan Bodzin drums, bassline, chords, plus a voice note turned into notes and a bassline).\n2. Click Export for Ableton (.zip).\n3. Sum Stems/*.wav and compare with \"… Mix.wav\".\nResult: Mix.wav peaks at -0.52 dBFS (RMS -6.56 dB). The summed stems peak at +6.04 dBFS (RMS -4.79 dB). The drums stem alone (RMS -6.00 dB) is louder than the whole mix.\nShould: the stems sum back to the mix (render them with the master bus as a fixed gain, or without the master dynamics, and say so in the README).\nOwners: studio-ux-dev (exportZip in src/studio.js), sound-engine-dev (render graph/master chain)."
+  },
+  {
+    "area": "assistant",
+    "severity": "low",
+    "text": "\"Keys, stop listening\" stops the music instead of the listening. With \"Always listening for my name\" on, saying or typing \"stop listening\" (or \"keys stop listening\") becomes a transport stop. The mic stays open, a recogniser is still running, and the box stays ticked, so you can't turn hands-free listening off by voice. \"turn off the mic\" does nothing.",
+    "steps": "1. Tick \"Always listening for my name\".\n2. Type (or say) \"stop listening\".\nResult: localBrain → transport stop. MIC.on is still true, 1 live recogniser, ASSIST.listening is still true, the box is still ticked.\nOwner: assistant-dev (src/maker.js; the AI prompt has no action for this either)."
+  },
+  {
+    "area": "assistant",
+    "severity": "low",
+    "text": "\"Make the drums busier\" at the top energy level changes nothing but replies as if it did (\"Done: Groove: four-to-the-floor kick…\"). On a Stephan Bodzin full track, the very first \"make the drums busier\" left every drum hit the same. In a loop, after one step, 5 more requests in a row each changed 0 hits (188 → 188). AI-6 already gave \"punchier\" an honest \"already at the max\" reply; busier needs the same.",
+    "steps": "1. \"make a beat like Ben Böhmer\".\n2. Type \"make the drums busier\" 6 times.\nResult: after the first one, recipe energy stays at 5 and the hits stay at 188, but every reply says \"Done: Groove: …\".\nOwner: assistant-dev (ACT.groove in src/actions.js)."
+  },
+  {
+    "area": "assistant",
+    "severity": "low",
+    "text": "Questions and named chords about the chords add a new random Chords track. \"which chords are these\" adds a chord part. \"make the chords Am F C G\" and \"chords: Fm Db Ab Eb\" ignore the chord names and add another generated Chords track.",
+    "steps": "1. A 4-part loop (Böhmer drums, bass, chords, melody).\n2. Type \"which chords are these\".\nResult: add_chords, so a new \"Chords 2\" track plays on top.\n3. Type \"make the chords Am F C G\".\nResult: add_chords with no progression, so you get random chords and the named ones are ignored.\nOwner: assistant-dev (src/maker.js). See idea 1 for actually playing named chords."
+  },
+  {
+    "area": "studio",
+    "severity": "low",
+    "text": "The Studio header jumps every time the song autosaves. At 1400 and 1600 px wide, the save status \"Saved 11:52 PM\" is wider than \"Saving…\" or \"Not saved\", so the New song / Open / Save / Download MP3 / Export buttons wrap to a second line. Everything below, the Keys box included, moves 37 px down and back up with each Saving… → Saved flip while you work.",
+    "steps": "1. Window 1400 px wide. Make any beat.\n2. Watch the Keys input while the song saves.\nResult: the Keys input top is at y=1105 with \"Saving…\"/\"Not saved\" and y=1142 with \"Saved 11:52 PM\" (measured). At 1280 px the buttons are always on two lines, so nothing jumps.\nShould: give the status a fixed width (or keep the buttons on one line).\nScreenshots: shots/e05-reopened.png (wrapped) vs shots/e06-deleted-open.png (one line).\nOwner: studio-ux-dev (src/head.html, src/body.html)."
+  }
+]

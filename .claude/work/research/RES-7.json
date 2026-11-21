@@ -1,0 +1,190 @@
+{
+ "id": "RES-7",
+ "title": "Ableton-style UI, music ducking while you talk, and a better AI brain",
+ "for": [
+  "studio-ux-dev",
+  "assistant-dev",
+  "sound-engine-dev",
+  "lead"
+ ],
+ "question": "A (UX-16): which 5-6 interface elements make a DAW feel pro and fast, ranked for Studio Keys, with the smallest change for each. B (AI-10): how voice assistants, DJ talkover and DAWs duck music, and the browser defaults to use. C (AI-11): stronger text models on Workers AI and Claude, cost per 100 requests, and which 2 to test.",
+ "bottomLine": "A: Studio Keys reads as a scrolling web page; the biggest Ableton win is a one-screen studio frame (thin control bar, dense track lanes, a bottom Clip/Device panel, the controller in a drawer), shipped in 6 small steps. B: duck the music about -15 dB in 60-80 ms when 'Keys' is heard, hold it through the command and the reply, release over about 0.8 s, never duck during a recorded take, and feed Web Speech an echo-cancelled mic track (Chrome 135+). C: test gpt-oss-120b on Workers AI (free tier, about $0.20 per 100 requests, the same as Llama today) against Claude Haiku 5.5 (already wired in; owner's key; about $0.02-0.06 per 100 requests); DeepSeek V4.1 Flash is the reserve if the owner has Workers Paid; avoid Kimi K2.6, Nemotron 3 and GLM-5.3-flash (planned deprecation 20 Nov 2026 has passed).",
+ "findings": [
+  "Live 12 is one fixed window: Control Bar on top, Browser on the left, Session/Arrangement in the centre, Clip/Device detail at the bottom, Info View bottom-left; themes are neutral and matte, and colour lives on tracks and clips.",
+  "Bitwig toggles panels with single keys from footer icons and has an Inspector for the selected item; FL Studio's Hint Bar explains whatever is under the mouse.",
+  "Studio Keys at 1440x900: the first screen is the hardware controller, and the DAW starts about 820 px down. Tracks are rounded cards (300 px header, 6 px gaps, 12 px radius), the mixer is 360 px horizontal cards, and transport controls are split over two rows.",
+  "Typical duck depths: Android -14 dB (factor 0.2); Pioneer DJM talkover -18 dB by default (range -6 to -24, with a mids-only Advanced mode); Home Assistant voice satellite -6 dB.",
+  "Voice-over ducking practice: attack 10-30 ms, release 300-700 ms; releases of 250 ms or less make the music bounce back between words. Cars should not unduck between an assistant's back-to-back phrases.",
+  "Music behind speech sharply raises recognition errors at 0-5 dB speech-to-music ratio (a clean-trained model went from 11% to 47-79% word errors); echo cancellation gives large gains for the device's own playback.",
+  "Chrome 135+ lets SpeechRecognition.start(track) take a getUserMedia track. Chrome's echo canceller removes the page's own Web Audio output on the default device, not other apps' audio. Today the app starts recognition on the raw mic.",
+  "Workers AI: 10,000 free neurons/day, then $0.011 per 1,000 neurons; Kimi, GLM-5.x and DeepSeek V4 models need Workers Paid. Per 100 requests (4.5k in + 300 out): Llama 3.3 $0.20, gpt-oss-120b about $0.20, Llama 4 Scout $0.15, Gemma 4 $0.05, Qwen3.8 $0.43, DeepSeek V4.1 Flash $0.17 ($0.04 cached), Kimi K2.6 $0.55.",
+  "Anthropic: Haiku 5.5 costs $0.10/$0.50 per million tokens ($0.06 per 100 requests, about $0.02 with prompt caching); Sonnet 5.5 costs $2/$10 ($1.20 per 100, about $0.35 cached). The Worker already supports Claude through ANTHROPIC_API_KEY."
+ ],
+ "recommendations": [
+  "UX-16 (studio-ux-dev): ship in this order: 1) one-screen frame at 1024 px and wider, with the controller as a drawer; 2) flat dense track lanes with colour only on clips; 3) a single 40 px control bar; 4) a bottom Clip/Device panel (Shift+Tab); 5) 76 px vertical mixer strips; 6) a 240 px browser sidebar plus a one-line hint strip. Phones keep the current tab bar.",
+  "AI-10 (sound-engine-dev): add a master 'duck' GainNode before the limiter, moved only with setTargetAtTime; -15 dB while the user talks, -10 dB while Keys speaks, 60-80 ms attack, 500 ms hold, about 0.8 s release; optional mid-cut style; never during a recorded take or count-in.",
+  "AI-10 (assistant-dev): duck on the first interim result containing 'Keys' or on an orb press; open an echo-cancelled assistant mic and call rec.start(track) on Chrome 135+, falling back to rec.start(); keep the singing mic with AEC off.",
+  "AI-11 (assistant-dev, lead): put the model behind a variable and run a 20-prompt side-by-side of gpt-oss-120b (reasoning_effort low) against Claude Haiku 5.5 (with prompt caching). Score valid JSON, correct actions, single-element edits and reply time; DeepSeek V4.1 Flash is the reserve if Workers Paid."
+ ],
+ "ideas": [],
+ "sources": [
+  {
+   "title": "Live Concepts",
+   "url": "https://www.ableton.com/en/live-manual/12/live-concepts/"
+  },
+  {
+   "title": "Working with the Browser",
+   "url": "https://www.ableton.com/en/live-manual/12/working-with-the-browser/"
+  },
+  {
+   "title": "Manual PDF (Info View, Themes)",
+   "url": "https://cdn-resources.ableton.com/resources/pdfs/live-manual/12/2026-04-30/live12-manual-en.pdf"
+  },
+  {
+   "title": "Live 12 Browser help",
+   "url": "https://help.ableton.com/hc/en-us/articles/12927340213660-The-Live-12-Browser"
+  },
+  {
+   "title": "Window footer",
+   "url": "https://www.bitwig.com/userguide/latest/the_window_footer"
+  },
+  {
+   "title": "Inspector panel",
+   "url": "https://www.bitwig.com/userguide/bws44-504/meet_inspector_panel"
+  },
+  {
+   "title": "Panels",
+   "url": "https://www.bitwig.com/userguide/latest/a_musical_swiss_army_knife"
+  },
+  {
+   "title": "Toolbar and hint bar",
+   "url": "https://www.image-line.com/fl-studio-learning/fl-studio-online-manual/html/toolbar_panels.htm"
+  },
+  {
+   "title": "Android AudioFocusRequest",
+   "url": "https://developer.android.com/reference/android/media/AudioFocusRequest"
+  },
+  {
+   "title": "Android Automotive volume management",
+   "url": "https://source.android.com/docs/automotive/audio/volume-management"
+  },
+  {
+   "title": "OHF linux-voice-assistant behaviour",
+   "url": "https://raw.githubusercontent.com/OHF-Voice/linux-voice-assistant/main/docs/behavior.md"
+  },
+  {
+   "title": "EchoMuse voice pipeline",
+   "url": "https://github.com/wilbowes/EchoMuse/blob/v2.19.0/docs/voice-pipeline.md"
+  },
+  {
+   "title": "Sonos patent US10582322B2",
+   "url": "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/10582322"
+  },
+  {
+   "title": "Pioneer DJM-V10 manual",
+   "url": "https://www.bhphotovideo.com/lit_files/775198.pdf"
+  },
+  {
+   "title": "Pioneer DJM-A9 manual",
+   "url": "https://impact-even.com/userfiles/files/telechargement/sonorisation/pioneer_djma9_manuel.pdf"
+  },
+  {
+   "title": "Mixgraph talkover",
+   "url": "https://www.mixgraph.io/glossary/talkover"
+  },
+  {
+   "title": "Sound On Sound: Duck Tales",
+   "url": "https://www.soundonsound.com/techniques/duck-tales"
+  },
+  {
+   "title": "MusicVivo music under voiceover",
+   "url": "https://musicvivo.com/blog/music-under-voiceover"
+  },
+  {
+   "title": "Infinite Creation ducking test",
+   "url": "https://infinitecreation.io/tutorial-ducking-music"
+  },
+  {
+   "title": "Chrome 135 release notes",
+   "url": "https://developer.chrome.com/release-notes/135"
+  },
+  {
+   "title": "MDN SpeechRecognition.start()",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/start"
+  },
+  {
+   "title": "MDN echoCancellation",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/API/MediaTrackConstraints/echoCancellation"
+  },
+  {
+   "title": "Chromium 40252911",
+   "url": "https://issues.chromium.org/issues/40252911"
+  },
+  {
+   "title": "Chromium 40504498",
+   "url": "https://issues.chromium.org/40504498"
+  },
+  {
+   "title": "react-speech-recognition #124",
+   "url": "https://github.com/JamesBrill/react-speech-recognition/issues/124"
+  },
+  {
+   "title": "Kyoto music-mixed ASR (APSIPA 2020)",
+   "url": "https://sap.ist.i.kyoto-u.ac.jp/EN/bib/intl/WOO-APSIPA20.pdf"
+  },
+  {
+   "title": "CMU music vs ASR (ICASSP 97)",
+   "url": "http://www.cs.cmu.edu/afs/cs/user/robust/www/Papers/icassp97-music.pdf"
+  },
+  {
+   "title": "Google ASR frontend with AEC",
+   "url": "https://arxiv.org/abs/2111.09935"
+  },
+  {
+   "title": "Workers AI pricing",
+   "url": "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+  },
+  {
+   "title": "Workers AI models",
+   "url": "https://developers.cloudflare.com/workers-ai/models/"
+  },
+  {
+   "title": "JSON mode",
+   "url": "https://developers.cloudflare.com/workers-ai/features/json-mode/"
+  },
+  {
+   "title": "gpt-oss-120b",
+   "url": "https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/"
+  },
+  {
+   "title": "llama-4-scout",
+   "url": "https://developers.cloudflare.com/workers-ai/models/llama-4-scout-17b-16e-instruct/"
+  },
+  {
+   "title": "gemma-4-26b-a4b-it",
+   "url": "https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/"
+  },
+  {
+   "title": "qwen3.8-27b",
+   "url": "https://developers.cloudflare.com/workers-ai/models/qwen3.8-27b/"
+  },
+  {
+   "title": "deepseek-v4.1-flash",
+   "url": "https://developers.cloudflare.com/workers-ai/models/deepseek-v4.1-flash-1017/"
+  },
+  {
+   "title": "kimi-k2.6",
+   "url": "https://developers.cloudflare.com/workers-ai/models/kimi-k2.6/"
+  },
+  {
+   "title": "nemotron-3-120b",
+   "url": "https://developers.cloudflare.com/workers-ai/models/nemotron-3-120b-a12b/"
+  },
+  {
+   "title": "Claude pricing",
+   "url": "https://platform.claude.com/docs/en/about-claude/pricing"
+  }
+ ],
+ "status": "done",
+ "at": "2026-11-21T18:30:00Z"
+}
