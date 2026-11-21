@@ -60,9 +60,10 @@ function melodyNotes(){ const out=[]; PROJ.tracks.forEach(t=>{ if(t.kind==='note
 function chordPlan(){
   const key=projectKey(), L=PROJ.bars*4, bars=L/4, mel=melodyNotes(), plan=[];
   const prog=(PROJ.prog&&PROJ.prog.length)?PROJ.prog:(key.mode==='minor'?[0,5,2,6]:[0,4,5,3]);
+  const hold=progHolds(PROJ.prog,bars);
   for(let b=0;b<bars;b++){
     const inBar=mel.filter(e=>e.b>=b*4&&e.b<b*4+4);
-    let deg=prog[b%prog.length];
+    let deg=prog[(hold?Math.floor(b/2):b)%prog.length];
     if(inBar.length && !PROJ.progLocked){ let best=-1; for(let d=0;d<7;d++){ if((key.mode==='major'&&d===6)||(key.mode==='minor'&&d===1)) continue;
       const pcs=triad(key,d); let s=(d===0?0.3:d===3||d===4?0.15:0); inBar.forEach(e=>{ if(pcs.includes(mod(Math.round(e.n),12))) s+=(e.d||0.5); }); if(s>best){ best=s; deg=d; } } }
     plan.push({deg,root:triad(key,deg)[0],pcs:triad(key,deg),sev:seventh(key,deg)});
@@ -70,7 +71,16 @@ function chordPlan(){
   return {key,plan};
 }
 function nearestAbove(pc,lo){ let n=lo-mod(lo,12)+pc; if(n<lo) n+=12; return n; }
-const PROGS={minor:[[0,5,2,6],[0,5,3,4],[0,6,5,6],[0,2,5,6],[0,3,6,5],[0,0,5,6],[0,5,0,6],[0,3,4,0]],major:[[0,4,5,3],[0,5,3,4],[0,3,4,4],[3,4,0,5],[0,4,3,4],[5,3,0,4]]};
+/* progressions as scale degrees (0 = tonic). The second half of each list came with SE-4 from RES-4 (the owner's PML
+   Chords For Life pack, scale degrees only, nothing copied): i VII iv VI, v VI i VII, VI III VII i, i v VI v, v VI VII i,
+   VI i VII v; major IV I, I iii V V, I IV vi IV. */
+const PROGS={minor:[[0,5,2,6],[0,5,3,4],[0,6,5,6],[0,2,5,6],[0,3,6,5],[0,0,5,6],[0,5,0,6],[0,3,4,0],
+    [0,6,3,5],[4,5,0,6],[5,2,6,0],[0,4,5,4],[4,5,6,0],[5,0,6,4]],
+  major:[[0,4,5,3],[0,5,3,4],[0,3,4,4],[3,4,0,5],[0,4,3,4],[5,3,0,4],[3,3,0,0],[0,2,4,4],[0,3,5,3]]};
+/* in the pack these progressions hold each chord for 2 bars of an 8-bar loop; here they do the same in loops of 8 bars or
+   more (a 4-bar loop plays one chord per bar). PROJ.progHold true/false overrides it. */
+const PROG_HOLD=new Set(['0,6,3,5','0,4,5,4','3,3,0,0','0,2,4,4','0,3,5,3']);
+function progHolds(prog,bars){ if(!prog||prog.length!==4||bars<8) return false; if(PROJ.progHold!=null) return !!PROJ.progHold; return PROG_HOLD.has(prog.join()); }
 function genBass(style,L,seed){
   const st=STYLES[style]||STYLES.house, {plan}=chordPlan(), ev=[], kick=pat((st.drums[36]||'x...x...x...x...'),0), r=rng(seed||5), pick=a=>a[Math.floor(r()*a.length)];
   const seqs=[[0,0,12,0],[0,12,0,7],[0,0,7,12],[0,12,10,7],[0,3,0,12]], seq=pick(seqs), off=pick([[2,6,10,14],[2,3,6,10,11,14],[2,6,7,10,14,15]]);
@@ -99,20 +109,68 @@ function genBass(style,L,seed){
   return ev;
 }
 function voice(pcs,lo=55){ return pcs.map(pc=>nearestAbove(pc,lo)).sort((a,b)=>a-b); }
+/* ---------- open chord voicings (SE-4) ----------
+   RES-4 measured the owner's PML chord pack (numbers only): a producer's chord is about 4 notes over 16 semitones
+   (14-40), root and fifth low, the third and colour notes an octave up; 70% plain triads, 15% add9, 12% sevenths.
+   A shape names the chord tones under the low root (low) and above it (up). The voicer puts the low root at C3 or
+   above (so chords never sit on the bassline), then places the upper tones in the octave that moves least from the
+   last chord, like a player's hands. Each new take picks a different shape, so "another one" changes the voicing too. */
+const VOICE_LO=48, VOICE_TOP=81;
+const VOICE_SHAPES={
+  held:[{low:['R','5'],up:['R','3'],c:69},{low:['R','5'],up:['3','5'],c:72},{low:['R','5'],up:['R','3','5'],c:70},{low:['R'],up:['5','R','3'],c:72}],
+  seventh:[{low:['R','5'],up:['7','3'],c:68},{low:['R'],up:['7','3','5'],c:70},{low:['R','5'],up:['3','7'],c:73}],
+  short:[{low:['R','5'],up:['R','3'],c:69},{low:['R'],up:['5','R','3'],c:69},{low:['R','5'],up:['3','5'],c:71}]
+};
+const VOICE_LAST={};
+function chordVoicer(key,fam,r){
+  const shapes=VOICE_SHAPES[fam]||VOICE_SHAPES.held, n=shapes.length; let si=Math.floor(r()*n);
+  if(si===VOICE_LAST[fam]) si=(si+1+Math.floor(r()*(n-1)))%n; VOICE_LAST[fam]=si;
+  const shape=shapes[si], memo={}; let prevUp=null;
+  /* colour per chord degree, the same each time it comes round: add9 about 15%, a 7th about 12%, otherwise plain.
+     Only colours that sound right on that chord: a 9th a whole tone above the root, a 7th on chords with a perfect fifth. */
+  const colourOf=c=>{ const rt=c.pcs[0], fifth=mod(c.pcs[2]-rt,12), nine=mod((SCALES[key.mode][(c.deg+1)%7]+key.tonic)%12-rt,12), x=r();
+    if(fam==='seventh') return x<0.3&&nine===2?'9':null;
+    if(x<0.15) return nine===2?'9':fifth===7?'7':null; if(x<0.27) return fifth===7?'7':nine===2?'9':null; return null; };
+  return c=>{
+    if(memo[c.deg]) return memo[c.deg];
+    const rt=c.pcs[0], iv={R:0,'3':mod(c.pcs[1]-rt,12),'5':mod(c.pcs[2]-rt,12),'7':mod(c.sev[3]-rt,12),'9':2};
+    const up=shape.up.slice(), col=colourOf(c);
+    if(col&&!up.includes(col)){ const j=up.indexOf('R'); if(j>=0) up[j]=col; else if(up.length<3) up.push(col); else { const k=up.indexOf('5'); if(k>=0) up[k]=col; } }
+    const R0=nearestAbove(rt,VOICE_LO), low=shape.low.map(k=>R0+iv[k]), minUp=Math.max(R0+10,Math.max(...low)+3);
+    const opts=up.map(k=>{ let p=minUp; while(mod(p-R0,12)!==iv[k]%12) p++; return [p,p+12]; });
+    let best=null, bs=1e9;
+    const avg=a=>a.reduce((s,x)=>s+x,0)/a.length;
+    for(let top=VOICE_TOP;top<=VOICE_TOP+6&&!best;top+=3){
+      const walk=(i,acc)=>{ if(i===opts.length){ const u=acc.slice().sort((a,b)=>a-b), hi=u[u.length-1], sp=hi-R0;
+          if(hi>top||sp<14||sp>24||new Set(u).size<u.length) return;
+          let s=prevUp?Math.abs(avg(u)-avg(prevUp))+0.5*Math.abs(hi-prevUp[prevUp.length-1]):Math.abs(avg(u)-shape.c);
+          s+=Math.max(0,sp-19)*0.4; for(let k=1;k<u.length;k++) if(u[k]-u[k-1]===1) s+=1.5;
+          if(s<bs){ bs=s; best=u; } return; }
+        opts[i].forEach(p=>{ acc.push(p); walk(i+1,acc); acc.pop(); }); };
+      walk(0,[]); }
+    if(!best) return memo[c.deg]=voice(c.pcs,57);
+    prevUp=best; return memo[c.deg]=low.concat(best).sort((a,b)=>a-b);
+  };
+}
 function genChords(style,L,seed,csOver){
-  const st=STYLES[style]||STYLES.house, cs=csOver||st.chordStyle, {plan}=chordPlan(), ev=[], r=rng(seed||9), rh=[[0,0.75,1.5],[0,0.75,1.5,2.5,3.25],[0.5,1.25,2,2.75,3.5],[0,1.5,2.25,3]][Math.floor(r()*4)];
+  const st=STYLES[style]||STYLES.house, cs=csOver||st.chordStyle, {key,plan}=chordPlan(), ev=[], r=rng(seed||9), rh=[[0,0.75,1.5],[0,0.75,1.5,2.5,3.25],[0.5,1.25,2,2.75,3.5],[0,1.5,2.25,3]][Math.floor(r()*4)];
+  /* every style voices its chords open (owner, SE-4 D1); rock keeps its power chords, which are open already */
+  const fam=cs==='seventh'?'seventh':/^(stabs|pulse8|plucks332|arp)$/.test(cs)?'short':'held', V=chordVoicer(key,fam,r);
+  let held=[];
   for(let bar=0;bar<L/4;bar++){
-    const c=plan[bar%plan.length], base=bar*4, notes=voice(st.chordStyle==='seventh'?c.sev:c.pcs,57);
+    const c=plan[bar%plan.length], base=bar*4, notes=V(c), same=bar>0&&plan[(bar-1)%plan.length].deg===c.deg;
     const hit=(b,d,v=0.75,ns=notes,strum=0)=>ns.forEach((n,i)=>ev.push({b:base+b+i*strum,d,n,v}));
+    /* a held pad over a chord that carries on (a 2-bar hold) is one long chord, not a re-attack */
+    const sustain=(d,v)=>{ if(same&&held.length){ held.forEach(e=>e.d+=4); return; } held=notes.map(n=>({b:base,d,n,v})); held.forEach(e=>ev.push(e)); };
     switch(cs){
       case 'stabs': [0.5,1.5,2.5,3.5].forEach(b=>hit(b,0.3,0.8)); break;
       case 'pulse8': for(let s=0;s<8;s++) hit(s/2,0.45,s%2?0.6:0.78); break;
       case 'seventh': hit(0,3.8,0.65,notes,0.03); break;
-      case 'pads': { const k=projectKey(), ninth=(SCALES[k.mode][(c.deg+1)%7]+k.tonic)%12; [...voice(c.sev,55),nearestAbove(ninth,67)].forEach(n=>ev.push({b:base,d:3.95,n,v:0.55})); break; }
+      case 'pads': sustain(3.95,0.55); break;
       case 'plucks332': rh.forEach((b,i)=>hit(b,0.35,i?0.65:0.8)); break;
-      case 'arp': { const ar=[...notes,notes[0]+12,notes[1]+12]; for(let s=0;s<16;s++) ev.push({b:base+s/4,d:0.22,n:ar[s%ar.length],v:s%4?0.6:0.82}); break; }
+      case 'arp': { const ar=notes.length>=5?notes:[...notes,notes[1]+12]; for(let s=0;s<16;s++) ev.push({b:base+s/4,d:0.22,n:ar[s%ar.length],v:s%4?0.6:0.82}); break; }
       case 'power': { const r=nearestAbove(c.root,40); for(let s=0;s<8;s++) hit(s/2,0.42,s%2?0.7:0.9,[r,r+7,r+12]); break; }
-      default: hit(0,3.9,0.65);
+      default: sustain(3.9,0.65);
     }
   }
   return ev;
