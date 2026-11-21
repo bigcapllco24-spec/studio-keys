@@ -428,7 +428,7 @@ try {
   ok('Stop right after a take\'s last beat cancels it: old take kept, mic off', stp.at != null && stp.fin === 0 && stp.st === 'stopped' && !stp.mic && stp.same, JSON.stringify(stp));
   // QA, 15 Nov (UX-10 fix 2): the first loop pass after a take plays every note of the new part that hasn't already ended when
   // the take is analysed (the scheduler had passed the opening notes), none twice and none inside the take pass
-  const cu = await E(async () => { const se = window.scheduleEvent, f = TAKE.finish, sch = []; let fE = null;
+  const cuT = await E(async () => { const se = window.scheduleEvent, f = TAKE.finish, sch = []; let fE = null;
     window.scheduleEvent = function (tr, e, t, d) { if (tr.take) sch.push({ e, t }); return se.apply(this, arguments); };
     TAKE.finish = function () { const x = f.apply(this, arguments); fE = A.ctx.currentTime; return x; };
     try { ASSIST.run('let me sing the bassline'); const s0 = performance.now();
@@ -438,7 +438,7 @@ try {
       for (const e of ev) { const T = t0 + (L + e.b) * s, end = T + e.d * s, hits = sch.filter(x => x.e === e && x.t >= T - 1e-3 && x.t < end);
         if (hits.length > 1) r.dbl++; if (end > fE + 0.07) { r.due++; if (!hits.length) r.missing.push(e.b); } }
       r.early = sch.filter(x => x.t < t0 + L * s - 1e-3).length; loopStop(); return r; } finally { window.scheduleEvent = se; TAKE.finish = f; } });
-  ok('the first pass after a take plays the new part\'s opening notes (none missed, none twice)', cu.n >= 4 && cu.due >= 1 && !cu.missing.length && !cu.dbl && !cu.early, JSON.stringify(cu));
+  ok('the first pass after a take plays the new part\'s opening notes (none missed, none twice)', cuT.n >= 4 && cuT.due >= 1 && !cuT.missing.length && !cuT.dbl && !cuT.early, JSON.stringify(cu));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
