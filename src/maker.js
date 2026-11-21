@@ -187,6 +187,8 @@ function partEditFix(t,raw){
   const sh=reshapeSaid(t);
   if(sh&&role!=='drums'||sh&&/^(simpler|busier)$/.test(sh)){ const A=[{type:'reshape',track:role,do:sh}], lv=levelFix(t.replace(/\b(simpler|simplify|simple|busier|less busy|too busy|more busy|shorter|longer)\b/g,' '));
     if(lv&&lv.actions&&lv.actions.length) A.push(...lv.actions); return {actions:A}; }
+  /* "happier chords", "make the melody darker": a new version that leans that way (bright/dark alone on a melody is its EQ, toneFix) */
+  if(role==='chords'&&moodSaid(t)&&!/\b(brighter|darker)\b.*\b(sound|tone|eq)\b/.test(t)&&!/\b(bright|brighter|dark|darker|dull|duller|muffled)\b/.test(t)) return {actions:[{type:'vary',track:'chords',mood:moodSaid(t)}]};
   const iw=(INST_WORDS.find(([k,re])=>re.test(t))||[])[0], fresh=/\b(redo|rework|rewrite|regenerate|new|different|other|fresh|try (some )?(other|different|something else))\b/.test(t);
   if(fresh||/\b(change|replace|swap( out)?|switch( up)?)\b/.test(t)){
     const inst=iw&&iw!==T.inst&&/\b(to|with|for|on|into|as|by)\b/.test(t)?{type:'instrument',track:role,instrument:role==='drums'&&iw==='bass808'?'kit808':iw}:null;

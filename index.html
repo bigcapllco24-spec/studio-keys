@@ -4916,6 +4916,8 @@ function partEditFix(t,raw){
   const sh=reshapeSaid(t);
   if(sh&&role!=='drums'||sh&&/^(simpler|busier)$/.test(sh)){ const A=[{type:'reshape',track:role,do:sh}], lv=levelFix(t.replace(/\b(simpler|simplify|simple|busier|less busy|too busy|more busy|shorter|longer)\b/g,' '));
     if(lv&&lv.actions&&lv.actions.length) A.push(...lv.actions); return {actions:A}; }
+  /* "happier chords", "make the melody darker": a new version that leans that way (bright/dark alone on a melody is its EQ, toneFix) */
+  if(role==='chords'&&moodSaid(t)&&!/\b(brighter|darker)\b.*\b(sound|tone|eq)\b/.test(t)&&!/\b(bright|brighter|dark|darker|dull|duller|muffled)\b/.test(t)) return {actions:[{type:'vary',track:'chords',mood:moodSaid(t)}]};
   const iw=(INST_WORDS.find(([k,re])=>re.test(t))||[])[0], fresh=/\b(redo|rework|rewrite|regenerate|new|different|other|fresh|try (some )?(other|different|something else))\b/.test(t);
   if(fresh||/\b(change|replace|swap( out)?|switch( up)?)\b/.test(t)){
     const inst=iw&&iw!==T.inst&&/\b(to|with|for|on|into|as|by)\b/.test(t)?{type:'instrument',track:role,instrument:role==='drums'&&iw==='bass808'?'kit808':iw}:null;
@@ -5493,7 +5495,9 @@ function onePart(list){
   if(G.size) for(let i=out.length-1;i>=0;i--){ const ty=out[i].type; if(ty==='key'&&!/\bkey\b|\b[a-g](?:#|b| sharp| flat)? ?(major|minor)\b/.test(lc)||ty==='tempo'&&!/\b(bpm|tempo|faster|slower|speed)\b/.test(lc)||ty==='bars'&&!/\bbars?\b|\bloop\b/.test(lc)) dropped.push(...out.splice(i,1)); }
   /* "add a bassline and give me another one": the AI's vary of the drums becomes another bassline */
   const tgt=added.size===1?[...added][0]:G.size===1?[...G][0]:null;
-  if(dropped.length&&again&&tgt&&tgt!=='voice'&&!out.some(a=>a.type==='vary'&&actRole(a)===tgt)){ const T=partTrack(tgt); if(T||added.has(tgt)) out.push({type:'vary',track:tgt}); }
+  if(dropped.length&&tgt&&tgt!=='voice'&&!out.some(a=>PART_ACTS.has(a.type)&&actRole(a)===tgt)){ const T=partTrack(tgt), sh=reshapeSaid(lc);
+    if(sh&&T) out.push({type:'reshape',track:T.id,do:sh}); /* "make the bass simpler" sent as a simpler drum groove: the bass gets simpler */
+    else if(again&&(T||added.has(tgt))) out.push({type:'vary',track:tgt}); }
   if(dropped.length) BATCH.guarded=dropped.map(a=>a.type+':'+actRole(a));
   return out.filter(a=>a.type!=='noop'); }
 /* add_bass/add_chords/add_melody about a part that is already there, with no add word: change that part in place */
@@ -5503,9 +5507,12 @@ function inPlace(a,text,named){ const m=/^add_(bass|chords|melody)$/.exec(a.type
   const inst=a.instrument&&resolveInst(a.instrument,role==='bass'?'bass':'keys');
   if(inst&&inst!==T.inst&&!/\b(new|different|other|fresh|regenerate|rewrite|simpler|busier)\b/.test(lc)) return {type:'instrument',track:T.id,instrument:inst};
   const sh=reshapeSaid(lc); if(sh) return {type:'reshape',track:T.id,do:sh};
-  if(CHANGE_SAID.test(lc)&&!inst) return {type:'vary',track:T.id,mood:moodSaid(lc)||a.mood};
+  /* tone words sent as a new part ("make the chords warmer"): an EQ step on that part, same notes */
+  const tone=/\b(warm(er|th)?)\b/.test(lc)?{high:-3,low:2}:/\b(bright(er)?|more air|sparkl\w*)\b/.test(lc)?{high:3}:/\b(dark(er)?|duller|mellow(er)?)\b/.test(lc)&&!/\b(new|different|change|replace)\b/.test(lc)?{high:-3}:null;
+  if(tone) return {type:'mix',track:T.id,eq:tone};
+  if((CHANGE_SAID.test(lc)||role==='chords'&&moodSaid(lc))&&!inst) return {type:'vary',track:T.id,mood:moodSaid(lc)||a.mood};
   return Object.assign({},a,{replace:true}); }
-const reshapeSaid=t=>/\b(simpler|simplify|simple|less busy|too busy|not so busy|fewer notes|less notes|sparser|sparse|thin (it|them) out|strip(ped)? (it |them )?back|calmer|minimal)\b/.test(t)?'simpler':/\b(busier|more busy|more notes|denser|fuller|more movement|more going on|more active|livelier|more rhythm(ic)?)\b/.test(t)?'busier':/\b(shorter|staccato|choppier|chopp?(ed|y)|short notes|plucky|punchier notes)\b/.test(t)?'shorter':/\b(longer|legato|held|sustained|smoother|long notes|hold (them|it|the [a-z]+))\b/.test(t)?'longer':null;
+const reshapeSaid=t=>/\b(busy|zyada|jyada) (karo|kar do|kardo)\b/.test(t)?'busier':/\b(simpler|simplify|simple|less busy|too busy|not so busy|fewer notes|less notes|sparser|sparse|thin (it|them|this|that) out|thin out|thin down|strip(ped)? (it |them )?back|calmer|minimal)\b/.test(t)?'simpler':/\b(busier|more busy|more notes|denser|fuller|more movement|more going on|more active|livelier|more rhythm(ic)?)\b/.test(t)?'busier':/\b(shorter|staccato|choppier|chopp?(ed|y)|short notes|plucky|punchier notes)\b/.test(t)?'shorter':/\b(longer|legato|held|sustained|smoother|long notes|hold (them|it|the [a-z]+))\b/.test(t)?'longer':null;
 const moodSaid=t=>/\b(happ(y|ier)|bright(er)?|uplifting|major|hopeful|cheer(ful|ier)|positive|euphoric)\b/.test(t)?'happier':/\b(sad(der)?|dark(er)?|moody|moodier|melanchol\w*|emotional|minor|deeper)\b/.test(t)?'darker':null;
 /* a new progression for "new chords": differs from the chords playing now, fits the melody that stays (generated or the
    user's), and leans happier or darker when asked */
@@ -5615,7 +5622,8 @@ const ACT={
     t.events=y; t.art=how; return `${t.name}: ${how==='shorter'?'shorter, tighter notes':'longer, held notes'}, same ${t.role==='chords'?'chords':'notes'}`; },
   /* the part as it was before its last change ("go back to the previous chords", "no, the other one"); the rest of the song stays */
   revert(a){ const t=findTrack(a.track)||(ASSIST.focus&&partTrack(ASSIST.focus))||null; let i=VERSIONS.length-1;
-    if(t){ while(i>=0&&!VERSIONS[i].tracks[t.id]) i--; } if(i<0||!t){ songNote(t?`There’s no earlier ${ROLE_TXT[t.role]||t.name} this session to go back to. Say “undo” to take back the last change.`:'Which part should go back? Say “go back to the previous bassline”, for example.'); BATCH.declined=true; return; }
+    /* a version that sounds like the part does now (after an Undo, say) is skipped */
+    if(t){ const cur=partSig(t); while(i>=0&&(!VERSIONS[i].tracks[t.id]||partSig(VERSIONS[i].tracks[t.id])===cur)) i--; } if(i<0||!t){ songNote(t?`There’s no earlier ${ROLE_TXT[t.role]||t.name} this session to go back to. Say “undo” to take back the last change.`:'Which part should go back? Say “go back to the previous bassline”, for example.'); BATCH.declined=true; return; }
     const v=VERSIONS.splice(i,1)[0], ids=[t.id].concat(t.role==='chords'?Object.keys(v.tracks).filter(id=>id!==t.id&&v.follow&&v.follow.includes(id)):[]);
     ids.forEach(id=>{ const T=PROJ.tracks.find(x=>x.id===id); if(T) Object.assign(T,JSON.parse(JSON.stringify(v.tracks[id]))); });
     if(t.role==='chords'&&v.prog!==undefined){ PROJ.prog=v.prog; PROJ.progLocked=v.locked; } BATCH.reverted=true;
@@ -5635,7 +5643,7 @@ const ACT={
     if(t && a.mode!=='add'){ t.events=list; t.inst=inst; } else if(t){ t.events.push(...list); } else t=addTrack({role,inst,name:a.track&&!/^(melody|bass|chords)$/i.test(a.track)?String(a.track).slice(0,30):ROLE_NAME[role],events:list});
     return `${list.length} notes on ${t.name}`; },
   instrument(a){ const t=findTrack(a.track); if(!t||t.kind!=='notes') return; const id=resolveInst(a.instrument||a.value,t.role==='drums'?'drums':t.role==='bass'?'bass':null); if(!id) return;
-    const I=INST.get(id); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); t.inst=id; return `${t.name} now on ${I.name}`; },
+    const I=INST.get(id); if(id===t.inst){ songNote(`${t.name} is already on ${I.name}.`); BATCH.declined=true; return; } if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); t.inst=id; return `${t.name} now on ${I.name}, same notes`; },
   mix(a){ const sw=a.mute!=null&&a.volume==null&&a.change==null&&a.db==null&&songArranged()&&secSaid(); /* "drop the drums in the outro" sent as a mute: that is one section, not the whole song */
     if(sw) return ACT.parts({section:sw,[a.mute?'out':'in']:[a.track]});
     const ref=String(a.track||'').toLowerCase().trim();
