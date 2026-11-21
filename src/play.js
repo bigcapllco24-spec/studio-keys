@@ -1,7 +1,10 @@
 
 /* ---------- voice manager (keys and pads zones, looper capture) ---------- */
-const active=new Map(), sustained=new Set(), pressed=new Map();
+const active=new Map(), sustained=new Set(), pressed=new Map(), sostHeld=new Set();
+/* sustain: the pedal (CC 64), the on-screen Sustain button (a latch) and sostenuto (CC 66, holds only the notes down when it is pressed) */
+const SUS={pedal:false,latch:false,sost:false};
 let sustainOn=false;
+const holdsVoice=v=>!v.oneShot && (sustainOn || (SUS.sost && sostHeld.has(v)));
 const CURVES={soft:v=>Math.pow(v,0.6),linear:v=>v,hard:v=>Math.pow(v,1.6),fixed:()=>0.8};
 const padPitch=n=>zoneInst('pads').percussive?n:n+24;
 function noteOn(note,vel,src,opt={}){
@@ -9,12 +12,14 @@ function noteOn(note,vel,src,opt={}){
   if(c.state!=='running' && src.startsWith('m')) $('#soundBanner').hidden=false;
   const zone=opt.zone||'keys', inst=opt.inst||zoneInst(zone), key=src+':'+note, now=c.currentTime;
   const old=active.get(key); if(old){ old.kill(now); active.delete(key); LOOP.capOff(key); }
+  /* striking a key again while the pedal holds it: the held note ends here (its recorded length too) and the new one starts */
+  sustained.forEach(h=>{ if(h.capKey!==key) return; h.release(now); sustained.delete(h); sostHeld.delete(h); LOOP.capOff(key); });
   let n=opt.pitch!=null?opt.pitch:note; if(zone==='keys' && !inst.percussive) n+=CTRL.transpose;
   const v=clamp((CURVES[CTRL.curve]||CURVES.linear)(vel/127),0.02,1);
   let voice; try{ voice=inst.play(c,zoneDest(zone),n,v,now); }catch(e){ console.error(e); return; }
   if(!voice) return;
   voice.capKey=key;
-  voice.onEnd=()=>{ if(active.get(key)===voice) active.delete(key); sustained.delete(voice); A.openHats.delete(voice); };
+  voice.onEnd=()=>{ if(active.get(key)===voice) active.delete(key); A.openHats.delete(voice); }; /* a held note that fades out stays in `sustained` until the pedal lifts, so its recording ends there */
   active.set(key,voice);
   if(voice.piece==='hatC'||voice.piece==='hatP'){ A.openHats.forEach(h=>h.kill(now)); A.openHats.clear(); }
   if(voice.piece==='hatO') A.openHats.add(voice);
@@ -28,10 +33,15 @@ function noteOff(note,src){
   if(z!==undefined){ pressed.delete(key); if(z==='keys') lit(note,-1); }
   const v=active.get(key); if(!v){ LOOP.capOff(key); return; }
   active.delete(key);
-  if(sustainOn && !v.oneShot) sustained.add(v); else { v.release(A.ctx.currentTime); LOOP.capOff(key); }
+  if(holdsVoice(v)) sustained.add(v); else { v.release(A.ctx.currentTime); LOOP.capOff(key); }
 }
-function setSustain(on){ sustainOn=on; $('#susLed').className='led'+(on?' amber':''); if(!on && A.ctx){ const t=A.ctx.currentTime; sustained.forEach(v=>{ v.release(t); LOOP.capOff(v.capKey); }); sustained.clear(); } }
-function panic(){ if(A.ctx){ const t=A.ctx.currentTime; LIVE.forEach(v=>v.kill(t)); } active.clear(); sustained.clear(); pressed.clear(); KB.lit.clear(); KB.pl.clear(); KB.els.forEach(el=>el.classList.remove('on','pl')); setSustain(false); }
+/* let go of every held note that no pedal or latch holds any more; a recorded note ends here, so its length includes the hold */
+function freeHeld(){ if(!A.ctx){ sustained.clear(); return; } const t=A.ctx.currentTime; sustained.forEach(v=>{ if(holdsVoice(v)) return; v.release(t); sustained.delete(v); sostHeld.delete(v); LOOP.capOff(v.capKey); }); }
+function susUI(){ const on=sustainOn||SUS.sost; $('#susLed').className='led'+(on?' amber':''); const b=$('#susBtn'); if(b){ b.setAttribute('aria-pressed',String(SUS.latch)); b.classList.toggle('on',on); } }
+function setSustain(on,from){ if(from==='latch') SUS.latch=!!on; else SUS.pedal=!!on; sustainOn=SUS.pedal||SUS.latch; susUI(); if(!sustainOn) freeHeld(); }
+function setSostenuto(on){ on=!!on; if(on===SUS.sost) return; SUS.sost=on; sostHeld.clear(); if(on) active.forEach(v=>{ if(!v.oneShot) sostHeld.add(v); }); else freeHeld(); susUI(); }
+function panic(){ if(A.ctx){ const t=A.ctx.currentTime; LIVE.forEach(v=>v.kill(t)); } active.clear(); sustained.clear(); sostHeld.clear(); pressed.clear(); KB.lit.clear(); KB.pl.clear(); KB.els.forEach(el=>el.classList.remove('on','pl')); SUS.sost=false; setSustain(false,'latch'); setSustain(false); }
+$('#susBtn').onclick=()=>{ ensureAudio(); setSustain(!SUS.latch,'latch'); lcd(`SUSTAIN ${SUS.latch?'ON':'OFF'}`); };
 
 /* ---------- controls ---------- */
 function setVolume(v){ CTRL.volume=clamp(v,0,100); saveCtrl(); $('#ctl-volume').value=CTRL.volume; $('#val-volume').textContent=Math.round(CTRL.volume)+'%'; applyVolume(); }
