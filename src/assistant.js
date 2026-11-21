@@ -3,9 +3,10 @@
    Brain: POST /api/assistant on the Studio Keys Worker (Workers AI, or Claude if the Worker has an
    ANTHROPIC_API_KEY secret). Anywhere else (local file, Claude preview) it falls back to localBrain(). */
 const SRc=window.SpeechRecognition||window.webkitSpeechRecognition;
+const MIC_OFF=/^\s*(?:(?:ok|okay|please|now|hey)\s+)*(?:stop listening|stop hearing( me)?|don'?t listen|quit listening|turn (?:off )?(?:the )?(?:mic|microphone)(?: off)?|(?:mic|microphone) off|switch (?:off )?(?:the )?(?:mic|microphone)(?: off)?|mute (?:the |my )?(?:mic|microphone)|(?:stop|close) (?:the )?(?:mic|microphone)|go to sleep)\b/i;
 const ASSIST={
   name:store.get('asName','Keys'), listening:false, voice:store.get('asVoice',true), hum:store.get('asHum',true),
-  engine:null, rec:null, awakeUntil:0, speaking:false, busy:false, history:[], humNotes:[], humLast:0, speechAt:0,
+  engine:null, rec:null, awakeUntil:0, speaking:false, busy:false, history:[], humNotes:[], humLast:0, speechAt:0, changes:[], focus:null,
   say(msg,opts={}){ addBubble('as',msg,opts.chips,opts.map); if(this.voice && opts.speak!==false) speak(msg); },
   run(text){ return handleRequest(text); },
   onMicNote(n,on){ if(ASSIST.listening||LOOP.state==='take') showSung(n,on); humNote(n,on); }
@@ -51,9 +52,20 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
     const two=[ideas[k],ideas[(k+1)%ideas.length]].filter((x,i,a)=>x&&a.indexOf(x)===i);
     return `Shape the song: ${two.join(', ')}, or download the MP3.`; }
   return `Shape it with effects (“more reverb on the chords”), mix it, make it a full track, or download the MP3.`; }
+/* the conversation's memory (AI-9): one line per request, what was said and what changed, the last 10 go to the AI as "recent".
+   The focus is the one part the last request was about, so "make it softer" right after the bass means the bass. */
+function noteChange(said,acts,done,touched){ said=String(said||'').trim(); if(!said) return;
+  const named=typeof partsSaid==='function'?[...partsSaid(said)]:[], parts=named.length?named:(touched||[]).filter(r=>r&&r!=='free');
+  const what=(done&&done.length?done.join('; '):((BATCH.notes||[]).map(n=>n.text).join(' ')||'nothing changed')).replace(/\s+/g,' ');
+  ASSIST.changes.push({said,parts,line:`“${said.slice(0,70)}” → ${what.slice(0,110)}`}); if(ASSIST.changes.length>20) ASSIST.changes.shift();
+  const song=acts.some(a=>/^(arrange|section|parts|transition|vibe|style|new_project)$/.test(a.type)||a.type==='mix'&&/^(all|master)$/i.test(String(a.track||'')));
+  ASSIST.focus=!song&&parts.length===1?parts[0]:null; }
 function projectState(){
   /* the song layout first, so the Worker's 7,000-character cut never drops it */
-  return {arrangement:typeof songSummary==='function'?songSummary():null,name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:PROJ.key?keyName(PROJ.key):`auto (${keyName(projectKey())})`,style:PROJ.style||null,playing:TR.running,
+  return {arrangement:typeof songSummary==='function'?songSummary():null,
+    /* the conversation so far, oldest first, and the part talked about last (AI-9) */
+    recent:ASSIST.changes.slice(-10).map(c=>c.line),focus:ASSIST.focus,chords:typeof chordsSaid==='function'?chordsSaid():null,
+    name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,key:PROJ.key?keyName(PROJ.key):`auto (${keyName(projectKey())})`,style:PROJ.style||null,playing:TR.running,
     tracks:PROJ.tracks.map(t=>({name:t.name,role:t.role,instrument:t.kind==='audio'?'recorded audio':(INST.get(t.inst)||{}).name,notes:t.events.length,volume:Math.round(t.vol*100),muted:!!t.mute,soloed:!!t.solo,generated:!!t.gen})),
     taste:TASTE.profile?{artists:(TASTE.profile.artists||[]).slice(0,12),styles:(TASTE.profile.styles||[]).map(s=>s.style),playlists:(TASTE.profile.playlists||[]).map(p=>p.name+(p.style?' ('+p.style+')':'')).slice(0,8)}:null,
     vibe:PROJ.ref||null,
@@ -68,6 +80,10 @@ function showEngine(){ $('#asEngine').innerHTML=ASSIST.engine?`<span class="led 
 async function handleRequest(text){
   text=String(text||'').trim(); if(!text) return; ensureAudio();
   addBubble('me',text); ASSIST.history.push({role:'user',content:text}); LAST_TEXT.text=text;
+  /* "stop listening", "turn off the mic": the assistant and microphone, never the song's transport (QA, 21 Nov) */
+  if(MIC_OFF.test(text.replace(new RegExp('^\\s*(?:(?:hey|hi|ok|okay)\\s+)?'+ASSIST.name.replace(/[^a-z0-9 ]/gi,'')+'\\b[\\s,:!.-]*','i'),''))){ const was=ASSIST.listening||MIC.on; if(ASSIST.listening) stopListening(); if(MIC.on&&LOOP.state!=='take'&&LOOP.state!=='counting') micStop();
+    const r=was?`OK, I’ve stopped listening and the mic is off. Tap the orb or type when you need me.`:`I wasn’t listening, and the mic is off. Tap the orb or type when you need me.`;
+    ASSIST.history.push({role:'assistant',content:r}); LAST_TEXT.text=''; ASSIST.say(r); if(!ASSIST.voice) setOrb('idle',idleText()); return; }
   ASSIST.busy=true; setOrb('thinking','Working on it…');
   let reply='', done=[];
   if(ASSIST.engine){
@@ -85,6 +101,9 @@ async function handleRequest(text){
     reply=(why.length?why.join(' '):`It’s already like that, so nothing changed${BATCH.same.length?': '+BATCH.same.join(', '):''}.`)+' '+(q||nextStep()); }
   /* what the executor knows and the AI didn't: a clamped length, a riser played as a roll, a missing part (AI-1) */
   const notes=(BATCH.notes||[]).filter(n=>!(n.unless&&n.unless.test(reply))).map(n=>n.text);
+  if(BATCH.declined&&!done.length&&notes.length){ const q=(reply.match(/[^.!?]*\?\s*$/)||[''])[0].trim(); reply=notes.join(' ')+(q&&!notes.some(n=>/\?/.test(n))?' '+q:''); notes.length=0; }
+  /* the AI's actions for other parts were left out (AI-9): say so, so the reply matches what changed */
+  if(BATCH.guarded&&BATCH.guarded.length&&done.length&&ASSIST.engine) notes.push('I only changed what you asked about; the rest stays as it was.');
   if(reply&&notes.length) reply=reply.replace(/\s*$/,'')+' '+notes.join(' ');
   else if(!reply&&!done.length&&notes.length) reply=notes.join(' ');
   /* while a sung take is about to start, no next-step hint: the part doesn't exist yet, and the hint would suggest singing it again */
@@ -177,7 +196,6 @@ setInterval(()=>{
   if(!PROJ.tracks.length&&!playing){ const bars=[1,2,4,8].find(b=>b*4>=endBeat)||8; PROJ.bars=bars; $('#barsSel').value=String(bars); }
   const L=PROJ.bars*4; ev=ev.filter(e=>e.b<L).map(e=>Object.assign(e,{d:Math.min(e.d,L-e.b)}));
   const key=PROJ.key||(ev.length>=4?detectKey(ev):null); if(!PROJ.key&&key) setKey(key);
-  if(key) ev.forEach(e=>e.n=snapToKey(e.n,key));
   ev.sort((a,b)=>a.b-b.b);
   const count=PROJ.tracks.filter(t=>/^Hummed melody/.test(t.name)).length, inst=partInst('melody');
   const t=addTrack({role:'melody',inst,name:'Hummed melody'+(count?' '+(count+1):''),events:ev});

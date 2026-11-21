@@ -56,7 +56,8 @@ function scaleOf(key){ return SCALES[key.mode].map(x=>(x+key.tonic)%12); }
 function triad(key,deg){ const sc=SCALES[key.mode]; return [0,2,4].map(i=>(sc[(deg+i)%7]+key.tonic)%12); }
 function seventh(key,deg){ const sc=SCALES[key.mode]; return [0,2,4,6].map(i=>(sc[(deg+i)%7]+key.tonic)%12); }
 function projectKey(){ return PROJ.key||detectKey(melodyNotes())||{tonic:9,mode:(STYLES[PROJ.style]||{}).mode||'minor'}; }
-function melodyNotes(){ const out=[]; PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && (t.role==='melody')) t.events.forEach(e=>out.push(e)); }); return out; }
+/* the melodies the chords fit: the user's own (sung, hummed, played). A generated melody already follows the chords, so it never moves them (AI-9) */
+function melodyNotes(){ const out=[]; PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && (t.role==='melody') && !t.gen) t.events.forEach(e=>out.push(e)); }); return out; }
 function chordPlan(){
   const key=projectKey(), L=PROJ.bars*4, bars=L/4, mel=melodyNotes(), plan=[];
   const prog=(PROJ.prog&&PROJ.prog.length)?PROJ.prog:(key.mode==='minor'?[0,5,2,6]:[0,4,5,3]);
@@ -71,8 +72,8 @@ function chordPlan(){
 }
 function nearestAbove(pc,lo){ let n=lo-mod(lo,12)+pc; if(n<lo) n+=12; return n; }
 const PROGS={minor:[[0,5,2,6],[0,5,3,4],[0,6,5,6],[0,2,5,6],[0,3,6,5],[0,0,5,6],[0,5,0,6],[0,3,4,0]],major:[[0,4,5,3],[0,5,3,4],[0,3,4,4],[3,4,0,5],[0,4,3,4],[5,3,0,4]]};
-function genBass(style,L,seed){
-  const st=STYLES[style]||STYLES.house, {plan}=chordPlan(), ev=[], kick=pat((st.drums[36]||'x...x...x...x...'),0), r=rng(seed||5), pick=a=>a[Math.floor(r()*a.length)];
+function genBass(style,L,seed,bsOver){
+  const st=Object.assign({},STYLES[style]||STYLES.house,bsOver?{bassStyle:bsOver}:{}), {plan}=chordPlan(), ev=[], kick=pat((st.drums[36]||'x...x...x...x...'),0), r=rng(seed||5), pick=a=>a[Math.floor(r()*a.length)];
   const seqs=[[0,0,12,0],[0,12,0,7],[0,0,7,12],[0,12,10,7],[0,3,0,12]], seq=pick(seqs), off=pick([[2,6,10,14],[2,3,6,10,11,14],[2,6,7,10,14,15]]);
   for(let bar=0;bar<L/4;bar++){
     const c=plan[bar%plan.length], root=nearestAbove(c.root,31), fifth=root+7, oct=root+12, base=bar*4;
