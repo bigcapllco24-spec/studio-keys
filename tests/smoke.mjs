@@ -371,6 +371,20 @@ try {
     await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
     await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
   ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
+  // SE-4: open chord voicings, new progressions with 2-bar holds, "another one" changes the voicing
+  const se4 = await E(async () => { await newSong('Smoke chords'); const R = {}, chordsT = () => PROJ.tracks.find(t => t.role === 'chords');
+    const groups = t => { const by = new Map(); t.events.forEach(e => { const q = Math.floor(e.b * 4 + 1e-6) / 4; if (!by.has(q)) by.set(q, []); by.get(q).push(e.n); }); return [...by.values()].filter(g => g.length >= 3); };
+    const shape = t => groups(t).map(g => { const lo = Math.min(...g); return g.map(n => n - lo).sort((a, b) => a - b).join('.'); }).join('|');
+    runActions([{ type: 'vibe', ref: 'Ben Böhmer' }, { type: 'add_chords', seed: 7301 }]); const g = groups(chordsT()), sp = g.map(x => Math.max(...x) - Math.min(...x));
+    R.min = Math.min(...sp); R.low = Math.min(...g.flat()); R.n = g.length;
+    const seen = new Set(); for (let i = 0; i < 60; i++) { ensureProg(true); seen.add(PROJ.prog.join()); }
+    R.fresh = ['0,6,3,5', '4,5,0,6', '5,2,6,0', '0,4,5,4', '4,5,6,0', '5,0,6,4'].filter(x => seen.has(x)).length;
+    setBars(8); PROJ.prog = [0, 6, 3, 5]; R.hold = chordPlan().plan.map(c => c.deg).join('');
+    const s0 = shape(chordsT()); runActions([{ type: 'vary', track: 'chords', progression: false }]); R.same = s0 === shape(chordsT());
+    const s1 = shape(chordsT()); runActions(localBrain('give me another chord progression').actions); R.same2 = s1 === shape(chordsT()); return R; });
+  ok('SE-4: new pad chords are open (every chord spans ≥ 14 semitones, low root C3 or above)', se4.n >= 4 && se4.min >= 14 && se4.low >= 48, `${se4.n} chords, narrowest ${se4.min} semitones, lowest note ${se4.low}`);
+  ok('SE-4: the new progressions come up, and hold 2 bars each in an 8-bar loop', se4.fresh >= 2 && se4.hold === '00663355', `${se4.fresh} of 6 new minor progressions in 60 picks · i VII iv VI over 8 bars: ${se4.hold}`);
+  ok('SE-4: "another one" on the chords changes the voicing too', !se4.same && !se4.same2, JSON.stringify(se4));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

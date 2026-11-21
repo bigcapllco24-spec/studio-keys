@@ -5,11 +5,11 @@
 
 /* more genres; each has a groove recipe used by the drum generator */
 Object.assign(STYLES,{
-  melodichouse:{name:'Melodic house',bpm:122,mode:'minor',kit:'kitMelodic',bass:'subbass',chords:'darkpad',lead:'mhpluck',bassStyle:'mhoffbeat',chordStyle:'pads',melStyle:'arp',swing:0.04,drums:{36:'x...x...x...x...'}},
+  melodichouse:{name:'Melodic house',bpm:122,mode:'minor',kit:'kitMelodic',bass:'subbass',chords:'darkpad',lead:'mhpluck',bassStyle:'mhoffbeat',chordStyle:'pads',melStyle:'arp',drums:{36:'x...x...x...x...'}},
   melodictechno:{name:'Melodic techno',bpm:124,mode:'minor',kit:'kitDeepTechno',bass:'rollbass',chords:'darkpad',lead:'mhpluck',bassStyle:'rolling16',chordStyle:'pads',melStyle:'seq',drums:{36:'x...x...x...x...'}},
   progressive:{name:'Progressive house',bpm:123,mode:'minor',kit:'kitMelodic',bass:'rollbass',chords:'supersaw',lead:'mhpluck',bassStyle:'rolling16',chordStyle:'plucks332',melStyle:'arp',drums:{36:'x...x...x...x...'}},
   deephouse:{name:'Deep house',bpm:120,mode:'minor',kit:'kit909',bass:'moog',chords:'epiano',lead:'epiano',bassStyle:'sync',chordStyle:'seventh',swing:0.08,drums:{36:'x...x...x...x...'}},
-  organichouse:{name:'Organic house',bpm:116,mode:'minor',kit:'kitMelodic',bass:'subbass',chords:'kalimba',lead:'flute',bassStyle:'mhoffbeat',chordStyle:'plucks332',melStyle:'arp',swing:0.07,drums:{36:'x...x...x...x...'}},
+  organichouse:{name:'Organic house',bpm:116,mode:'minor',kit:'kitMelodic',bass:'subbass',chords:'kalimba',lead:'flute',bassStyle:'mhoffbeat',chordStyle:'plucks332',melStyle:'arp',drums:{36:'x...x...x...x...'}},
   techhouse:{name:'Tech house',bpm:126,mode:'minor',kit:'kit909',bass:'moog',chords:'organ',lead:'lead',bassStyle:'techhouse',chordStyle:'stabs',swing:0.05,drums:{36:'x...x...x...x...'}},
   ukg:{name:'UK garage',bpm:132,mode:'minor',kit:'kitKit3',bass:'reese',chords:'organ',lead:'lead',bassStyle:'sync',chordStyle:'stabs',swing:0.18,drums:{36:'x.....x...x.....'}},
   drill:{name:'Drill',bpm:142,mode:'minor',kit:'kitTrap',bass:'bass808',chords:'strings',lead:'flute',bassStyle:'slide808',chordStyle:'sustain',drums:{36:'x......x..x.....'}},
@@ -30,11 +30,11 @@ Object.assign(STYLES.house,{kit:'kit909'}); STYLES.techno.kit='kitDeepTechno';
 const GROOVES={
   house:{kick:'four',back:'clap',hats:'offbeat16',open:true,shaker:false,perc:1,ghost:0.1,energy:3,fill:8,crash:true},
   techno:{kick:'four',back:'clap',hats:'16th',open:true,ride:true,perc:1,ghost:0.15,energy:4,fill:8,rumble:true},
-  melodichouse:{kick:'four',back:'clap',hats:'shuffle16',open:true,shaker:true,perc:2,ghost:0.1,energy:3,fill:8,human:true},
+  melodichouse:{kick:'four',back:'clap',hats:'shuffle16',open:true,shaker:true,perc:2,ghost:0.1,energy:3,fill:8,human:true,feel:'amh'},
   melodictechno:{kick:'four',back:'clap',hats:'16th',open:true,ride:true,shaker:false,perc:1,ghost:0.1,energy:4,fill:8,human:true},
   progressive:{kick:'four',back:'clap',hats:'16th',open:true,shaker:true,perc:1,energy:4,fill:8,crash:true},
   deephouse:{kick:'four',back:'clap',hats:'offbeat16',open:true,shaker:true,perc:1,ghost:0.2,energy:2,fill:8,human:true},
-  organichouse:{kick:'four',back:'rim',hats:'shuffle16',open:false,shaker:true,perc:3,ghost:0.2,energy:2,fill:8,human:true},
+  organichouse:{kick:'four',back:'rim',hats:'shuffle16',open:false,shaker:true,perc:3,ghost:0.2,energy:2,fill:8,human:true,feel:'amh'},
   techhouse:{kick:'four',back:'clap',hats:'16th',open:true,shaker:true,perc:2,ghost:0.3,energy:4,fill:4},
   afro:{kick:'four',back:'rim',hats:'shuffle16',open:false,shaker:true,perc:3,ghost:0.2,energy:3,fill:8,human:true},
   ukg:{kick:'broken',back:'snare',hats:'shuffle16',open:true,perc:1,ghost:0.4,energy:3,fill:4},
@@ -149,10 +149,19 @@ const FEELS={
     perc:[0.44,0.28,0.36,0.59,0.74,0.47,0.57,0,0.25,0.21,0.54,0.32,0.64,0.54,0.3,0.74]}},
   live:{src:'Drum Essentials, 12 live-kit grooves',swing:0,ghost:0.4,vel:{
     hatc:[0.61,0.53,0.53,0.51,0.63,0.54,0.55,0.59,0.59,0.53,0.54,0.52,0.71,0.56,0.63,0.57]},
-    push:{kick:-9.9,snare:-3.6,hat:0.6,perc:2.8},spread:{kick:16.6,snare:14,hat:27.5,perc:16.3},keep:{kick:0.15,snare:0.15,hat:0.3,perc:0.3}}
+    push:{kick:-9.9,snare:-3.6,hat:0.6,perc:2.8},spread:{kick:16.6,snare:14,hat:27.5,perc:16.3},keep:{kick:0.15,snare:0.15,hat:0.3,perc:0.3}},
+  /* SE-4, from RES-4 (.claude/research/data/RES-4-chords-and-amh.json): PML Acoustic Melodic House, 44 percussion loops.
+     Straight (swing 0), downbeats about 0.6, 8ths about 0.5, off-16ths about 0.3, timing spread about 5.5 ms on the
+     hats, shakers and percussion; kick and clap stay on the grid. Used by melodic and organic house while they are
+     straight or lightly swung; "more swing" (over 58%) switches to the measured swung feel as before. */
+  amh:{src:'PML Acoustic Melodic House, 44 percussion loops (RES-4)',swing:0,ghost:0.3,vel:{
+    hatc:[0.62,0.3,0.47,0.48,0.47,0.36,0.58,0.34,0.51,0.32,0.45,0.43,0.54,0.25,0.56,0.29],
+    shaker:[0.62,0.3,0.47,0.48,0.47,0.36,0.58,0.34,0.51,0.32,0.45,0.43,0.54,0.25,0.56,0.29],
+    perc:[0.62,0.3,0.47,0.48,0.47,0.36,0.58,0.34,0.51,0.32,0.45,0.43,0.54,0.25,0.56,0.29]},
+    push:{kick:0,snare:0,hat:0,perc:0},spread:{kick:0,snare:0,hat:5.5,perc:5.5},keep:{kick:0,snare:0,hat:1,perc:1}}
 };
 const FEEL_WOBBLE=0.12;   /* each new groove nudges the curves a little, so "another one" never repeats exactly */
-function pickFeel(rec){ return FEELS[rec.feel]||((+rec.swing||0)>0.15?FEELS.swing16:FEELS.straight); }
+function pickFeel(rec){ const swung=(+rec.swing||0)>0.15; return !swung&&FEELS[rec.feel]?FEELS[rec.feel]:swung?FEELS.swing16:FEELS.straight; }
 /* a velocity curve as a shape around 1; rows with gaps in the data are trusted less (pulled towards flat) */
 function feelShape(c,r){ if(!c) return Array(16).fill(1); const nz=c.filter(x=>x>0), m=nz.length?nz.reduce((a,b)=>a+b,0)/nz.length:1, depth=nz.length/16;
   return c.map(x=>(1+((x>0?x:m)/m-1)*depth)*(1+(r()-0.5)*FEEL_WOBBLE)); }
@@ -197,7 +206,7 @@ function makeGroove(rec,L,seed){
   const r=rng(seed||1), ev=[], bars=Math.max(1,L/4), E=rec.energy, pick=a=>a[Math.floor(r()*a.length)];
   const sw=s=>s%2===1?(rec.swing||0)*0.25:0, vel=(v)=>clamp(v+(r()-0.5)*0.08,0.08,1);
   /* measured feel: velocity shapes per step, and (human styles) a drummer's push and wander per role */
-  const F=pickFeel(rec), T=rec.human?FEELS.live:null, sh={}; ['hatc','hato','shaker','perc'].forEach(k=>sh[k]=feelShape(F.vel[k],r));
+  const F=pickFeel(rec), T=F.spread?F:rec.human?FEELS.live:null, sh={}; ['hatc','hato','shaker','perc'].forEach(k=>sh[k]=feelShape(F.vel[k],r));
   const bpm=(typeof CTRL!=='undefined'&&+CTRL.bpm)||120, msB=ms=>ms/1000*bpm/60, gs=()=>{ const u=Math.max(1e-6,r()), w=r(); return clamp(Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*w),-2,2); };
   const roleOf=n=>n===36?'kick':(n===38||n===39||n===37&&rec.back==='rim')?'snare':(n===42||n===44||n===46||n===51)?'hat':'perc';
   const feelMs=(n,j)=>{ if(!T) return 0; const k=roleOf(n); return (T.push[k]||0)+(j||k==='kick'||k==='snare'?gs()*(T.spread[k]||0)*(T.keep[k]||0):0); };
