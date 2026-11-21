@@ -1,0 +1,15 @@
+# SE-7b+7c branch check · qa-tester · 15 Nov 2026 (17:13 IST check-in)
+
+Read `.claude/standards/dev-standards.md` first (Quality bar; every UI change checked at 1400, 390 and 360 px in Emerald, Velvet and Sapphire). Your role file is `.claude/agents/qa-tester.md`.
+
+First test of branch `preview-se-7bc` (head 5141a21) before the owner sees it: a dropped-in song's key, tempo and chords (7b), the chord strip, chord fixer, song card and voice actions (7c). Built on `preview-se-7` (7a, which you passed). Approved design: `.claude/work/proposals/SE-7.md` (section 2 B-C, steps 4-10). Developer reports on the branch: `.claude/work/reports/SE-7b-build.md`, `SE-7c-engine.md`, `SE-7c-ux.md`, `SE-7c-ai.md` (each lists smoke lines they want and known limits). Owner's choices: "DJ key" label (never "Camelot"); users may use a song's chords freely, but Keys never copies a song's melody note for note. Desktop only for now: the phone gets a plain fallback (phone sheet/swipe strip wait for UX-4); check it isn't broken at 390/360.
+
+Work only in your worktree `/home/claude/wt-se-7bc-qa` (already on branch `preview-se-7bc`, tracking origin; never check out other branches there, never pull or merge main there). Other testers run at the same time in their own worktrees.
+
+1. `python3 tools/build.py` then `git status`: `index.html` must be unchanged (two developers pushed to this branch). Then `bash .claude/tools/check.sh` (any FAIL blocks; save/reopen checks are load-sensitive: rerun once).
+2. Use it like a producer: render 3-4 of our own songs (different keys/modes/styles, one with only drums), import them as WAV through the real file input: listening toast, song card text (key, sureness, second guess, DJ key, BPM), "no key in this clip" for drums. Put these chords on my song (into a song in another key, and with no key yet; Bass movement too), Use BPM, Set my key; each one undo step; Play with the strip highlight in sync; chord fixer (mouse, keyboard, typed chord, Hear it); setKey after song chords; save and reopen. Typed to Keys (offline parser; the live AI can't be tested now, the Workers AI daily quota is used up): "what key is this?", "yes", "put those chords on my song", "make bar 4 B minor", "match this loop to my key", "key back to auto", Hinglish ones from SE-7c-ai.md. Does any part copy the song's melody? (It must not.)
+3. Accuracy: run the engine harness once (`tools/ana-harness.mjs`, see SE-7b-build.md; don't spend over ~20 minutes) or a smaller sample, and report exact key N/total, chords % of bars.
+4. Add the developers' smoke lines that are cheap (their reports list them) and commit/push them to `preview-se-7bc`; never product code, never `main`. If `tests/keys.mjs` from the harness is quick to make, add it (run on demand, not in check.sh).
+Keep it to about an hour. Save files as you go.
+
+Report to `.claude/work/reports/SE-7bc-test.md` on the branch (commit and push). Verdict first: READY or NOT READY, then bugs (steps, expected, actual, severity), rough edges, numbers, and 4-6 try steps written for a musician. Final message: the report text.

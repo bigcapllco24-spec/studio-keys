@@ -15,6 +15,8 @@ const b = await pc.launch({ executablePath: chrome, headless: 'new', args: ['--n
 const p = await b.newPage(); await p.setViewport({ width: 1400, height: 1100 });
 const errs = []; p.on('pageerror', e => errs.push(e.message));
 await p.evaluateOnNewDocument(() => { if (!sessionStorage.getItem('skSmoke')) { localStorage.clear(); sessionStorage.setItem('skSmoke', '1'); } }); // clear once, so the reload check keeps the last song
+await p.evaluateOnNewDocument(() => { window.__sr = []; class SR { start() { this.on = true; window.__sr.push(this); } stop() { this.end(); } abort() { this.end(); } end() { if (this.on) { this.on = false; setTimeout(() => this.onend && this.onend(), 10); } } }
+  window.SpeechRecognition = window.webkitSpeechRecognition = SR; }); // speech can't run headless: a fake recogniser that counts live ones
 const W = ms => new Promise(r => setTimeout(r, ms)), E = (f, ...a) => p.evaluate(f, ...a);
 try {
   await p.goto(target, { waitUntil: 'load', timeout: 60000 }); await W(2500);
@@ -43,11 +45,54 @@ try {
   // 3b. MP3 download: render, encode, decode back
   const mp = await E(async () => { const m = await makeMp3(PROJ.tracks.filter(trackAudible), 4); const u = new Uint8Array(await m.blob.arrayBuffer()); const d = await A.ctx.decodeAudioData(u.buffer.slice(0)); return { size: m.blob.size, sync: u[0] === 0xff && (u[1] & 0xe0) === 0xe0, sec: m.seconds, dec: d.duration }; });
   ok('MP3 download (4 loops, decodes back)', mp.sync && mp.size > 50000 && Math.abs(mp.dec - mp.sec) < 0.5, `${(mp.size / 1024).toFixed(0)} KB, ${mp.dec.toFixed(1)} s`);
+  // UX-13 (QA, 17 Nov): the MP3 carries a LAME gapless header, so it decodes on the beat and exactly one loop long
+  const mg = await E(async () => { const tr = PROJ.tracks.filter(trackAudible), m = await makeMp3(tr, 1), u = new Uint8Array(await m.blob.arrayBuffer()), d = await A.ctx.decodeAudioData(u.buffer.slice(0));
+    return { info: String.fromCharCode(...u.slice(36, 40)), lame: String.fromCharCode(...u.slice(156, 160)), want: Math.round(m.seconds * 44100), got: d.length }; });
+  ok('MP3 is gapless: one loop decodes to exactly the loop length', mg.info === 'Info' && mg.lame === 'LAME' && Math.abs(mg.got - mg.want) <= 88, `${mg.got} of ${mg.want} samples`);
   // 3c. track effects, multi-select, one element at a time
   const fxr = await E(() => { const t = PROJ.tracks.find(t => t.role === 'bass'); const r = runActions([{ type: 'track_fx', track: 'bass', effect: 'reverb', amount: 30 }]);
     if (!FXOPEN.has(t.id)) document.querySelector(`[data-tfx="${t.id}"]`).click(); renderTracks(); const panel = !!document.querySelector('.tfx'); const sel = document.querySelector('.tfx [data-tfxadd]'); sel.value = 'width'; sel.dispatchEvent(new Event('change', { bubbles: true }));
     return { r: r.join(), rev: t.fx.rev, width: t.fx.width, duck: t.fx.duck, panel }; });
   ok('track FX: panel, add effect, assistant reverb, sidechain preset', fxr.panel && fxr.rev === 0.3 && fxr.width > 0 && fxr.duck > 0, JSON.stringify(fxr));
+  // 3d. mixing words change EQ / low cut and keep the notes
+  const mud = await E(() => { const t = PROJ.tracks.find(t => t.role === 'bass'), c = PROJ.tracks.find(t => t.role === 'chords'); const n0 = JSON.stringify(t.events), hp0 = t.fx.hp || 0, ch0 = c.fx.hp || 0, n1 = PROJ.tracks.length;
+    const L = localBrain('the bass is muddy'); runActions(L.actions); const bass = { same: JSON.stringify(t.events) === n0, hp: t.fx.hp, hp0, reply: L.reply };
+    const M = localBrain('the mix is muddy'); runActions(M.actions); return { bass, mix: { ch0, ch: c.fx.hp, types: M.actions.map(a => a.type).join() }, added: PROJ.tracks.length - n1 }; });
+  ok('"the bass is muddy" cleans the bass EQ, same notes', mud.bass.same && mud.bass.hp > mud.bass.hp0 && mud.added === 0 && /low cut/.test(mud.bass.reply), `low cut ${mud.bass.hp0}→${mud.bass.hp} Hz`);
+  ok('"the mix is muddy" changes the mix FX', mud.mix.ch > mud.mix.ch0 && /track_fx/.test(mud.mix.types), `chords low cut ${mud.mix.ch0}→${mud.mix.ch} Hz`);
+  const still = await E(() => ['add a bassline', 'let me sing the bassline', 'record a voice note', 'another one'].map(s => localBrain(s).actions.map(a => a.type + (a.part ? ':' + a.part : '')).join('+')).join(' | '));
+  ok('"add a bassline", "sing the bassline", "voice note", "another one" unchanged', still === 'add_bass | sing:bass | sing:voice | vary', still);
+  // QA (AI-6 check): up/down describing a part's shape is not a level change ("let me sing a bassline that goes down" sings; "write a melody that goes down" makes one)
+  const dir = await E(() => ['let me sing a bassline that goes down', 'i want to sing a melody that goes up', 'write a melody that goes down', 'create a bassline that walks up'].map(s => localBrain(s).actions.map(a => a.type + (a.part ? ':' + a.part : '')).join('+')).join(' | '));
+  ok('direction words in sing / make requests keep their meaning (no fader move)', /^sing:bass \| sing:melody \| (add_melody|vary) \| (add_bass|vary)$/.test(dir), dir);
+  // AI-6: level and punch words change the fader / EQ / compressor and never add or remake a part
+  const lv = await E(() => { const T = r => PROJ.tracks.find(t => t.role === r), m = T('melody'), d = T('drums'), sig = () => PROJ.tracks.map(t => t.id + ':' + t.events.map(e => e.n + '@' + e.b).join()).join('|');
+    const s0 = sig(), n0 = PROJ.tracks.length, v0 = m.vol, c0 = d.fx.comp || 0, hi0 = d.hi || 0, lo0 = d.lo || 0, R = {};
+    for (const s of ['turn the melody down a bit', 'make the kick punchier', 'bring the bass up', 'chords louder', 'drums too loud', 'softer hats']) R[s] = runActions(localBrain(s).actions).join(', ');
+    return { db: 40 * Math.log10(m.vol / v0), comp: [c0, d.fx.comp], hi: [hi0, d.hi], lo: [lo0, d.lo], same: sig() === s0, added: PROJ.tracks.length - n0, R }; });
+  ok('"turn the melody down a bit" = -3 dB, "kick punchier" = more compressor, "softer hats" = less highs; no part added or remade', Math.abs(lv.db + 3) < 0.1 && lv.comp[1] > lv.comp[0] && lv.hi[1] < lv.hi[0] && lv.same && lv.added === 0, `melody ${lv.db.toFixed(1)} dB, comp ${lv.comp.join('→')}, drums high ${lv.hi.join('→')} dB, +${lv.added} tracks`);
+  // AI-6 fix 1: the whole song's level moves every part by the same dB (in the song, so Undo restores it exactly; the master fader is untouched)
+  const song = await E(() => { const vols = () => PROJ.tracks.map(t => t.vol.toFixed(4)).join(','), m0 = MIX.master ? MIX.master.vol : 1, v0 = vols(), n0 = PROJ.tracks.length;
+    const L = localBrain('turn it down a bit'), chip = runActions(L.actions).join(), v1 = vols(), r = PROJ.tracks.map(t => t.vol).filter(v => v > 0); undo();
+    return { down: L.actions.map(a => a.type + ':' + a.track + ':' + a.db).join(), chip, reply: L.reply, changed: v1 !== v0, back: vols() === v0, master: (MIX.master ? MIX.master.vol : 1) === m0, added: PROJ.tracks.length - n0 }; });
+  ok('"turn it down a bit" moves every part 3 dB and Undo puts it back exactly (master fader untouched)', song.down === 'mix:all:-3' && song.changed && song.back && song.master && song.added === 0 && /3 dB/.test(song.chip) && /3 dB/.test(song.reply), `${song.down} · ${song.chip} · undo exact ${song.back}`);
+  // QA (AI-6 retest): "punchier" stops at +6 dB low EQ and 90% compressor (then an honest reply), and Undo puts the drums back exactly
+  const pc6 = await E(() => { const D = () => PROJ.tracks.find(t => t.role === 'drums'), s = () => [D().lo || 0, D().fx.comp || 0].join(), s0 = s(), u0 = UNDO.stack.length; let last = ''; /* Undo swaps the track objects, so look the drums up each time */
+    for (let i = 0; i < 6; i++) { const L = localBrain('make the kick punchier'); runActions(L.actions); last = L.actions.length ? '' : L.reply; }
+    const lo = D().lo || 0, comp = Math.round((D().fx.comp || 0) * 100); while (UNDO.stack.length > u0) undo(); return { lo, comp, last, back: s() === s0 }; });
+  ok('"make the kick punchier" x6 stops at +6 dB low EQ / 90% compressor with an honest reply; Undo restores', pc6.lo <= 6 && pc6.comp <= 90 && /already as punchy/.test(pc6.last) && pc6.back, `low +${pc6.lo} dB, comp ${pc6.comp}%`);
+  // AI-6 fix 1: "very" and Hinglish level sentences change the mix only
+  const hin = await E(() => { const n0 = PROJ.tracks.length; const R = ['the drums are very loud', 'the bass is very quiet', 'drums bahut loud hai', 'drums ki awaaz kam karo', 'melody thoda kam karo', 'hats ko soft karo', 'bass ko thoda upar karo'].map(s => { const L = localBrain(s); return L.actions.map(a => a.type).join('+') || (/full volume/.test(L.reply || '') ? 'full' : ''); });
+    return { R: R.join(' | '), ok: R.every(x => /^(mix(\+mix)*|full)$/.test(x)), added: PROJ.tracks.length - n0 }; });
+  ok('"very" and Hinglish level words ("bahut loud hai", "thoda kam karo", "soft karo") only move the mix', hin.ok && hin.added === 0, hin.R);
+  const tone = await E(() => { const t = PROJ.tracks.find(t => t.role === 'bass'), n0 = JSON.stringify(t.events), lo0 = t.lo || 0;
+    runActions(localBrain('boost the lows on the bass').actions); const boost = { lo0, lo: t.lo || 0, same: JSON.stringify(t.events) === n0 };
+    runActions(localBrain('the bass is muddy').actions); const hp1 = t.fx.hp; const S = localBrain('still muddy'); runActions(S.actions);
+    const add = localBrain('add brighter chords').actions.map(a => a.type).join(), another = localBrain('another one with more low end').actions.map(a => a.type).join();
+    return { boost, hp1, hp2: t.fx.hp, stillBass: S.actions.length > 0 && S.actions.every(a => a.track === t.id), add, another }; });
+  ok('"boost the lows on the bass" raises the bass low EQ', tone.boost.lo > tone.boost.lo0 && tone.boost.same, `low ${tone.boost.lo0}→${tone.boost.lo} dB`);
+  ok('"still muddy" after "the bass is muddy" goes further on the bass', tone.stillBass && tone.hp2 > tone.hp1, `low cut ${tone.hp1}→${tone.hp2} Hz`);
+  ok('"add brighter chords" adds chords; "another one with more low end" makes a new groove', tone.add === 'add_chords' && tone.another === 'vary', `${tone.add} | ${tone.another}`);
   const ms = await E(() => { SEL.clear(); PROJ.tracks.slice(0, 2).forEach(t => SEL.add(t.id)); renderTracks(); document.querySelector('[data-sel="play"]').click(); const n = PROJ.tracks.filter(trackAudible).length; loopStop(); SEL.clear(); renderTracks(); return n; });
   ok('select two tracks and play them together', ms === 2, `${ms} audible`);
   const one = await E(() => JSON.stringify(localBrain('make a track like stephan bodzin').actions.map(a => a.type)));
@@ -66,11 +111,27 @@ try {
   // 5. import MIDI and audio, audio → notes
   await E(() => newSong('Smoke import')); await W(300);
   const inp = await p.$('#importFile'); await inp.uploadFile(fx('test.mid')); await W(800); await inp.uploadFile(fx('sing.wav')); await W(1500);
+  const tv = await E(() => { const a = PROJ.tracks.find(t => t.kind === 'audio'); const x = localBrain('turn the voice note into a bassline').actions, y = localBrain('turn ' + a.name + ' into chords').actions; return { x: x.map(q => q.type).join(), y: y.map(q => q.type + ':' + q.to + ':' + (q.track === a.id)).join(), n: PROJ.tracks.length, r: runActions(y).join(), n2: PROJ.tracks.length }; });
+  ok('"turn the voice note into a bassline" transcribes', tv.x === 'transcribe', tv.x);
+  const tv2 = await E(() => ['make the voice note a bassline', 'turn the voice note I just recorded into a bassline', 'make a bassline from the voice note', 'turn the voice note into a base line', 'record a voice note'].map(s => localBrain(s).actions.map(a => a.type + ':' + (a.to || a.part)).join('+')).join(' | '));
+  ok('voice note phrasings convert the recording ("record a voice note" still records)', tv2 === 'transcribe:bass | transcribe:bass | transcribe:bass | transcribe:bass | sing:voice', tv2);
+  const tv3 = await E(() => ['voice note ko bassline bana do', 'is recording se chords banao', 'meri recording ko melody mein badlo'].map(s => localBrain(s).actions.map(a => a.type + ':' + (a.to || a.part)).join('+')).join(' | '));
+  ok('Hinglish voice note requests convert the recording ("voice note ko bassline bana do")', tv3 === 'transcribe:bass | transcribe:chords | transcribe:melody', tv3);
+  ok('"turn <recording name> into chords" transcribes that track',tv.y === 'transcribe:chords:true' && tv.n2 === tv.n + 1 && /chords/.test(tv.r), tv.r);
   const im = await E(() => { const r = runActions([{ type: 'transcribe', to: 'bass' }]); return { tracks: PROJ.tracks.map(t => t.name + ':' + t.kind).join(', '), r: r.join() }; });
   ok('import MIDI + audio, turn audio into a bassline', /Lead:notes/.test(im.tracks) && /sing:audio/.test(im.tracks) && /bassline/.test(im.tracks), im.tracks);
+  // UX-13 (QA, 17 Nov): a 16-bar MIDI file into a 4-bar beat keeps every note, the loop grows to 16 bars, one Undo puts it back
+  const lm = await E(async () => { await newSong('Smoke long MIDI'); runActions([{ type: 'add_drums', style: 'house' }]); setBars(4); undoBoundary(); const n0 = PROJ.tracks[0].events.length;
+    const ev = []; for (let i = 0; i < 64; i++) ev.push({ b: i, d: 0.5, n: 60 + (i % 12), v: 0.8 });
+    await importFile(new File([buildMidi([{ name: 'Long', kind: 'notes', role: 'melody', inst: 'piano', events: ev }], CTRL.bpm, 64, 'long')], 'long16.mid'));
+    const t = PROJ.tracks.find(x => x.name === 'Long'), r = { bars: PROJ.bars, notes: t ? t.events.length : 0, last: t ? Math.max(...t.events.map(e => e.b)) : 0, toast: $('#toast').textContent };
+    undo(); r.undoBars = PROJ.bars; r.undoTracks = PROJ.tracks.length; r.undoDrums = PROJ.tracks[0].events.length === n0; return r; });
+  ok('long MIDI import keeps all notes and grows the loop (one Undo)', lm.bars === 16 && lm.notes === 64 && lm.last === 63 && /loop is now 16 bars/.test(lm.toast) && lm.undoBars === 4 && lm.undoTracks === 1 && lm.undoDrums, JSON.stringify(lm));
   // 6. sing a bassline over the beat (fake microphone sings C E G A C G)
   await E(() => newSong('Smoke sing')); await W(300);
-  await E(() => { runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_chords' }]); ASSIST.run('let me sing the bassline'); });
+  await E(() => { runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_chords' }]); window.__sayLog = []; const o = ASSIST.say; ASSIST.say = function (m, op) { window.__sayLog.push(m); ASSIST.say = o; return o.call(this, m, op); }; ASSIST.run('let me sing the bassline'); });
+  await W(300); const sr = await E(() => (window.__sayLog || [])[0] || '');
+  ok('the sing reply doesn\'t suggest singing what you just asked for', /Sing the bassline/.test(sr) && !/let me sing|Bassline next/.test(sr), sr);
   await W(3500); const guide = await E(() => TAKE_GUIDE && PROJ.tracks.filter(trackAudible).every(t => t.role === 'drums'));
   ok('while singing, only the drums play', guide);
   await E(() => { window.__live = 0; const orig = noteOn; window.noteOn = function () { if (LOOP.state === 'take') window.__live++; return orig.apply(this, arguments); }; });
@@ -79,6 +140,9 @@ try {
   ok('sing the bassline → bass track', sb && sb.n >= 4 && sb.lo < 60, sb ? `${sb.n} notes` : 'no track');
   ok('a sung part doesn\'t add your raw voice as an extra track', await E(() => !PROJ.tracks.some(t => t.kind === 'audio')));
   ok('your voice isn\'t played back live while you sing, and the mic turns off after', await E(() => window.__live === 0 && !MIC.on));
+  const lo = await E(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), cb = $('#asListen'); cb.click(); await w(1200); const on = MIC.on, tr = MIC.stream && MIC.stream.getTracks()[0];
+    cb.click(); cb.click(); cb.click(); await w(1200); return { on, off: !MIC.on && !MIC.pending, ended: !!tr && tr.readyState === 'ended', live: __sr.filter(r => r.on).length, orb: $('#asOrb').dataset.state }; });
+  ok('listening off (even off-on-off fast) releases the mic and leaves no recogniser running', lo.on && lo.off && lo.ended && lo.live === 0 && lo.orb === 'idle', JSON.stringify(lo));
   ok('humming isn\'t mistaken for talking', await E(() => !isSpeechy('la la la da da') && isSpeechy('add a bassline please')));
   // 6b. sung chords land on the beat, no repeats back to back, each at least a beat (UX-2)
   await E(() => { ASSIST.run('let me sing the chords'); }); await W(14500);
@@ -113,12 +177,41 @@ try {
     el().click(); const text = $('#songChip').hidden ? null : $('#songChipT').textContent; $('#songChipU').click(); const back = !!songFind('break').parts[t.id].on === was;
     el().click(); undoBoundary(); songResize('outro', 12); const label = $('#songChipT').textContent; undo(); undo(); return { text, back, label, outro: songFind('outro').bars }; });
   ok('song: clicking a part shows its own Undo chip, and that Undo undoes exactly it', /^\S.* (on|off) in Break$/.test(chp.text || '') && chp.back && /^Outro: 12 bars/.test(chp.label) && chp.outro === 16, JSON.stringify(chp));
+  // UX-7 (QA, 14 Nov): after a double-click opens the note editor on a part, Ctrl+A / Delete / Ctrl+D act on its notes, never on the song's sections
+  const kxy = await E(() => { songTemplate('club'); const s = songFind('drop'), t = PROJ.tracks.find(t => t.role === 'chords'); const el = document.querySelector(`.part[data-sid="${s.id}"][data-tid="${t.id}"]`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  const kdbl = async () => { await p.mouse.move(kxy.x, kxy.y); await p.mouse.down(); await p.mouse.up(); await W(80); await p.mouse.down({ clickCount: 2 }); await p.mouse.up({ clickCount: 2 }); await W(400); };
+  const kmod = async k => { await p.keyboard.down('Control'); await p.keyboard.press(k); await p.keyboard.up('Control'); await W(150); };
+  const kst = () => E(() => ({ secs: songSections().length, bars: songBars(), notes: edTrack() ? edTrack().events.length : -1, ed: !$('#editor').hidden }));
+  await kdbl(); const k0 = await kst(); await kmod('a'); await p.keyboard.press('Delete'); await W(150); const k1 = await kst();
+  await p.keyboard.press('Delete'); await p.keyboard.press('Backspace'); await W(150); const k2 = await kst(); await E(() => undo()); await W(150); const k3 = await kst();
+  ok('song: double-click Chords in the Drop, Ctrl+A, Delete removes its notes, not the Drop; Delete with nothing selected changes nothing; Undo brings the notes back', k0.ed && k0.notes > 0 && k1.secs === 6 && k1.bars === 96 && k1.notes === 0 && k2.secs === 6 && k2.bars === 96 && k3.notes === k0.notes, `${k0.notes} → ${k1.notes} → ${k3.notes} notes, ${k2.secs} sections, ${k2.bars} bars`);
+  await kmod('a'); await kmod('d'); const k4 = await kst(); await E(() => undo()); await W(150); const k5 = await kst();
+  ok('song: Ctrl+D in the editor duplicates the notes, not the section (one Undo)', k4.secs === 6 && k4.notes === 2 * k0.notes && k5.notes === k0.notes, `${k0.notes} → ${k4.notes} → ${k5.notes} notes, ${k4.secs} sections`);
+  const bxy = await E(() => { const el = document.querySelector(`.sec[data-sid="${songFind('break').id}"] .sname`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  await p.mouse.click(bxy.x, bxy.y); await W(300); await p.keyboard.press('Delete'); await W(150);
+  const k6 = await E(() => { const r = { secs: songSections().length, gone: !songFind('break') }; undo(); r.back = songSections().length; r.brk = !!songFind('break'); closeEditor(); return r; });
+  ok('song: click a section name, then Delete still removes the section, and Undo restores it', k6.secs === 5 && k6.gone && k6.back === 6 && k6.brk, JSON.stringify(k6));
+  // QA, 15 Nov (UX-7 re-check): after typing to Keys, the editor still takes the keyboard (double-click a part in Song mode, click a note in Loop mode); Space plays/stops there
+  const kSay = async txt => { const n0 = await E(() => document.querySelectorAll('#asChat .bub.as').length); await p.$eval('#asIn', el => el.scrollIntoView({ block: 'center' })); await p.click('#asIn', { clickCount: 3 }); await p.keyboard.type(txt); await p.keyboard.press('Enter');
+    await p.waitForFunction(n => document.querySelectorAll('#asChat .bub.as').length > n, { timeout: 10000 }, n0).catch(() => {}); await W(300); await E(() => loopStop()); return E(() => document.activeElement.id); };
+  const kf0 = await kSay('more reverb on the chords'); const kxy2 = await E(() => { const el = document.querySelector(`.part[data-sid="${songFind('drop').id}"][data-tid="${PROJ.tracks.find(t => t.role === 'chords').id}"]`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  await p.mouse.move(kxy2.x, kxy2.y); await p.mouse.down(); await p.mouse.up(); await W(80); await p.mouse.down({ clickCount: 2 }); await p.mouse.up({ clickCount: 2 }); await W(400);
+  const kf1 = await E(() => document.activeElement.id); await p.keyboard.press(' '); await W(250); const kr1 = await E(() => TR.running); await p.keyboard.press(' '); await W(250); const kr2 = await E(() => TR.running);
+  await E(() => { closeEditor(); songMode('loop'); openEditor(PROJ.tracks.find(t => t.role === 'chords').id); }); const kf2 = await kSay('a bit louder chords');
+  const knx = await E(() => { const t = edTrack(), G = edGeom(); $('#editor').scrollIntoView({ block: 'center' }); const cr = $('#edCanvas').getBoundingClientRect(); for (const e of t.events) { const R = evRect(t, G, e); if (R && R.y > 2 && R.y + R.h < G.gh - 2) return { x: cr.left + R.x + Math.min(4, R.w / 2), y: cr.top + R.y + R.h / 2, n: t.events.length }; } return null; });
+  await p.mouse.click(knx.x, knx.y); await W(200); const kf3 = await E(() => document.activeElement.id); await p.keyboard.press('Delete'); await W(150); const kn = await E(() => edTrack().events.length); await E(() => { undo(); closeEditor(); songMode('song'); });
+  ok('song/loop: after typing to Keys, double-click a part or click a note gives the editor the keys (Space plays/stops, Delete removes the note)', kf0 === 'asIn' && kf1 === 'edCanvas' && kr1 && !kr2 && kf2 === 'asIn' && kf3 === 'edCanvas' && kn === knx.n - 1, JSON.stringify({ song: kf1, space: [kr1, kr2], loop: kf3, notes: `${knx.n}→${kn}` }));
   const pl = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); const calls = []; const orig = scheduleEvent; window.scheduleEvent = function (tr, e) { calls.push(e.B); return orig.apply(this, arguments); };
     songPlay({ from: 33 }); await W(400); loopStop(); const first = calls[0], sec = first != null ? songAt(first).section.name : null;
     calls.length = 0; songLoop('break', { play: false }); const range = songLoopRange(); songPlay({ from: 64 }); await W(2900); const beat = songBeatAt(A.ctx.currentTime), wrapped = calls.some(B => B < 200); loopStop(); songLoop(null); window.scheduleEvent = orig;
     return { first, sec, range, beat, wrapped }; });
   ok('song: play from bar 33 starts in the Drop', pl.first >= 128 && pl.first < 132 && pl.sec === 'Drop', `first note at beat ${pl.first} (${pl.sec})`);
   ok('song: loop the Break jumps back to its start', JSON.stringify(pl.range) === '[192,256]' && pl.beat >= 192 && pl.beat < 210 && pl.wrapped, `range ${JSON.stringify(pl.range)}, beat ${pl.beat && pl.beat.toFixed(1)}`);
+  // UX-13 (QA, 17 Nov): moving the looped section while it plays keeps playback in it (it used to run on to the end and stop)
+  const lf = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); songLoop('break', { play: false }); songPlay({ from: 'break' }); await W(600);
+    undoBoundary(); songMove('break', 0); await W(1500); const beat = songBeatAt(A.ctx.currentTime), r = { range: songLoopRange(), beat: +beat.toFixed(1), at: songAt(beat).section.name, run: TR.running };
+    loopStop(); undo(); songLoop(null); r.back = songStartOf(songFind('break')); return r; });
+  ok('song: loop survives moving its section while playing', lf.run && JSON.stringify(lf.range) === '[0,64]' && lf.beat > 0 && lf.beat < 64 && lf.at === 'Break' && lf.back === 192, JSON.stringify(lf));
   const mu = await E(() => { const t = PROJ.tracks.find(t => t.take === 'bass' || t.role === 'bass'), s = songFind('drop 2'), a0 = JSON.stringify(t.events); const L = songMakeUnique(s.id, t.id);
     t.patterns.B.events.push({ b: 0.5, d: 0.25, n: 40, v: 0.9 }); saveProject(); const st = songStartOf(s), d1 = songStartOf(songFind('drop')), fl = songFlat(t);
     return { L, same: JSON.stringify(t.events) === a0, inB: fl.some(e => e.n === 40 && Math.abs(e.B - st - 0.5) < 1e-6), inA: fl.some(e => e.n === 40 && Math.abs(e.B - d1 - 0.5) < 1e-6) }; });
@@ -142,6 +235,12 @@ try {
     const u = new Uint8Array(await m.blob.arrayBuffer()), d = await A.ctx.decodeAudioData(u.buffer.slice(0)); let pk = 0; for (let c = 0; c < d.numberOfChannels; c++) { const x = d.getChannelData(c); for (let i = 0; i < x.length; i++) { const a = Math.abs(x[i]); if (a > pk) pk = a; } }
     return { dec: d.duration, pk: 20 * Math.log10(pk || 1e-9), rms: 20 * Math.log10(m.rms || 1e-9), sec: ms / 1000 }; });
   ok('song: whole-song MP3 of the Short layout, drums (decodes back, no clipping)', Math.abs(sp.dec - 33.0) < 0.1 && sp.pk < 0 && sp.rms > -40, `${sp.dec.toFixed(2)} s, peak ${sp.pk.toFixed(2)} dBFS, RMS ${sp.rms.toFixed(1)} dB, ${sp.sec.toFixed(0)} s to make`);
+  // UX-7 (QA, 14 Nov): importing a MIDI file with the Drop selected names every new track in the note
+  await E(() => { songTemplate('club'); closeEditor(); songSelect(songFind('drop').id); window.__toasts = []; const o = window.toast; window.toast = function (m) { window.__toasts.push(m); return o.apply(this, arguments); }; window.__toastO = o; });
+  await (await p.$('#importFile')).uploadFile(fx('test.mid')); await W(1600);
+  const mtn = await E(() => window.__toasts.filter(m => /plays? in /.test(m)).length);
+  const mt = await E(() => { const m = window.__toasts.find(m => / in Drop\b/.test(m)) || ''; window.toast = window.__toastO; return m; });
+  ok('song: a MIDI file imported into the Drop names both new tracks (one toast)', /Lead/.test(mt) && /Kick/.test(mt) && /play in Drop/.test(mt) && mtn === 1, `${mtn} toast: ${mt}`);
   const rc = await E(() => { songMode('song'); recordPress(); const m = SONG.view.mode; loopStop(); return m; });
   ok('song: Rec in Song mode switches to Loop', rc === 'loop', rc);
   // UX-5: a part sung in Song mode lands like a part Keys adds (selected section only) and says where it plays, once back in Song mode
@@ -150,8 +249,8 @@ try {
     runActions([{ type: 'add_melody' }]); window.__ref = PROJ.tracks[PROJ.tracks.length - 1].id; ASSIST.run('let me sing the chords'); });
   await p.waitForFunction(() => PROJ.tracks.some(t => t.take === 'chords') && LOOP.state !== 'take', { timeout: 40000 }).catch(() => {}); await W(1300); // the toast shows 0.9 s after the take
   const sg = await E(() => { const S = songSections(), t = PROJ.tracks.find(t => t.take === 'chords'), on = id => S.filter(s => s.parts[id] && s.parts[id].on).map(s => s.name).join(',');
-    const r = { mode: SONG.view.mode, sung: t ? on(t.id) : null, ref: on(window.__ref), toast: window.__toasts.find(m => /Sung chords/.test(m)) || null }; loopStop(); return r; });
-  ok('song: sing the chords in Song mode → plays in the selected section like an added part, and a toast says so', sg.mode === 'song' && sg.sung === 'Intro' && sg.sung === sg.ref && /^“Sung chords” plays in Intro\. Click its empty parts/.test(sg.toast || ''), JSON.stringify(sg));
+    const r = { mode: SONG.view.mode, sung: t ? on(t.id) : null, ref: on(window.__ref), toast: window.__toasts.find(m => /Sung chords/.test(m)) || null, n: window.__toasts.filter(m => /Sung chords.* plays? in /.test(m)).length }; loopStop(); return r; });
+  ok('song: sing the chords in Song mode → plays in the selected section like an added part, and one toast says so', sg.mode === 'song' && sg.sung === 'Intro' && sg.sung === sg.ref && /^“Sung chords” plays in Intro\. Click its empty parts/.test(sg.toast || '') && sg.n === 1, JSON.stringify(sg));
   const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
   await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(1500);
   await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 15000 }).catch(() => {}); // keepLastSong is async: wait for it on a busy machine
@@ -181,6 +280,11 @@ try {
   ok('hats lift on beats 2 and 4, in-between 16ths sit back', fe.on24 > fe.on13 * 1.05 && fe.on24 > fe.off * 1.2, `2/4 ${fe.on24.toFixed(2)} vs 1/3 ${fe.on13.toFixed(2)} vs off-16ths ${fe.off.toFixed(2)}`);
   ok('"more swing" is full triplet swing (off-16ths 1/12 beat late)', fe.more.sw > 0.32 && Math.abs(fe.lag - 1 / 12) < 0.01 && /66%/.test(fe.more.r), `${fe.lag.toFixed(3)} beat · ${fe.more.r}`);
   ok('"less swing" steps down (66 → 58 → 54 → straight), exact "swing 58%", "no swing"', fe.less.map(x => x.sw).join() === '0.16,0.08,0' && /58%/.test(fe.less[0].r) && Math.abs(fe.exact.sw - 0.16) < 0.005 && fe.none.sw === 0, fe.less.map(x => x.r).join(' → '));
+  // AI-6: "straighten it a bit" / "a bit straighter" / "a little less bounce" step one rung; "make it bouncier" steps up; "straighten it" is straight
+  const sw6 = await E(() => { const drums = () => PROJ.tracks.find(t => t.role === 'drums'), said = txt => { LAST_TEXT.text = txt; runActions(localBrain(txt).actions); LAST_TEXT.text = ''; return drums().recipe.swing; };
+    runActions([{ type: 'add_drums', style: 'house', swing: '70%' }]); const down = ['too swingy, straighten it a bit', 'a bit straighter', 'a little less bounce', 'straighten the hats a little'].map(said);
+    const up = said('make it bouncier'); runActions([{ type: 'groove', swing: '70%' }]); return { down, up, full: said('straighten it') }; });
+  ok('"straighten it a bit" steps 70 → 66 → 58 → 54 → straight; "bouncier" swings; "straighten it" is straight', sw6.down.join() === '0.333,0.16,0.08,0' && sw6.up > 0.3 && sw6.full === 0, `${sw6.down.join(' → ')} · bouncier ${sw6.up} · straighten ${sw6.full}`);
   ok('human styles: kick pushes about 10 ms early', fe.kickMs < -6 && fe.kickMs > -14, `${fe.kickMs.toFixed(1)} ms`);
   // with the AI on (mocked like the old live prompt, which sends swing 0 for "less swing"), the user's words still step down
   const ai = await E(async () => { const of = window.fetch, eng = ASSIST.engine, drums = () => PROJ.tracks.find(t => t.role === 'drums');
@@ -258,6 +362,67 @@ try {
   ok('AI-1: the AI\'s "filter sweep" offer becomes a snare roll; its "mute the drums" said about the outro only takes them out of the outro', ai1c.guard && ai1c.mute, JSON.stringify({ guard: ai1c.guard, mute: ai1c.mute }));
   ok('AI-1: when the AI adds its own snare roll to a new layout, the Build still ends in a beat of silence', /"gap":true/.test(ai1c.llmGap) || /kickdrop/.test(ai1c.llmGap), ai1c.llmGap);
   ok('AI-1: "make it shorter" keeps 8/16/32-bar phrases; "take the bass out of the build" (AI mix mute) takes it out of the Build only; an added drop is numbered in song order and the Break keeps its gap', /^((8|16|32),)*(8|16|32)$/.test(ai1c.phr) && ai1c.outOf && /Break,Drop 2,Drop 3,Outro/.test(ai1c.order) && /"gap":true/.test(ai1c.brkEnd), JSON.stringify({ phrases: ai1c.phr, outOf: ai1c.outOf, order: ai1c.order, brk: ai1c.brkEnd }));
+  // AI-8: Basic mode: compound genres, unsolo/unmute, quantize, two requests in one sentence, the artist the user named
+  const a8 = await E(async () => { const eng = ASSIST.engine, R = {};
+    try { ASSIST.engine = null;
+      await newSong('Smoke AI-8 afro'); PROJ.style = null; await handleRequest('afro house beat'); loopStop(); R.afro = PROJ.style;
+      await newSong('Smoke AI-8 lofi'); PROJ.ref = undefined; PROJ.style = null; await handleRequest('lofi hip hop beat'); loopStop(); R.lofi = PROJ.style + '/' + (PROJ.ref || '');
+      await newSong('Smoke AI-8 ref'); PROJ.ref = undefined; await handleRequest('drums like Black Coffee'); loopStop(); R.ref = PROJ.ref;
+      await newSong('Smoke AI-8 mix'); runActions([{ type: 'add_drums', style: 'house', seed: 5180 }, { type: 'add_bass', seed: 5181 }, { type: 'add_chords', seed: 5182 }, { type: 'add_melody', seed: 5183 }]); loopStop();
+      const tr = r => PROJ.tracks.find(t => t.role === r), n0 = PROJ.tracks.length;
+      await handleRequest('solo the bass'); await handleRequest('unsolo the bass'); R.unsolo = !tr('bass').solo && PROJ.tracks.length === n0;
+      await handleRequest('un-mute the drums'); R.unmute = !tr('drums').mute;
+      await handleRequest('mute the drums and solo the bass'); R.both = tr('drums').mute && tr('bass').solo; await handleRequest('remove the solo'); await handleRequest('unmute everything'); R.clear = !PROJ.tracks.some(t => t.solo || t.mute);
+      const rc = (tr('chords').fx || {}).rev || 0, rm = (tr('melody').fx || {}).rev || 0, u0 = UNDO.stack.length;
+      await handleRequest('more reverb on the chords and less on the melody'); R.fx = tr('chords').fx.rev > rc && ((tr('melody').fx || {}).rev || 0) <= rm; R.undo1 = UNDO.stack.length - u0;
+      const p = addTrack({ role: 'melody', inst: 'piano', name: 'Played keys', events: [{ b: 0.07, d: 0.4, n: 60, v: .8 }, { b: 1.12, d: 0.3, n: 64, v: .8 }] }); saveProject();
+      await handleRequest('quantize my melody to 1/8'); R.q = p.events.map(e => e.b).join() + '/' + PROJ.tracks.length;
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('Basic mode: afro house is afro, lofi hip hop is lo-fi with no artist, "like Black Coffee" stays Black Coffee', a8.afro === 'afro' && a8.lofi === 'lofi/' && a8.ref === 'Black Coffee', `${a8.afro}, ${a8.lofi}, ${a8.ref}`);
+  ok('Basic mode: unsolo / un-mute / "remove the solo" / "unmute everything"; two requests in one sentence both run (one Undo)', a8.unsolo && a8.unmute && a8.both && a8.clear && a8.fx && a8.undo1 === 1, JSON.stringify(a8));
+  ok('Basic mode: "quantize my melody to 1/8" snaps your own part to 1/8 and adds no track', a8.q === '0,1/5', a8.q);
+  // AI-8 fix 1: "another one" after adding a part varies that part, "mute everything but the drums", "save the song" saves (no MP3)
+  const f8 = await E(async () => { const eng = ASSIST.engine, R = {};
+    try { ASSIST.engine = null;
+      await newSong('Smoke AI-8 fix'); runActions([{ type: 'add_drums', style: 'house', seed: 5190 }, { type: 'add_bass', seed: 5191 }, { type: 'add_chords', seed: 5192 }]); loopStop();
+      const tr = r => PROJ.tracks.find(t => t.role === r);
+      R.another = localBrain('add a bassline and give me another one').actions.map(a => a.type + ':' + (a.track || '')).join();
+      await handleRequest('mute everything but the drums'); R.but = !tr('drums').mute && tr('bass').mute && tr('chords').mute;
+      R.save = localBrain('save the song').actions.map(a => a.type).join();
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('Basic mode: "add a bassline and give me another one" varies the bass, "mute everything but the drums" mutes the rest, "save the song" saves', f8.another === 'add_bass:,vary:bass' && f8.but && f8.save === 'save', JSON.stringify(f8));
+  // AI-8 fix 2: an explicit number beats the "add some never lowers" guard (AI path), "add some reverb" still raises, "remove the reverb from the chords" keeps the part
+  const g8 = await E(async () => { const eng = ASSIST.engine, R = {};
+    try { ASSIST.engine = null;
+      await newSong('Smoke AI-8 fix 2'); runActions([{ type: 'add_drums', style: 'house', seed: 5200 }, { type: 'add_chords', seed: 5201 }]); loopStop();
+      const ch = () => PROJ.tracks.find(t => t.role === 'chords'), rv = () => Math.round(((ch() || {}).fx || {}).rev * 100);
+      const ai = (text, acts) => { LAST_TEXT.text = text; try { runActions(acts); } finally { LAST_TEXT.text = ''; } };
+      ch().fx.rev = 0.42; ai('set the chords reverb to 20 and add some delay', [{ type: 'track_fx', track: 'chords', effect: 'reverb', amount: 20 }, { type: 'track_fx', track: 'chords', effect: 'delay', amount: 30 }]); R.set = rv();
+      ch().fx.rev = 0.42; ai('add some reverb to the chords', [{ type: 'track_fx', track: 'chords', effect: 'reverb', amount: 40 }]); R.add = rv();
+      ch().fx.rev = 0.42; await handleRequest('set the reverb on the chords to 20%'); R.basic = rv();
+      await handleRequest('remove the reverb from the chords'); R.kept = !!ch(); R.off = ch() ? ch().fx.rev == null : null;
+      /* fix 3: a clause that names the part with remove/delete removes it, even next to "turn off the reverb" */
+      const has = r => PROJ.tracks.some(t => t.role === r);
+      runActions([{ type: 'add_melody', seed: 5202 }]); ai('remove the melody and turn off the reverb', [{ type: 'remove', track: 'melody' }, { type: 'fx', effect: 'reverb', amount: 0 }]); R.rmAI = !has('melody');
+      await handleRequest('delete the drums and kill the reverb'); R.rmBasic = !has('drums') && has('chords');
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('"set the chords reverb to 20 and add some delay" gives 20%, "add some reverb" still raises it, "remove the reverb from the chords" keeps the chords, "remove the melody and turn off the reverb" removes the melody', g8.set === 20 && g8.add === 52 && g8.basic === 20 && g8.kept && g8.off && g8.rmAI && g8.rmBasic, JSON.stringify(g8));
+  // UX-12: Save a copy starts its own history; Undo in the copy never touches the original (in the songs list too)
+  const cu = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)), rec = async k => { const r = await IDB.get(k, 'projects'); return r ? JSON.stringify([r.name, r.bpm, r.tracks, r.savedAt, r.proj.tracks.map(t => t.events.length)]) : null; };
+    await newSong('Smoke original'); runActions([{ type: 'add_drums', style: 'house', seed: 5170 }]); await W(150); runActions([{ type: 'add_bass', seed: 5171 }]); const oid = PROJ.id; await saveCopy(); await W(200); const o0 = await rec(oid);
+    for (let i = 0; i < 4; i++) { PROJ.tracks[0].events.push({ b: i / 2, d: 0.25, n: 40 + i, v: 0.8 }); saveProject(); await W(150); }
+    for (let i = 0; i < 7; i++) { undo(); await W(150); } await W(1800); return { same: o0 === await rec(oid), id: PROJ.id !== oid, name: PROJ.name, n: PROJ.tracks.length }; });
+  ok('Undo after Save a copy never touches the original', cu.same && cu.id && cu.name === 'Smoke original (copy)' && cu.n === 2, JSON.stringify(cu));
+  // UX-12: a tempo typed in the BPM box is one undo step; Undo and Redo restore it exactly
+  const tb = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); await newSong('Smoke tempo box'); runActions([{ type: 'add_drums', style: 'house', seed: 5180 }]); await W(150); runActions([{ type: 'tempo', bpm: 88 }]); await W(150); runActions([{ type: 'add_chords', seed: 5181 }]); await W(150);
+    const s0 = UNDO.stack.length, el = $('#bpm'); el.value = '96'; el.dispatchEvent(new Event('change')); const steps = UNDO.stack.length - s0; undo(); const u = [CTRL.bpm, PROJ.tracks.length]; redo(); return { steps, u, r: [CTRL.bpm, PROJ.tracks.length] }; });
+  ok('BPM box change is one undo step', tb.steps === 1 && tb.u.join() === '88,2' && tb.r.join() === '96,2', JSON.stringify(tb));
+  // UX-12 fix 1: Save after deleting the open song saves it again (autosave keeps skipping it)
+  const sd = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)), has = async () => !!(await IDB.get(PROJ.id, 'projects'));
+    await newSong('Smoke gone'); runActions([{ type: 'add_drums', style: 'house', seed: 5190 }]); await saveNamed(true); const k = PROJ.id;
+    await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
+    await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
+  ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

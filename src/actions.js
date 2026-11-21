@@ -41,21 +41,43 @@ function normAction(a){
   return {type:k,[field]:v};
 }
 const L_=()=>PROJ.bars*4;
-const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
+/* quantize grid: "1/8", "1/16", "1/8t" or "1/8 triplets", "8th", "16th", "quarter"; a number is beats (0.25 = 1/16), or a note value
+   when it is 3..64 (8 = 1/8). Nothing said: 1/16. */
+function gridBeats(g){ if(g==null||g==='') return 0.25;
+  if(typeof g==='number'||/^\s*\d*\.?\d+\s*$/.test(String(g))){ const n=+g; return n>=3&&n<=64?4/n:n>0&&n<=4?n:0.25; }
+  const s=String(g).toLowerCase(), trip=/\btriplets?\b|\btrip\b|\d\s*t\b/.test(s); let m=s.match(/1\s*\/\s*(\d+)/)||s.match(/\b(\d+)(?:st|nd|rd|th|s)?\b/);
+  let den=m?+m[1]:/quarter|crotchet/.test(s)?4:/half/.test(s)?2:/sixteenth/.test(s)?16:/eighth|quaver/.test(s)?8:trip?8:16;
+  if(![1,2,4,8,16,32,64].includes(den)) den=16; return 4/den*(trip?2/3:1); }
+function gridName(q){ for(const d of [1,2,4,8,16,32,64]){ if(Math.abs(4/d-q)<1e-6) return `1/${d} notes`; if(Math.abs(8/(3*d)-q)<1e-6) return `1/${d} triplets`; } return `${Math.round(q*1000)/1000} beats`; }
+/* dB words shared by the replies and the chips, so they always say the same number: 2.8, 3, 5 */
+function dbTxt(x){ const r=Math.round(Math.abs(+x||0)*10)/10; return r%1?r.toFixed(1):String(r); }
+/* the dB a fader really moves for a step (gain is vol², so dB/40 is the fader step; full volume caps it) */
+function faderDb(v0,db){ const v1=clamp(v0*Math.pow(10,clamp(+db,-24,12)/40),0,1); return v0>0&&v1>0?40*Math.log10(v1/v0):0; }
+/* the whole song moves every part by the same dB; going up stops when the loudest part reaches full volume */
+function songDbStep(db){ db=clamp(+db||0,-24,12); if(db<=0) return db; const top=Math.max(0,...PROJ.tracks.map(t=>t.vol>0?t.vol:0)); return top>0?Math.min(db,40*Math.log10(1/top)):0; }
+/* genre names the AI sometimes joins up ("afrohouse", "ukgarage"), mapped to the studio's styles */
+const STYLE_ALIAS={afrohouse:'afro',afrotech:'afro',afrobeat:'afro',afrobeats:'afro',ukgarage:'ukg',garage:'ukg',ukg:'ukg',lofihiphop:'lofi',lofihouse:'deephouse',chillhouse:'deephouse',deeptech:'techhouse',minimalhouse:'techhouse',minimaltechno:'techno',drumandbass:'dnb',drumnbass:'dnb',melodic:'melodichouse',boombap:'boombap',hiphop:'hiphop'};
+const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; if(STYLE_ALIAS[k]) return STYLE_ALIAS[k]; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
 let BATCH={}; const LAST_TEXT={text:''}; const LAST_TAKE={part:null};
 const newSeed=()=>1+Math.floor(Math.random()*2e9);
-function tasteArtist(){ const p=TASTE.profile; if(!p||!p.artists) return null; for(const a of p.artists){ const A=findArtist(a); if(A) return A; } return null; }
+function tasteArtist(){ const p=TASTE.profile; if(!p||!p.artists) return null; for(const a of p.artists){ const A=findArtist(a); if(A) return artistAs(A,a); } return null; }
 /* style + artist for a request: named artist > named style > the song's vibe > the person's taste > house */
 function resolveVibe(a){
   /* the AI sometimes invents a reference; only switch away from the song's vibe when the user actually named it */
   const said=normName(LAST_TEXT.text||''), named_=x=>{ const k=normName(x||''); return !said||!k||said.includes(k.split(' ')[0])||(findArtist(x)&&findArtist(x).names.some(n=>said.includes(normName(n)))); };
   if(PROJ.ref&&(a.ref||a.artist||a.like)&&!named_(a.ref||a.artist||a.like)){ a=Object.assign({},a,{ref:undefined,artist:undefined,like:undefined}); }
   if(PROJ.style&&a.style&&pickStyle(a.style)!==PROJ.style&&said&&!STYLE_WORDS.some(([k,re])=>k===pickStyle(a.style)&&re.test(' '+said+' '))) a=Object.assign({},a,{style:undefined});
+  /* the user named a genre and no artist ("afro house beat", "lofi hip hop beat"): the AI's artist pick is dropped and the genre is used,
+     so Keys never says or saves an artist the user didn't name (QA, 16 Nov) */
+  { const w=a.ref||a.artist||a.like, RA=w&&!/playlist/i.test(w)?findArtist(w):null, said_=LAST_TEXT.text||'', sw=typeof askText==='function'?askText(said_):' '+said_.toLowerCase()+' ', gen=RA&&said_?STYLE_WORDS.find(([k,re])=>re.test(sw)):null;
+    if(gen&&!artistAlias(RA,said_)&&!(PROJ.ref&&findArtist(PROJ.ref)===RA)) a=Object.assign({},a,{ref:undefined,artist:undefined,like:undefined,style:a.style||gen[0]}); }
   let artist=findArtist(a.ref||a.artist||a.like); let named=artist?null:pickStyle(a.style); /* a known artist decides the style; the AI's style guess is ignored */
   const pl=typeof findPlaylist==='function'?findPlaylist(a.playlist||(/playlist/i.test(a.ref||a.like||'')?(a.ref||a.like):null)):null;
-  if(pl){ artist=artist||pl.artists.map(findArtist).find(Boolean)||null; named=named||pl.style||(artist&&artist.style)||null; }
+  if(pl){ artist=artist||pl.artists.map(n=>artistAs(findArtist(n),n)).find(Boolean)||null; named=named||pl.style||(artist&&artist.style)||null; }
   if(!artist&&!named&&PROJ.ref) artist=findArtist(PROJ.ref);
   if(!artist&&!named&&!PROJ.style) artist=tasteArtist();
+  /* the name the user said: "like Black Coffee" shows and saves Black Coffee, not the first name of the table row (Keinemusik) */
+  if(artist) artist=artistAs(artist,LAST_TEXT.text,a.ref||a.artist||a.like,PROJ.ref,artist.name);
   const s=named||(artist&&artist.style)||PROJ.style||tasteStyle()||'house';
   return {s,artist};
 }
@@ -149,11 +171,24 @@ const ACT={
     return `${list.length} notes on ${t.name}`; },
   instrument(a){ const t=findTrack(a.track); if(!t||t.kind!=='notes') return; const id=resolveInst(a.instrument||a.value,t.role==='drums'?'drums':t.role==='bass'?'bass':null); if(!id) return;
     const I=INST.get(id); if(I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); t.inst=id; return `${t.name} now on ${I.name}`; },
-  mix(a){ const sw=a.mute!=null&&a.volume==null&&a.change==null&&songArranged()&&secSaid(); /* "drop the drums in the outro" sent as a mute: that is one section, not the whole song */
+  mix(a){ const sw=a.mute!=null&&a.volume==null&&a.change==null&&a.db==null&&songArranged()&&secSaid(); /* "drop the drums in the outro" sent as a mute: that is one section, not the whole song */
     if(sw) return ACT.parts({section:sw,[a.mute?'out':'in']:[a.track]});
-    const ref=String(a.track||'').toLowerCase(); const id=['master','keys','pads'].includes(ref)?ref:(findTrack(a.track)||{}).id; if(!id) return; const cfg=chCfg(id); const out=[];
+    const ref=String(a.track||'').toLowerCase().trim();
+    /* the whole song ("turn it down a bit", "make it louder"): every part's fader moves by the same dB, so it is part of the song and
+       Undo restores it exactly. The master fader itself is a studio setting outside Undo, so relative moves on "master" come here too. */
+    if(/^(all|song|the song|whole song|the whole song|everything|mix|the mix)$/.test(ref)||ref==='master'&&a.volume==null&&(a.db!=null||a.change!=null)){
+      const db=a.db!=null?+a.db:40*Math.log10(clamp(0.8+(+a.change||0)/100,0.05,1)/0.8); if(!isFinite(db)||!db||!PROJ.tracks.length) return;
+      const got=songDbStep(db); if(Math.abs(got)<0.05) return `Whole song: ${db>0?'the loudest part is already at full volume':'already silent'}`;
+      const k=Math.pow(10,got/40); PROJ.tracks.forEach(t=>{ if(t.vol>0) chSet(t.id,'vol',clamp(t.vol*k,0,1)); });
+      return `Whole song: ${got>0?'up':'down'} ${dbTxt(got)} dB (every part, same balance)`; }
+    const id=['master','keys','pads'].includes(ref)?ref:(findTrack(a.track)||{}).id; if(!id) return; const cfg=chCfg(id); const out=[];
     if(a.volume!=null){ chSet(id,'vol',clamp(+a.volume/100,0,1)); out.push(`volume ${Math.round(cfg.vol*100)}`); }
     if(a.change!=null){ chSet(id,'vol',clamp(cfg.vol+(+a.change)/100,0,1)); out.push(`volume ${Math.round(cfg.vol*100)}`); }
+    /* db: a relative fader move in decibels ("a bit quieter" = -3); the fader's gain is vol² so dB/40 is the fader step */
+    if(a.db!=null&&isFinite(+a.db)&&+a.db){ const v0=cfg.vol, v1=clamp(v0*Math.pow(10,clamp(+a.db,-24,12)/40),0,1); chSet(id,'vol',v1); const got=v0>0&&v1>0?40*Math.log10(v1/v0):0;
+      out.push(Math.abs(got)<0.05?(+a.db>0?'already at full volume':'already silent'):`${got>0?'up':'down'} ${dbTxt(got)} dB (volume ${Math.round(v1*100)})`); }
+    /* eq: relative EQ steps in dB, {low:+3} ("more kick" on the drums), {high:-3} ("softer hats") */
+    if(a.eq&&typeof a.eq==='object') ['low','mid','high'].forEach(b=>{ const d=+a.eq[b]; if(!d||!isFinite(d)) return; const f={low:'lo',mid:'mid',high:'hi'}[b], v0=Math.round(+cfg[f]||0), v=clamp(Math.round(v0+d),-15,15); chSet(id,f,v); out.push(v===v0?`${b} EQ already at ${v>0?'+':''}${v} dB`:`${b} EQ ${v>v0?'+':'-'}${Math.abs(v-v0)} dB (now ${v>0?'+':''}${v})`); });
     ['low','mid','high'].forEach(b=>{ if(a[b]!=null){ chSet(id,{low:'lo',mid:'mid',high:'hi'}[b],clamp(+a[b],-15,15)); out.push(`${b} ${a[b]>0?'+':''}${a[b]} dB`); } });
     if(a.mute!=null){ cfg.mute=!!a.mute; chApply(id); out.push(a.mute?'muted':'unmuted'); }
     if(a.solo!=null){ cfg.solo=!!a.solo; refreshTrackGains(); out.push(a.solo?'solo':'solo off'); }
@@ -161,8 +196,13 @@ const ACT={
   fx(a){ const want=String(a.effect||'').toLowerCase().replace(/[-_]/g,' '); const type=Object.keys(FX_LIB).find(k=>FX_LIB[k].name.toLowerCase()===want||k===want.replace(/ /g,''))||Object.keys(FX_LIB).find(k=>FX_LIB[k].name.toLowerCase().includes(want)||want.includes(k));
     if(!type) return; let i=FX.slots.findIndex(s=>s.type===type); if(i<0){ i=7; FX.setType(i,type); } FX.set(i,clamp((+a.amount)/100,0,1)); return `${FX_LIB[type].name} ${Math.round(FX.slots[i].amount*100)}%`; },
   remove(a){ const ref=a.track||a.value; if(!PROJ.tracks.some(t=>t.name.toLowerCase()===String(ref||'').toLowerCase())&&songArranged()&&findSec(ref)) return; /* "remove the second drop" sent as a track: the section action does it */
-    const t=findTrack(ref); if(!t) return; removeTrack(t.id); return `Removed ${t.name}`; },
-  quantize(a){ const t=findTrack(a.track); if(!t) return; const q=+a.grid||0.25; t.events.forEach(e=>{ e.b=Math.round(e.b/q)*q; e.d=Math.max(q,Math.round(e.d/q)*q); }); return `Quantized ${t.name}`; },
+    const t=findTrack(ref); if(!t) return;
+    /* "remove the reverb from the chords" turns the reverb off; the part stays (QA, 16 Nov: the AI or the parser deleted the track) */
+    const fw=fxOffSaid(LAST_TEXT.text,t); if(fw) return ACT.track_fx({track:t.id,effect:fw,remove:true});
+    removeTrack(t.id); return `Removed ${t.name}`; },
+  quantize(a){ const t=findTrack(a.track); if(!t||t.kind==='audio'||!t.events) return; const q=gridBeats(a.grid), L=L_(); let moved=0;
+    t.events.forEach(e=>{ let b=Math.round(e.b/q)*q; if(b>=L&&e.b<L) b=0; if(Math.abs(b-e.b)>1e-6) moved++; e.b=b; e.d=Math.max(q,Math.round(e.d/q)*q); });
+    return `Quantized ${t.name} to ${gridName(q)} (${moved} of ${t.events.length} notes moved)`; },
   transpose(a){ const t=findTrack(a.track); if(!t||(INST.get(t.inst)||{}).percussive) return; const s=Math.round(+a.semitones||0); t.events.forEach(e=>e.n+=s); return `${t.name} ${s>0?'up':'down'} ${Math.abs(s)}`; },
   transport(a){ const d=String(a.do||a.value||'').toLowerCase(); if(/stop|pause/.test(d)){ loopStop(); return 'Stopped'; }
     /* "play from the second drop": from = a section (name, "drop 2", "second drop", number in the list) or a bar ("bar 33") */
@@ -176,21 +216,33 @@ const ACT={
     return `${t.name} on ${INST.get(t.inst).name}`; },
   again(a){ const p=LAST_TAKE.part; if(!p) return; BATCH.take=p; return `Again: sing the ${p} after the count-in`; },
   track_fx(a){ const t=findTrack(a.track); if(!t) return; const w=String(a.effect||'').toLowerCase();
+    /* "remove the effects from the chords": every effect off, the part stays */
+    if(/^(all|effects?|fx|all effects)$/.test(w.trim())&&(a.remove||a.amount===0)){ t.fx={}; refreshTrackGains(); return `Effects off on ${t.name}`; }
+    /* the AI sometimes sends EQ as an effect ({effect:"eq",amount:{high:-3}}): that is a relative EQ step on the mixer */
+    if(/^(eq|equali[sz](er|ation)?)$/.test(w.trim())){ const eq=a.eq||(a.amount&&typeof a.amount==='object'?a.amount:null)||(a.band&&isFinite(+(a.change??a.amount))?{[String(a.band).toLowerCase()]:+(a.change??a.amount)}:null); return eq?ACT.mix({track:t.id,eq}):undefined; }
     const k=/rev|room|hall|space/.test(w)?'rev':/delay|echo/.test(w)?'dly':/side|pump|duck/.test(w)?'duck':/low ?cut|high ?pass|hp|rumble/.test(w)?'hp':/high ?cut|low ?pass|lp|dark|muffle/.test(w)?'lp':/drive|satur|distort|warm|grit/.test(w)?'drive':/comp|glue|punch/.test(w)?'comp':/wid|stereo|spread/.test(w)?'width':/pan/.test(w)?'pan':/preset|default|studio/.test(w)?'preset':null;
     if(!k) return; t.fx=t.fx||{};
     if(k==='preset'){ t.fx=roleFx(t.role,PROJ.style); refreshTrackGains(); return `Studio effects on ${t.name}`; }
     const d=TFX_DEF[k]; if(a.remove||a.amount===0||/off|remove|no /.test(String(a.value||''))){ delete t.fx[k]; refreshTrackGains(); return `${d.name} off on ${t.name}`; }
     const num=x=>x!=null&&x!==''&&isFinite(+x); let v=num(a.amount)?+a.amount:(num(a.change)?null:d.def*100);
-    if(d.unit==='Hz'){ v=num(a.hz)?+a.hz:(num(a.amount)&&+a.amount>=20?+a.amount:(k==='hp'?(t.role==='bass'?35:t.role==='drums'?30:180):6000)); t.fx[k]=clamp(Math.round(v),d.min,d.max); }
+    if(d.unit==='Hz'){ v=num(a.hz)?+a.hz:(num(a.amount)&&+a.amount>=20?+a.amount:(k==='hp'?(t.role==='bass'?35:t.role==='drums'?30:180):6000));
+      /* a high cut under 800 Hz is never what was meant (the AI sent "amount":60 for "softer hats"): read 0-100 as how much to cut, on the log scale */
+      if(k==='lp'&&!num(a.hz)&&num(a.amount)&&+a.amount<=100) v=d.max*Math.pow(d.min/d.max,clamp(+a.amount,0,100)/100);
+      t.fx[k]=clamp(Math.round(v),d.min,d.max); }
     else if(k==='pan'){ t.fx.pan=clamp((num(a.amount)?+a.amount:0)/100,-1,1); }
-    else { const cur=t.fx[k]||0; t.fx[k]=clamp(v==null?cur+(+a.change)/100:v/100,0,1); }
+    else { const cur=t.fx[k]||0; let nv=clamp(v==null?cur+(+a.change)/100:v/100,0,1);
+      /* "add some reverb" / "more delay" never lowers it, even when the AI sends an amount under what the track has (QA, 16 Nov) */
+      /* only when the add/more is about THIS effect and no number, set, less or too wet was said for it (QA, 16 Nov: "set the chords reverb to 20 and add some delay" kept 20) */
+      if(nv<cur&&fxAddOnly(fxClause(LAST_TEXT.text,k,t))) nv=clamp(cur+0.1,0,1); t.fx[k]=nv; }
     if(FXOPEN) FXOPEN.add(t.id); refreshTrackGains();
     return `${d.name} on ${t.name}: ${fxShow(k,t.fx[k])}`; },
   export(a){ const fmt=String(a.format||a.value||'mp3').toLowerCase(); const len=a.minutes?Math.round(+a.minutes*60):a.seconds?+a.seconds:a.loops?Math.min(16,+a.loops):undefined;
     if(!PROJ.tracks.length) return; if(/zip|stem|ableton|wav/.test(fmt)){ exportZip(); return 'Packing the Ableton zip (WAV mix, stems and MIDI)'; } if(/mid/.test(fmt)){ exportMidiOnly(); return 'Downloading the MIDI file'; }
     if(len) { const sel=$('#mp3Len'); if(sel && [...sel.options].some(o=>+o.value===len)) sel.value=String(len); }
     exportMp3(len); return 'Making your MP3, the download starts in a few seconds'; },
-  save(a){ if(a.name) PROJ.name=String(a.name).slice(0,60); saveNamed(); return `Saved “${PROJ.name}”`; },
+  save(a){ if(a.name) PROJ.name=String(a.name).slice(0,60); if(typeof indexedDB==='undefined') return `Couldn’t save “${PROJ.name}”: this browser can’t keep songs`;
+    const fail=SAVE_FAIL; saveNamed(false); /* the real result also shows as a toast */
+    return fail?`Trying to save “${PROJ.name}” again: last time this browser couldn’t (${fail})`:`Saved “${PROJ.name}”`; },
   new_project(a){ newSong(a.name); return 'New song'; },
   rename(a){ if(!a.name) return; PROJ.name=String(a.name).slice(0,60); saveProject(); return `Song renamed to “${PROJ.name}”`; }
 };
@@ -424,16 +476,62 @@ function orderActions(list){ const rank=a=>{ const t=a.type; return t==='arrange
   return list.map((a,i)=>({a,i,r:rank(a)})).sort((x,y)=>x.r-y.r||x.i-y.i).map(x=>x.a); }
 /* actions whose whole effect is in the song (PROJ and the tempo), so "the undo history didn't move" means "nothing changed"; neutral ones (play, loop) never change it */
 const NOOP_PURE=new Set(['arrange','section','parts','transition','groove','hats','tempo','bars','key','style','instrument','quantize','transpose']), NOOP_NEUTRAL=new Set(['transport','loop_section']);
+/* which part of what the user said is about effect k: "set the chords reverb to 20 and add some delay" → "add some delay" for the delay.
+   A half without a verb of its own ("…and delay to the chords") reads with the half before it. null when the effect isn't named. */
+const FX_WORDS={hp:/\b(low ?cut|high ?pass|rumble)\b/,lp:/\b(high ?cut|low ?pass)\b/,rev:/\b(reverb|verb|room|hall|space|wet|wetter|dry|drier)\b/,dly:/\b(delay|echo(es)?)\b/,duck:/\b(sidechain|side chain|pump\w*|duck\w*)\b/,drive:/\b(drive|saturat\w*|distort\w*|grit\w*|warm\w*)\b/,comp:/\b(compress\w*|glue|punch\w*)\b/,width:/\b(width|wide\w*|stereo|spread)\b/};
+const FX_VERB=/\d|\b(add|more|some|set|make|put|turn|give|less|lower|reduce|raise|boost|increase|cut|remove|kill|drop|take|no|too|bring|push|pull|want|need|use|dry|wet)\b/;
+function fxClause(text,k,tr){ const re=FX_WORDS[k]; if(!re) return null; const s=String(text||'').toLowerCase().replace(/\bmor\b/g,'more');
+  const parts=s.split(/\s*(?:[,;.]|\band then\b|\bthen\b|\band\b|\bbut\b|\bplus\b|\balso\b)\s*/).filter(x=>x.trim());
+  /* "more reverb on the chords and less on the melody": the melody's half is the one that names the melody */
+  const RW=typeof ROLE_WORDS!=='undefined'?ROLE_WORDS:[], rre=tr&&(RW.find(([r])=>r===tr.role)||[])[1], nm=tr&&tr.name&&tr.name.length>2?tr.name.toLowerCase():null;
+  const names=c=>!!tr&&(rre&&rre.test(' '+c+' ')||!!nm&&c.includes(nm)), pick=i=>{ let c=parts[i]; for(let j=i-1;j>=0&&!FX_VERB.test(c.replace(re,' '));j--) c=parts[j]+' '+c; return c; };
+  let i=parts.findIndex(c=>re.test(c)&&names(c)); if(i<0&&tr) i=parts.findIndex(c=>names(c)&&FX_VERB.test(c)&&!Object.values(FX_WORDS).some(r=>r!==re&&r.test(c)));
+  if(i<0) i=parts.findIndex(c=>re.test(c)); return i<0?null:pick(i); }
+/* "add some reverb" / "more delay": raise it, never lower it. Not when a number, set, less, too wet or dry was said for it. */
+function fxAddOnly(c){ return !!c&&/\b(add|more|some|extra|boost|increase|zyada|jyada)\b/.test(c)&&!/\d|\b(set|less|lower|reduce|down|remove|no|cut|kam|too|dry|drier|off|kill|drop)\b/.test(c); }
+/* "remove the reverb from the chords", "take the delay off the bass", "kill the reverb", "no reverb on the chords": the effect word, else null */
+function fxOffSaid(text,t){ const r=fxPartSaid(text,t); return r&&r.fx||null; }
+/* a clause aims remove/delete/get rid of at part t itself ("remove the melody and turn off the reverb"): the part goes, the effect clause doesn't stop it */
+function removesPart(text,t){ const r=fxPartSaid(text,t); return !!(r&&r.aimed); }
+function fxPartSaid(text,t){ const FXW='reverb|verb|delay|echo|sidechain|side chain|compression|compressor|drive|saturation|distortion|width|low ?cut|high ?cut|effects?|fx';
+  const R1=new RegExp('\\b(?:remove|take off|take out|kill|lose|drop|get rid of|turn off|switch off|delete|no|without)(?: the| any| all the| all| my| that)? ('+FXW+')\\b'), R2=new RegExp('\\btake (?:the |all the |that )?('+FXW+') (?:off|out)\\b');
+  const RW=typeof ROLE_WORDS!=='undefined'?ROLE_WORDS:[], part=c=>RW.find(([k,re])=>re.test(c)), off=c=>{ const m=(' '+c+' ').match(R1)||(' '+c+' ').match(R2); return m?(m[1]==='verb'?'reverb':m[1]):null; };
+  const cl=String(text||'').toLowerCase().split(/\s*(?:[,;.]|\band then\b|\bthen\b|\band\b|\bbut\b|\balso\b)\s*/).filter(x=>x.trim());
+  /* the clause that names THIS part decides (QA, 16 Nov: "remove the melody and turn off the reverb" kept the melody):
+     "remove/delete/get rid of the melody" removes it; "remove the reverb from the chords" turns the effect off. A half with no verb ("…and the bass") reads with the half before it. */
+  if(t){ const rre=(RW.find(([r])=>r===t.role)||[])[1], nm=t.name&&t.name.length>2?t.name.toLowerCase():null, names=c=>!!(rre&&rre.test(' '+c+' ')||nm&&c.includes(nm));
+    const VERB=/\b(remove|delete|kill|lose|drop|get rid|take|turn|switch|no|without|cut|mute|add|make|put|give|set)\b/, RM=/\b(remove|delete|kill|lose|drop|get rid of|take out|take off|take away|bin|scrap|ditch|clear|erase)\b/;
+    let named=false;
+    for(let i=0;i<cl.length;i++){ if(!names(cl[i])) continue; named=true; let c=cl[i];
+      /* "delete the drums and the bass": the verbless half borrows the verb of the half before it */
+      if(!VERB.test(c)) for(let j=i-1;j>=0;j--){ const v=cl[j].match(/\b(remove|delete|kill|lose|drop|get rid of|take out|take off|turn off|switch off|no|without|mute)\b/); if(v){ c=v[1]+' '+c; break; } if(VERB.test(cl[j])) break; }
+      const fw=off(c), p=part(' '+c+' ');
+      /* the remove verb is aimed at the part itself ("remove the melody", "delete the bass", "remove the melody without the reverb"), not at an effect on it */
+      const aimed=[...c.matchAll(new RegExp(RM.source,'g'))].some(m=>{ const after=c.slice(m.index+m[0].length).replace(/^\s*((the|my|that|this|those|these|all|whole|entire|current|new)\s+)*/,'');
+        const pm=rre&&after.match(new RegExp('^'+rre.source.replace(/^\\b/,'')))||nm&&after.startsWith(nm)&&[nm]; if(!pm) return false;
+        /* "remove the chords reverb", "remove the melody's reverb": the effect is the object, not the part */
+        return !new RegExp("^(['’]s|s['’])?\\s*("+FXW+")\\b").test(after.slice(pm[0].length)); });
+      if(aimed) return {aimed:true}; if(fw&&(!p||p[0]===t.role||names(c))) return {fx:fw};
+      const fx2=RM.test(c)&&(c.match(new RegExp('\\b('+FXW+')\\b'))||[])[1]; if(fx2) return {fx:fx2==='verb'?'reverb':fx2}; }
+    if(named) return null; }
+  /* no clause names this part: an effect-off clause that names no part at all ("remove the reverb") */
+  for(const c of cl){ const fw=off(c); if(fw&&!part(' '+c+' ')) return {fx:fw}; }
+  return null; }
 function runActions(list){
   const done=[], songDone=[], kinds=[]; let changed=false; BATCH={startBpm:CTRL.bpm,notes:[]}; if(typeof undoBoundary==='function') undoBoundary(); const last0=typeof UNDO!=='undefined'?UNDO.last:null;
+  /* done.segs[i]: which half of a two-part sentence each result came from (offline "mute the drums and solo the bass") */
+  done.segs=[]; const u0=typeof UNDO!=='undefined'?(UNDO.pushes||0):-1;
   const acts=orderActions((list||[]).map(normAction).filter(a=>a&&ACT[a.type])), before=songSnapshot();
   SONG.batch=true; SONG.batchChip=null; BATCH.acting=true;
-  try{ for(const a of acts){ try{ const r=ACT[a.type](a); if(r){ done.push(r); kinds.push([a.type,r]); changed=true; if(SONG_ACTS.has(a.type)||(a.type==='transport'&&a.from!=null)) songDone.push(r); } }catch(e){ console.warn('action failed',a,e); } } }
+  try{ for(const a of acts){ try{ const r=ACT[a.type](a); if(r){ done.push(r); done.segs.push(a.seg); kinds.push([a.type,r]); changed=true; if(SONG_ACTS.has(a.type)||(a.type==='transport'&&a.from!=null)) songDone.push(r); } }catch(e){ console.warn('action failed',a,e); } } }
   finally{ BATCH.acting=false; }
   /* new sections are numbered in song order once every action has run, so the AI's later actions still find "Drop 3" by the name it gave */
   try{ if(BATCH.renum){ const ren=songRenumber(BATCH.renum); if(ren&&ren.size){ const d2=songRenamed(done,ren), s2=songRenamed(songDone,ren); done.splice(0,done.length,...d2); songDone.splice(0,songDone.length,...s2); BATCH.notes.forEach(n=>{ n.text=songRenamed([n.text],ren)[0]; }); } } }
   finally{ SONG.batch=false; }
   if(changed){ saveProject(); renderTracks(); uiLoop(); }
+  /* one request is one Undo step, even when a slow machine saves the parts more than 120 ms apart (QA, 16 Nov: "add a melody" left 2 steps).
+     Count the steps this request pushed (the history drops its oldest step at 120, so its length can stay the same): keep the first, drop the rest. */
+  const n=u0>=0?(UNDO.pushes||0)-u0:0; if(n>1&&UNDO.stack.length>1){ UNDO.stack.splice(Math.max(1,UNDO.stack.length-(n-1))); if(typeof undoButtons==='function') undoButtons(); }
   /* a request whose edits changed nothing (it was already like that): the reply must not say "Done" or claim changes (QA fix 2) */
   const edits=kinds.filter(([t])=>!NOOP_NEUTRAL.has(t));
   if(changed&&last0!=null&&typeof UNDO!=='undefined'&&UNDO.last===last0&&edits.length&&edits.every(([t])=>NOOP_PURE.has(t))) BATCH.same=edits.filter(([t,r])=>/^(transition|parts)$/.test(t)&&!/\bstays\b/.test(r)).map(x=>x[1]).slice(0,2);

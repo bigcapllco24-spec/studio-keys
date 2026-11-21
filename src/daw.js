@@ -124,6 +124,8 @@ function openEditor(id,o={}){ const t=PROJ.tracks.find(x=>x.id===id); if(!t||t.k
   if(!isDrumTrack(t) && t.events.length){ const ns=t.events.map(e=>e.n).sort((a,b)=>a-b); ED.top=clamp(Math.max(ns[ns.length-1]+4,ns[0]+edGeomRows()-6),40,120); } else if(!isDrumTrack(t)) ED.top=t.role==='bass'?60:84;
   $('#editor').hidden=false; $('#edTitle').textContent=t.name; edHint(); setEdMode(ED.mode);
   document.querySelectorAll('.trk').forEach(r=>r.classList.toggle('sel',r.dataset.tid===id)); drawEditor(); $('#editor').scrollIntoView({behavior:'smooth',block:'nearest'}); }
+/* give the keyboard to the note editor (e.g. after a double-click on a song part), so Delete / Ctrl+D act on its notes, not on the song's sections (UX-7) */
+function edFocus(){ const cv=$('#edCanvas'); if(cv&&!$('#editor').hidden&&document.activeElement!==cv) cv.focus({preventScroll:true}); }
 function closeEditor(){ ED.tid=null; ED.sel=new Set(); ED.pat='A'; ED.sid=null; $('#editor').hidden=true; document.querySelectorAll('.trk.sel').forEach(r=>r.classList.remove('sel')); }
 $('#edClose').onclick=closeEditor;
 /* patterns: which version of this track's notes the section plays (A is the main one; B, C… belong to some sections only) */
@@ -146,7 +148,7 @@ $('#edQuant').onclick=()=>{ const t=edTrack(); if(!t) return; const q=ED.grid; e
 $('#edUp').onclick=()=>edShift(1); $('#edDown').onclick=()=>edShift(-1);
 function edShift(s){ const t=edTrack(); if(!t||isDrumTrack(t)) return; edTargets(t).forEach(e=>e.n+=s); if(!ED.sel.size) ED.top+=s; edChanged(); }
 $('#edClear').onclick=()=>{ const t=edTrack(); if(!t) return; const b=$('#edClear'); if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Confirm clear'; setTimeout(()=>{ delete b.dataset.armed; b.textContent='Clear notes'; },3000); return; } delete b.dataset.armed; b.textContent='Clear notes'; t.events=[]; ED.sel=new Set(); edChanged(); };
-function edChanged(){ if(typeof undoBoundary==='function') undoBoundary(); const t=edTrack(), real=PROJ.tracks.find(x=>x.id===ED.tid); if(real) real.gen=false; if(t){ t.events.forEach(e=>{ if(e.cyc!==undefined && !TR.running) delete e.cyc; }); } saveProject(); drawEditor(); drawRolls(); const r=document.querySelector(`.trk[data-tid="${ED.tid}"] .trole`); if(r&&t) r.textContent=`${ROLE_NAME[t.role]||'Part'} · ${t.events.length} notes`; }
+function edChanged(){ if(typeof undoBoundary==='function'&&!ED.oneStep) undoBoundary(); ED.oneStep=false; const t=edTrack(), real=PROJ.tracks.find(x=>x.id===ED.tid); if(real) real.gen=false; if(t){ t.events.forEach(e=>{ if(e.cyc!==undefined && !TR.running) delete e.cyc; }); } saveProject(); drawEditor(); drawRolls(); const r=document.querySelector(`.trk[data-tid="${ED.tid}"] .trole`); if(r&&t) r.textContent=`${ROLE_NAME[t.role]||'Part'} · ${t.events.length} notes`; }
 function drumRows(t){ const rows=DRUM_ROWS.slice(); t.events.forEach(e=>{ if(!rows.some(r=>r[0]===e.n)) rows.unshift([e.n,DRUM_LABEL[drumPiece(e.n)]+' '+noteName(e.n)]); }); return rows; }
 /* height the grid may use so the velocity lane always shows inside the editor box (UX-2) */
 function edFitH(W){ const wrap=$('#edWrap'), mh=parseFloat(getComputedStyle(wrap).maxHeight)||480; return mh-2-ED.velH-8-(W>wrap.clientWidth+1?14:0); }
@@ -185,7 +187,7 @@ function drawEditor(){
 function previewNote(t,n){ const c=ensureAudio(); if(!c) return; const I=INST.get(t.inst); if(!I) return; try{ const v=I.play(c,trackStrip(t).inp,n,0.8,c.currentTime); if(v&&!v.oneShot) v.release(c.currentTime+0.25); }catch(e){} }
 function edCopy(){ const t=edTrack(); if(!t||!ED.sel.size) return false; const ev=[...ED.sel], b0=Math.min(...ev.map(e=>e.b)), end=Math.max(...ev.map(e=>e.b+e.d));
   ED.clip={tid:t.id,notes:ev.map(e=>({b:e.b-b0,d:e.d,n:e.n,v:e.v})),span:Math.max(ED.grid,Math.ceil((end-b0)/1-1e-6)*1),at:b0}; return true; }
-function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bars*4; let base=at!=null?at:ED.clip.at+ED.clip.span; if(base>=L){ if(PROJ.bars<16){ toast('No room after the end of the song, so I doubled its length first'); const oldL=L; setBars(PROJ.bars*2); L=PROJ.bars*4; t.events=t.events.filter(e=>e.b<oldL); } else { toast('The song is already 16 bars long. Move the playhead or select less.'); return; } } ED.clip.at=base;
+function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bars*4; let base=at!=null?at:ED.clip.at+ED.clip.span; if(base>=L){ if(PROJ.bars<16){ toast('No room after the end of the song, so I doubled its length first'); const oldL=L; undoBoundary(); setBars(PROJ.bars*2); ED.oneStep=true; /* the longer loop and the pasted notes are one Undo step (UX-7) */ L=PROJ.bars*4; t.events=t.events.filter(e=>e.b<oldL); } else { toast('The song is already 16 bars long. Move the playhead or select less.'); return; } } ED.clip.at=base;
   const add=ED.clip.notes.map(x=>({b:base+x.b,d:x.d,n:x.n,v:x.v})).filter(e=>e.b<L); t.events.push(...add); ED.sel=new Set(add); edChanged(); }
 (function(){
   const cv=$('#edCanvas');
@@ -198,7 +200,7 @@ function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bar
     if(D&&D.group){ const dv=v-D.orig.get(D.lead); D.group.forEach(x=>x.v=r(D.alt?v:clamp(D.orig.get(x)+dv,0.05,1))); } else e.v=r(v); };
   cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('pointerdown',e=>{
-    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e); e.preventDefault(); ensureAudio(); cv.focus&&cv.focus();
+    const t=edTrack(); if(!t) return; const G=edGeom(), p=pos(e); e.preventDefault(); ensureAudio(); edFocus();
     if(p.y>G.gh+4){ const v=velHit(t,G,p); if(v){ const grp=ED.sel.has(v)&&ED.sel.size>1?[...ED.sel]:null; ED.drag={mode:'vel',group:grp,lead:v,alt:e.altKey,orig:new Map((grp||[v]).map(x=>[x,x.v]))}; setVel(t,G,p,v); drawEditor(); try{ cv.setPointerCapture(e.pointerId); }catch(_){} } return; }
     if(p.x<G.K){ const n=G.drum?(G.rows[Math.floor(p.y/G.rh)]||[])[0]:ED.top-Math.floor(p.y/G.rh); if(n!=null) previewNote(t,n); return; }
     const h=hit(t,G,p);
@@ -252,6 +254,7 @@ function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bar
   document.addEventListener('keydown',e=>{
     if(!ED.tid||$('#editor').hidden) return; const tg=e.target; if(tg&&/INPUT|SELECT|TEXTAREA/.test(tg.tagName)) return; const t=edTrack(); if(!t) return;
     const mod_=e.ctrlKey||e.metaKey, k=e.key.toLowerCase();
+    if(e.key===' '&&!mod_&&tg===cv){ e.preventDefault(); if(!e.repeat){ ensureAudio(); if(TR.running) loopStop(); else loopPlay(); } return; } /* the editor has the keyboard: Space plays or stops, as in the song area */
     if(mod_&&k==='a'){ ED.sel=new Set(t.events); drawEditor(); e.preventDefault(); return; }
     if(mod_&&k==='c'){ if(edCopy()){ toast(`Copied ${ED.sel.size} note${ED.sel.size>1?'s':''}`); e.preventDefault(); } return; }
     if(mod_&&k==='x'){ if(edCopy()){ t.events=t.events.filter(x=>!ED.sel.has(x)); ED.sel=new Set(); edChanged(); e.preventDefault(); } return; }
@@ -292,8 +295,8 @@ function autoSaveNamed(){ clearTimeout(projAutoT); projAutoT=setTimeout(()=>save
 async function refreshProjList(){}
 /* owner, 13 Nov: the app opens on a new empty song. The last song is put into the songs list first, so nothing is lost;
    if this browser can't keep the list, the last song opens as before */
-async function keepLastSong(){ const L=LAST_PROJ, cur=PROJ;
-  if(!L||L===PROJ||!(L.tracks||[]).length){ store.set('project',serialize(PROJ)); return; }
+async function keepLastSong(){ const L=LAST_PROJ, cur=PROJ, gone=store.get('detached',null); if(gone) store.set('detached',null);
+  if(!L||L===PROJ||!(L.tracks||[]).length||gone===L.id){ store.set('project',serialize(PROJ)); return; } /* a song deleted while open stays deleted */
   try{ const ex=await IDB.get(L.id,'projects'), proj=Object.assign(serialize(L),{bpm:CTRL.bpm}); migrateSong(proj);
     const same=ex&&ex.proj&&ex.name===L.name&&JSON.stringify(ex.proj.tracks)===JSON.stringify(proj.tracks)&&JSON.stringify(ex.proj.sections||null)===JSON.stringify(proj.sections);
     if(!same){ const bars=proj.sections.reduce((a,s)=>a+s.bars,0), arranged=!(proj.sections.length===1&&proj.sections[0].auto);
@@ -304,12 +307,21 @@ async function keepLastSong(){ const L=LAST_PROJ, cur=PROJ;
   catch(e){ if(PROJ!==cur) return; PROJ=migrateSong(L); songViewLoad(); SONG.ver++; LOOP.state='stopped'; loadAudioFor(PROJ).then(()=>drawRolls()); preloadTracks(); renderTracks(); uiLoop();
     if(typeof undoReset==='function') undoReset(); }
 }
+/* deleting the song you're in (QA, 16 Nov: it came back with the next autosave): it stays open but isn't saved again
+   until you change something; DETACH (declared in studio.js) remembers it, also across a reload (store 'detached') */
+const detachedNow=()=>!!DETACH&&PROJ.id===DETACH.id&&snapState()===DETACH.snap;
+function detachCheck(){ if(DETACH&&!detachedNow()){ DETACH=null; store.set('detached',null); } }
+/* returns true when the song was written; SAVE_FAIL keeps the last error so the assistant never says "Saved" when this browser can't save */
+let SAVE_FAIL='';
 async function saveNamed(quiet){
-  const key=PROJ.id;
-  if(quiet&&!PROJ.tracks.length){ let ex=null; try{ ex=await IDB.get(key,'projects'); }catch(e){} if(!ex) return; } /* an untouched new song doesn't go into the list */
-  try{ await IDB.put(key,{key,name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,song:songArranged()?songLenText():null,tracks:PROJ.tracks.length,savedAt:Date.now(),proj:Object.assign(serialize(PROJ),{bpm:CTRL.bpm})},'projects');
-    $('#saveState').textContent='Saved '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); if(!quiet) toast(`Saved “${PROJ.name}”`); }
-  catch(e){ $('#saveState').textContent='Not saved'; if(!quiet) toast('Couldn’t save in this browser: '+e.message); }
+  if(detachedNow()){ if(quiet){ $('#saveState').textContent='Not saved'; return false; }
+    DETACH=null; store.set('detached',null); } /* Save after deleting the open song puts it back (QA, 16 Nov); quiet saves keep skipping */
+  /* the record is taken now, before any wait, so it can't pick up a song opened or copied meanwhile */
+  const key=PROJ.id, rec={key,name:PROJ.name,bpm:CTRL.bpm,bars:PROJ.bars,song:songArranged()?songLenText():null,tracks:PROJ.tracks.length,savedAt:Date.now(),proj:Object.assign(serialize(PROJ),{bpm:CTRL.bpm})};
+  if(quiet&&!rec.tracks){ let ex=null; try{ ex=await IDB.get(key,'projects'); }catch(e){} if(!ex) return false; } /* an untouched new song doesn't go into the list */
+  try{ await IDB.put(key,rec,'projects'); SAVE_FAIL=''; if(PROJ.id!==key) return true;
+    $('#saveState').textContent='Saved '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); if(!quiet) toast(`Saved “${rec.name}”`); return true; }
+  catch(e){ SAVE_FAIL=(e&&e.message)||'storage is blocked'; if(PROJ.id===key) $('#saveState').textContent='Not saved'; if(!quiet) toast('Couldn’t save in this browser: '+SAVE_FAIL); return false; }
 }
 async function loadAudioFor(p){ for(const t of p.tracks){ if(t.kind==='audio' && !AUD.has(t.id)){ try{ const r=await IDB.get('aud:'+t.id,'audio'); if(r) AUD.set(t.id,makeBuf(r.data,r.sr)); }catch(e){} } } }
 async function loadNamed(key){ clearTimeout(projAutoT); await saveNamed(true); /* keep the last edits of the song you leave */ let r=null; try{ r=await IDB.get(key,'projects'); }catch(e){} if(!r) return; loopStop(); PREVIEW=null; closeEditor(); PROJ=migrateSong(dropTakeVoices(Object.assign(newProject(),r.proj))); songViewLoad(); SONG.ver++; if(r.proj.bpm) setTempo(r.proj.bpm); await loadAudioFor(PROJ); preloadTracks(); LOOP.state=PROJ.tracks.length?'stopped':'empty'; store.set('project',serialize(PROJ)); renderTracks(); uiLoop();
@@ -318,7 +330,9 @@ async function loadNamed(key){ clearTimeout(projAutoT); await saveNamed(true); /
 function savedLabel(at){ if(!at) return ''; const d=new Date(at), today=new Date().toDateString()===d.toDateString();
   return 'Saved '+(today?d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):d.toLocaleDateString([], {day:'numeric',month:'short'})); }
 async function newSong(name){ await saveNamed(true); loopStop(); PREVIEW=null; closeEditor(); PROJ=newProject(); if(name) PROJ.name=String(name).slice(0,60); songViewLoad(); SONG.ver++; LOOP.state='empty'; store.set('project',serialize(PROJ)); renderTracks(); uiLoop(); if(typeof undoReset==='function') undoReset(); $('#saveState').textContent='New song'; }
-async function saveCopy(){ await saveNamed(true); const v=Object.assign({},SONG.view); PROJ=Object.assign(serialize(PROJ),{id:'p'+Date.now().toString(36),name:PROJ.name+' (copy)'}); SONG.view=v; songViewSave(); SONG.ver++; await saveNamed(); renderTracks(); }
+/* the copy starts its own undo history: Undo in the copy never reaches back into the original (QA, 16 Nov) */
+async function saveCopy(){ clearTimeout(projAutoT); await saveNamed(true); const v=Object.assign({},SONG.view); PROJ=Object.assign(serialize(PROJ),{id:'p'+Date.now().toString(36),name:PROJ.name+' (copy)'}); SONG.view=v; songViewSave(); SONG.ver++;
+  store.set('project',serialize(PROJ)); if(typeof undoReset==='function') undoReset(); renderTracks(); await saveNamed(); }
 function preloadTracks(){ PROJ.tracks.forEach(t=>{ const I=INST.get(t.inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{}); }); }
 async function openSongs(){
   const m=$('#projModal'); m.hidden=false; let list=[]; try{ list=await IDB.all('projects'); }catch(e){} list.sort((a,b)=>b.savedAt-a.savedAt);
@@ -327,7 +341,10 @@ async function openSongs(){
 $('#projModal').addEventListener('click',async e=>{
   if(e.target===$('#projModal')||e.target.closest('#projClose')){ $('#projModal').hidden=true; return; }
   const o=e.target.closest('[data-open]'); if(o){ $('#projModal').hidden=true; if(o.dataset.open!==PROJ.id) await loadNamed(o.dataset.open); return; }
-  const d=e.target.closest('[data-pdel]'); if(d){ if(!d.dataset.armed){ d.dataset.armed='1'; d.textContent='Confirm delete'; return; } await IDB.del(d.dataset.pdel,'projects').catch(()=>{}); if(d.dataset.pdel===PROJ.id){ PROJ.id='p'+Date.now().toString(36); } openSongs(); }
+  const d=e.target.closest('[data-pdel]'); if(d){ if(!d.dataset.armed){ d.dataset.armed='1'; d.textContent='Confirm delete'; return; } const k=d.dataset.pdel, cur=k===PROJ.id; if(cur) clearTimeout(projAutoT); await IDB.del(k,'projects').catch(()=>{});
+    if(cur&&k===PROJ.id){ DETACH={id:k,snap:snapState()}; store.set('detached',k); $('#saveState').textContent='Not saved';
+      toast(`Deleted “${PROJ.name}”. It stays open here and saves again only if you change it.`); }
+    openSongs(); }
   if(e.target.closest('#projNew2')){ $('#projModal').hidden=true; newSong(); }
 });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !$('#projModal').hidden) $('#projModal').hidden=true; });

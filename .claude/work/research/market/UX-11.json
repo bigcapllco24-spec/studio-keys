@@ -1,0 +1,34 @@
+{
+  "item": "UX-11",
+  "verdict": "great",
+  "score": 5,
+  "why": "Muting and soloing single drum sounds is a basic expectation in every serious beat tool: Ableton Drum Rack pads, FL Studio channel rack, Logic Drum Machine Designer cells and Maschine sounds all have it. Not having it in Keys beats is a real gap. Doing it by voice ('mute the open hats') is something none of the AI tools offer: Suno Studio only mutes whole stems. The proposal keeps the notes, is undoable and stays visible, which is how the big DAWs do it.",
+  "notes": [
+    "Mute, not delete, is the norm. Ableton, FL, Logic and Maschine all keep the notes when you mute a pad. Ableton 12 also lets you switch off single notes in a clip. The proposal's rule ('remove'/'delete' rewrites the beat, everything else mutes) matches what producers expect. Keep Decision 3 as (a).",
+    "Solo should give back the mutes the user had before. FL has an option for this ('restore previous state after solo'), and Ableton's Ctrl/Cmd+click adds pads to a solo, like the proposal. Keeping muteNotes and soloNotes as separate arrays already does this. Test it: mute the open hat, solo the kick, unsolo, and the open hat must still be muted.",
+    "Choke groups: Ableton has 16 and FL has cut groups. The classic one is the closed hat cutting off the open hat. Studio Keys has no choke code today (a grep of src finds none), so nothing breaks now. If chokes are added later, a muted closed hat should not keep cutting the open hat. Note it for sound-engine-dev.",
+    "The proposal's tails behaviour is right. Maschine's default 'trigger mute' stops new hits and lets ringing sounds and reverb tails fade out; 'audio mute' cuts them at once. Letting the last hit finish in Keys is the musical choice. Later idea (not in this item): Push and Elektron have a performance mute mode, loved by techno producers for live breakdowns. A 'mute on the next bar' option could follow, for example 'drop the hats at the next bar'."
+  ],
+  "answer": "Keep 'live playing still sounds'. The big tools don't agree. In FL Studio, the manual says channel mute and solo affect only Step Sequencer and Piano roll playback, so a muted channel still plays from your MIDI keyboard. Ableton's Drum Rack pad mute silences the pad's sound, not its MIDI notes, so hitting a muted pad live gives silence. Logic Drum Machine Designer mutes the kit piece itself, so a muted cell is very likely silent live too (Apple's page doesn't say). Producers who come from FL will expect your choice and Ableton users may not, but nobody reports either one as a problem. For a keyboard-first app where people audition sounds by hand, being able to hear the pad is friendlier. Two small tweaks: (1) briefly flash the muted row's M button when the user plays that pad live, so an Ableton user understands why they hear it; (2) keep the planned toast when hits are recorded onto a muted row.",
+  "improve": [
+    "Flash the M on a muted row when the pad is played live, so the mute state is never a surprise.",
+    "Make sure unsolo brings back the earlier mutes, and add that as a smoke-test line.",
+    "Later item: quantized performance mutes ('drop the hats at the next bar') for live-style breakdowns."
+  ],
+  "similar": [
+    {"title": "Ableton Live 12 manual: Instrument, Drum and Effect Racks (pad mute and solo, 16 choke groups)", "url": "https://www.ableton.com/en/live-manual/12/instrument-drum-and-effect-racks/"},
+    {"title": "FL Studio manual: Channel Rack (mute and solo affect sequencer and piano roll playback only)", "url": "https://www.image-line.com/fl-studio-learning/fl-studio-online-manual/html/channelrack.htm"},
+    {"title": "Logic Pro: Use Drum Machine Designer (M and S on each cell)", "url": "https://help.apple.com/logicpro/mac/10.4/en.lproj/lgsi74473405.html"},
+    {"title": "Maschine manual: Playing on the controller (trigger mute vs audio mute)", "url": "https://docs.native-instruments.com/online-guides/maschine-software-manual/en/playing-on-the-controller"},
+    {"title": "Suno help: Stem extraction (mute or solo whole stems only)", "url": "https://help.suno.com/en/articles/6141441"}
+  ],
+  "sources": [
+    {"title": "Ableton Live 12 manual: Instrument, Drum and Effect Racks", "url": "https://www.ableton.com/en/live-manual/12/instrument-drum-and-effect-racks/"},
+    {"title": "Ableton forum: MIDI mute mode for Drum Racks (pad mute affects the sound, not the MIDI notes)", "url": "https://forum.ableton.com/viewtopic.php?p=1744464"},
+    {"title": "FL Studio online manual: Channel Rack", "url": "https://www.image-line.com/fl-studio-learning/fl-studio-online-manual/html/channelrack.htm"},
+    {"title": "Logic Pro help: Use Drum Machine Designer", "url": "https://help.apple.com/logicpro/mac/10.4/en.lproj/lgsi74473405.html"},
+    {"title": "Native Instruments Maschine manual: Playing on the controller", "url": "https://docs.native-instruments.com/online-guides/maschine-software-manual/en/playing-on-the-controller"},
+    {"title": "Suno help: How to use Stem Extraction", "url": "https://help.suno.com/en/articles/6141441"}
+  ],
+  "at": "2026-11-15T00:00:00Z"
+}

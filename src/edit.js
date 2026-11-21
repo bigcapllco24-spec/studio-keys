@@ -4,11 +4,14 @@
 /* ----- undo / redo: every change goes through saveProject, so we snapshot there ----- */
 const UNDO={stack:[],redo:[],last:null,busy:false,t:0};
 function undoBoundary(){ UNDO.t=0; }
+/* several saves as one Undo step, however long the work in between takes */
+function undoGroup(fn){ const before=UNDO.last, wasBusy=UNDO.busy; UNDO.busy=true; let r; try{ r=fn(); }finally{ UNDO.busy=wasBusy; }
+  if(!wasBusy&&before!==null){ UNDO.last=before; UNDO.t=0; undoNote(); } return r; }
 const snapState=()=>JSON.stringify({p:PROJ,bpm:CTRL.bpm});
 function undoNote(){
   const j=snapState(); if(UNDO.last===null||UNDO.busy){ UNDO.last=j; return; } if(j===UNDO.last) return;
   const now=performance.now(), prev=UNDO.last; let pushed=false;
-  if(now-UNDO.t>120||!UNDO.stack.length){ UNDO.stack.push(UNDO.last); if(UNDO.stack.length>120) UNDO.stack.shift(); pushed=true; }
+  if(now-UNDO.t>120||!UNDO.stack.length){ UNDO.stack.push(UNDO.last); if(UNDO.stack.length>120) UNDO.stack.shift(); pushed=true; UNDO.pushes=(UNDO.pushes||0)+1; }
   UNDO.t=now; UNDO.redo=[]; UNDO.last=j; undoButtons();
   if(typeof songChipNote==='function') songChipNote(prev,j,pushed); /* a newer change makes the Undo chip's label stale */
 }
@@ -21,17 +24,22 @@ saveProject=function(){ if(typeof songSync==='function') songSync(); undoNote();
 function applyState(j){
   const wasArr=typeof songArranged==='function'&&songArranged();
   UNDO.busy=true; const o=JSON.parse(j);
-  PROJ=migrateSong(Object.assign(newProject(),o.p)); SONG.ver++; if(o.bpm&&o.bpm!==CTRL.bpm) setTempo(o.bpm);
+  /* Undo restores the song's content, never which song it is: a step can't carry another song's id (and name) back in,
+     so autosave always writes to the song you are in (QA, 16 Nov: Undo after Save a copy overwrote the original) */
+  const keep={id:PROJ.id}; if(o.p&&o.p.id!==PROJ.id) keep.name=PROJ.name;
+  PROJ=migrateSong(Object.assign(newProject(),o.p,keep)); SONG.ver++; if(o.bpm&&o.bpm!==CTRL.bpm) setTempo(o.bpm);
   if(ED.tid&&!PROJ.tracks.find(t=>t.id===ED.tid)) closeEditor(); ED.sel=new Set();
   if(!PROJ.tracks.length&&LOOP.state!=='empty'){ loopStop(); LOOP.state='empty'; } else if(PROJ.tracks.length&&LOOP.state==='empty') LOOP.state='stopped';
-  loadAudioFor(PROJ).then(()=>drawRolls()); refreshTrackGains(); renderTracks(); uiLoop(); _saveProject(); UNDO.last=j; UNDO.busy=false; undoButtons();
+  loadAudioFor(PROJ).then(()=>drawRolls()); refreshTrackGains(); renderTracks(); uiLoop(); _saveProject(); UNDO.last=snapState(); UNDO.busy=false; undoButtons();
   if(typeof songChipHide==='function') songChipHide();
   if(typeof songArranged!=='function') return; const nowArr=songArranged();
   if(wasArr&&!nowArr&&songOn()){ songMode('loop',{force:true}); UNDO.leftSong=true; toast('Back to the plain loop (Loop mode). Redo brings the song back.'); }
   else if(!wasArr&&nowArr&&UNDO.leftSong&&!songOn()){ UNDO.leftSong=false; songMode('song',{force:true}); songChip('Song layout back · Song mode',{undo:false}); }
 }
-function undo(){ if(!UNDO.stack.length){ toast('Nothing to undo'); return false; } UNDO.redo.push(UNDO.last); applyState(UNDO.stack.pop()); return true; }
-function redo(){ if(!UNDO.redo.length){ toast('Nothing to redo'); return false; } UNDO.stack.push(UNDO.last); applyState(UNDO.redo.pop()); return true; }
+/* a Tap tempo still settling becomes its own step first, so Undo/Redo never lose it */
+const undoFlush=()=>{ if(typeof tempoFlush==='function') tempoFlush(); };
+function undo(){ undoFlush(); if(!UNDO.stack.length){ toast('Nothing to undo'); return false; } UNDO.redo.push(UNDO.last); applyState(UNDO.stack.pop()); return true; }
+function redo(){ undoFlush(); if(!UNDO.redo.length){ toast('Nothing to redo'); return false; } UNDO.stack.push(UNDO.last); applyState(UNDO.redo.pop()); return true; }
 function undoButtons(){ const u=$('#undoBtn'), r=$('#redoBtn'); if(u) u.disabled=!UNDO.stack.length; if(r) r.disabled=!UNDO.redo.length; }
 $('#undoBtn').onclick=undo; $('#redoBtn').onclick=redo;
 document.addEventListener('keydown',e=>{ const tg=e.target; if(tg&&/INPUT|SELECT|TEXTAREA/.test(tg.tagName)) return; if(!(e.ctrlKey||e.metaKey)) return; const k=e.key.toLowerCase();
@@ -103,17 +111,23 @@ async function importFile(f){
   const c=ensureAudio(); if(!c) return; const base=f.name.replace(/\.[^.]+$/,'').slice(0,32)||'Imported';
   const ab=await f.arrayBuffer();
   if(/\.midi?$/i.test(f.name)){
-    let m; try{ m=parseMidi(ab); }catch(e){ toast(`Couldn’t read ${f.name}: ${e.message}`); return; }
+    let m; try{ m=parseMidi(ab); }catch(e){ console.warn('MIDI import',e); toast(`That MIDI file (${f.name}) couldn’t be read`); return; }
     if(!m.tracks.length){ toast(`${f.name} has no notes`); return; }
-    const empty=!PROJ.tracks.length; if(empty&&m.tempo) setTempo(Math.round(m.tempo));
-    const endB=Math.max(...m.tracks.flatMap(t=>t.notes.map(e=>e.b+e.d))); if(empty) setBars(fitBars(endB));
-    const L=PROJ.bars*4;
-    m.tracks.forEach((t,i)=>{ const ev=t.notes.filter(e=>e.b<L).map(e=>Object.assign(e,{d:Math.min(e.d,L-e.b)})); if(!ev.length) return;
-      const avg=ev.reduce((a,e)=>a+e.n,0)/ev.length, role=t.drums?'drums':avg<50?'bass':'melody', inst=t.drums?(ZONES.pads&&INST.get(ZONES.pads).drums?ZONES.pads:'kit909'):role==='bass'?'bass':'piano';
-      const I=INST.get(inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{});
-      addTrack({role,inst,zone:t.drums?'pads':'keys',name:(t.name||base+(m.tracks.length>1?' '+(i+1):'')).slice(0,32),events:ev}); });
-    if(LOOP.state==='empty') LOOP.state='stopped'; uiLoop();
-    toast(`Imported ${m.tracks.length} MIDI track${m.tracks.length>1?'s':''} from ${f.name}`); return;
+    /* QA, 17 Nov: a file longer than the loop kept only the first bars. Now the loop grows to fit the file (up to its 16-bar
+       maximum; the parts already there repeat, as when you pick more bars), and the whole import is one Undo step */
+    const endB=Math.max(...m.tracks.flatMap(t=>t.notes.map(e=>e.b+e.d))), was=PROJ.bars, MAXB=16; let made=0, cut=0;
+    undoGroup(()=>{
+      const empty=!PROJ.tracks.length; if(empty&&m.tempo) setTempo(Math.round(m.tempo));
+      const need=fitBars(endB); if(empty||need>PROJ.bars) setBars(need);
+      const L=PROJ.bars*4;
+      m.tracks.forEach((t,i)=>{ cut+=t.notes.filter(e=>e.b>=L).length; const ev=t.notes.filter(e=>e.b<L).map(e=>Object.assign(e,{d:Math.min(e.d,L-e.b)})); if(!ev.length) return;
+        const avg=ev.reduce((a,e)=>a+e.n,0)/ev.length, role=t.drums?'drums':avg<50?'bass':'melody', inst=t.drums?(ZONES.pads&&INST.get(ZONES.pads).drums?ZONES.pads:'kit909'):role==='bass'?'bass':'piano';
+        const I=INST.get(inst); if(I&&I.set) loadSet(I.set,loadOpts(I.set)).catch(()=>{});
+        addTrack({role,inst,zone:t.drums?'pads':'keys',name:(t.name||base+(m.tracks.length>1?' '+(i+1):'')).slice(0,32),events:ev}); made++; });
+      if(LOOP.state==='empty') LOOP.state='stopped'; uiLoop(); });
+    if(!made){ toast(`${f.name} has no notes in its first ${MAXB} bars`); return; }
+    const grew=PROJ.bars>was&&was>0, fileBars=Math.ceil(endB/4-0.01);
+    toast(`Imported ${made} MIDI track${made!==1?'s':''} from ${f.name}${grew?` · the loop is now ${PROJ.bars} bars`:''}${cut?`. The file is ${fileBars} bars and a loop holds at most ${MAXB}, so ${cut} note${cut!==1?'s':''} after bar ${MAXB} ${cut!==1?'were':'was'} left out`:''}`); return;
   }
   let buf; try{ buf=await c.decodeAudioData(ab.slice(0)); }catch(e){ toast(`Couldn’t open ${f.name}. Try WAV, MP3, M4A, OGG or a voice-memo file.`); return; }
   const sr=buf.sampleRate, mono=new Float32Array(buf.length); for(let ch=0;ch<buf.numberOfChannels;ch++){ const d=buf.getChannelData(ch); for(let i=0;i<d.length;i++) mono[i]+=d[i]/buf.numberOfChannels; }
@@ -121,7 +135,7 @@ async function importFile(f){
   const t=makeTrack({kind:'audio',role:'voice',inst:null,name:base,events:[],start:0,trim:0}); PROJ.tracks.push(t); AUD.set(t.id,makeBuf(mono,sr)); IDB.put('aud:'+t.id,{sr,data:mono},'audio').catch(()=>{});
   if(LOOP.state==='empty') LOOP.state='stopped'; saveProject(); renderTracks(); uiLoop();
   const over=buf.duration>PROJ.bars*4*spb()+0.05;
-  toast(`Added “${base}” (${buf.duration.toFixed(1)} s)${over?`. Only the first ${PROJ.bars} bars play; add bars to hear more`:''}. Use “Turn into notes” to play it on an instrument.`);
+  toast(`Added “${base}” (${buf.duration.toFixed(1)} s)${over?`. ${PROJ.bars===1?'Only the first bar plays':`Only the first ${PROJ.bars} bars play`}; add bars to hear more`:''}. Use “Turn into notes” to play it on an instrument.`);
   ASSIST.say(`Added “${base}”. Drag it left or right to line it up, or say “${ASSIST.name}, turn ${base.length<20?base:'it'} into a bassline” to play it on an instrument.`,{speak:false});
 }
 $('#importBtn').onclick=()=>$('#importFile').click();

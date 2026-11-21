@@ -9,11 +9,11 @@ let PROJ=LAST_PROJ&&!(LAST_PROJ.tracks||[]).length&&!LAST_PROJ.sections?LAST_PRO
 function dropTakeVoices(p){ if(p&&p.tracks) p.tracks=p.tracks.filter(t=>!(t.kind==='audio'&&/-voice$/.test(t.take||''))); return p; }
 dropTakeVoices(PROJ); if(LAST_PROJ) dropTakeVoices(LAST_PROJ);
 const AUD=new Map();
-let projSaveT=0;
+let projSaveT=0, DETACH=null; /* DETACH: the open song was deleted from the list and isn't saved until it changes (daw.js) */
 function serialize(p){ return JSON.parse(JSON.stringify(p)); }
 /* an idle transport follows the song: tracks make it ready to play, no tracks make it empty again (UX-2) */
 function syncLoopState(){ if(LOOP.state==='empty'&&PROJ.tracks.length) LOOP.state='stopped'; else if(LOOP.state==='stopped'&&!PROJ.tracks.length) LOOP.state='empty'; }
-function saveProject(){ syncLoopState(); clearTimeout(projSaveT); projSaveT=setTimeout(()=>{ projSaveT=0; store.set('project',serialize(PROJ)); },250); if(typeof autoSaveNamed==='function'){ $('#saveState').textContent='Saving…'; autoSaveNamed(); } }
+function saveProject(){ syncLoopState(); if(typeof detachCheck==='function') detachCheck(); clearTimeout(projSaveT); projSaveT=setTimeout(()=>{ projSaveT=0; store.set('project',serialize(PROJ)); },250); if(typeof autoSaveNamed==='function'){ $('#saveState').textContent='Saving…'; autoSaveNamed(); } }
 /* closing or reloading the page inside that quarter second still keeps the last change (a late rename came back as the old name) */
 addEventListener('pagehide',()=>{ if(projSaveT){ clearTimeout(projSaveT); projSaveT=0; store.set('project',serialize(PROJ)); } });
 const roleOfInst=inst=>{ const I=INST.get(inst)||{}; return I.drums?'drums':I.cat==='Bass'?'bass':'free'; };
@@ -51,9 +51,16 @@ function setTempo(b){
   if(TR.running && A.ctx){ const now=A.ctx.currentTime, beat=(now-TR.t0)*CTRL.bpm/60; if(songOn()) songRetempo(now); TR.t0=now-beat*60/b; TR.schedT=now; }
   CTRL.bpm=b; saveCtrl(); $('#bpm').value=b; $('#lcdTempo').textContent=b+' BPM'; FX.tempo(b); if(A.sends) A.sends.setTempo(b);
 }
-$('#bpm').addEventListener('change',e=>setTempo(+e.target.value));
+/* a tempo the user types or taps is one undo step (QA, 16 Nov: Undo lost a typed tempo). Tapping settles for 1.2 s,
+   so a run of taps is one step for the final tempo; Undo/Redo flush a step still settling (tempoFlush) */
+let tempoStepT=0;
+function tempoStep(){ clearTimeout(tempoStepT); tempoStepT=0; if(typeof undoBoundary==='function') undoBoundary(); saveProject(); if(typeof undoBoundary==='function') undoBoundary(); }
+function tempoFlush(){ if(tempoStepT) tempoStep(); }
+function userTempo(b,settle){ const was=CTRL.bpm; setTempo(b); if(CTRL.bpm===was&&!tempoStepT) return;
+  if(settle){ clearTimeout(tempoStepT); tempoStepT=setTimeout(tempoStep,1200); } else tempoStep(); }
+$('#bpm').addEventListener('change',e=>{ const b=+e.target.value; if(!b){ e.target.value=CTRL.bpm; return; } userTempo(b); });
 (function(){ const taps=[]; $('#tapBtn').onclick=()=>{ const t=performance.now(); if(taps.length && t-taps[taps.length-1]>2000) taps.length=0; taps.push(t); if(taps.length>6) taps.shift();
-  if(taps.length>=3){ const iv=(taps[taps.length-1]-taps[0])/(taps.length-1); setTempo(60000/iv); } }; })();
+  if(taps.length>=3){ const iv=(taps[taps.length-1]-taps[0])/(taps.length-1); userTempo(60000/iv,true); } }; })();
 [['metro','metro'],['countIn','countIn']].forEach(([id,k])=>{ const el=$('#'+id); el.checked=!!CTRL[k]; el.addEventListener('change',()=>{ CTRL[k]=el.checked; saveCtrl(); }); });
 [['quant','quant'],['loopLen','loopLen']].forEach(([id,k])=>{ const el=$('#'+id); el.value=String(CTRL[k]); el.addEventListener('change',()=>{ CTRL[k]=+el.value; saveCtrl(); }); });
 
@@ -363,7 +370,7 @@ async function makeSongMp3(tracks,onProgress,opts={}){
     const buf=enc.encodeBuffer(m<B?LB.subarray(0,m):LB,m<B?RB.subarray(0,m):RB); if(buf.length) out.push(new Uint8Array(buf));
     if(performance.now()-tk>20){ if(onProgress) onProgress(0.85+0.15*i/total,'encoding'); await yieldMain(); tk=performance.now(); } }
   const end=enc.flush(); if(end.length) out.push(new Uint8Array(end));
-  return {blob:new Blob(out,{type:'audio/mpeg'}),seconds:total/sr,bars:E/4,peak:pk*g,rms:Math.sqrt(sq/(2*total))};
+  return {blob:new Blob(mp3Gapless(out,total),{type:'audio/mpeg'}),seconds:total/sr,bars:E/4,peak:pk*g,rms:Math.sqrt(sq/(2*total))};
 }
 /* the song as plain tracks of notes in song time (for MIDI) */
 const songFlatTracks=tracks=>tracks.filter(t=>t.kind==='notes').map(t=>Object.assign({},t,{events:songFlat(t).map(e=>({b:e.B,d:e.d,n:e.n,v:e.v}))}));
@@ -423,6 +430,26 @@ async function exportMidiOnly(){
   try{ const r=await saveFile(`${base}.mid`,new Blob([buildMidi(song?songFlatTracks(tr):tr,bpm,L,base)],{type:'audio/midi'})); st.textContent=r==='declined'?'Download cancelled.':'MIDI downloaded.'; }catch(e){ st.textContent='Export failed: '+e.message; }
 }
 /* ---------- MP3: the mix, looped to the chosen length, encoded with LAME (lamejs, LGPL; its own script block) ---------- */
+/* Gapless MP3 (QA, 17 Nov: both MP3s started 25 ms late). LAME puts 576 samples of encoder delay before the music and pads the
+   last frame; the decoder adds 529 more. A LAME "Info" frame in front of the audio says how much to trim at each end, so
+   Chrome, ffmpeg-based apps, DAWs and gapless players start on the beat and end exactly on the loop's length */
+const MP3_DELAY=576;
+function crc16a(u,n){ let c=0; for(let i=0;i<n;i++){ c^=u[i]; for(let k=0;k<8;k++) c=c&1?(c>>>1)^0xA001:c>>>1; } return c&0xFFFF; }
+function mp3Gapless(parts,samples){
+  const u=new Uint8Array(parts.reduce((a,x)=>a+x.length,0)); let o=0; for(const x of parts){ u.set(x,o); o+=x.length; }
+  const BR=[0,32,40,48,56,64,80,96,112,128,160,192,224,256,320], SR=[44100,48000,32000];
+  const flen=p=>{ const br=BR[u[p+2]>>4], sr=SR[(u[p+2]>>2)&3]; return br&&sr?Math.floor(144000*br/sr)+((u[p+2]>>1)&1):0; };
+  let n=0, p=0; while(p+4<=u.length&&u[p]===0xFF&&(u[p+1]&0xFE)===0xFA){ const l=flen(p); if(!l) break; p+=l; n++; } /* MPEG-1 Layer III frames */
+  const pad=n*1152-MP3_DELAY-samples; if(!n||p!==u.length||pad<0||pad>4095) return parts; /* not what we expect: leave the file as LAME made it */
+  const len=flen(0)-((u[2]>>1)&1), f=new Uint8Array(len), v=new DataView(f.buffer);
+  f[0]=0xFF; f[1]=u[1]|1; f[2]=u[2]&0xFD; f[3]=u[3]; /* same format as the audio, no CRC, no padding */
+  let q=4+((u[3]>>6)===3?17:32); const w8=x=>{ f[q++]=x; }, w32=x=>{ v.setUint32(q,x>>>0); q+=4; }, ws=t=>{ for(const ch of t) w8(ch.charCodeAt(0)); };
+  ws('Info'); w32(15); w32(n); w32(len+u.length); for(let i=0;i<100;i++) w8(Math.floor(i*256/100)); w32(0); /* frames, bytes, seek table, quality */
+  const lame=q; ws('LAME3.100'); w8(0x01); w8(0); w32(0); q+=4; w8(0); w8(Math.min(255,BR[u[2]>>4]));
+  w8(MP3_DELAY>>4); w8(((MP3_DELAY&15)<<4)|(pad>>8)); w8(pad&255); w8(0); w8(0); q+=2; w32(len+u.length); q+=2;
+  v.setUint16(q,crc16a(f,lame+34)); /* CRC of the frame up to here */
+  return [f,u];
+}
 async function makeMp3(tracks,loopsOrSeconds,onProgress){
   if(typeof lamejs==='undefined'||!lamejs.Mp3Encoder) throw new Error('the MP3 encoder didn’t load');
   const bpm=CTRL.bpm, L=PROJ.bars*4, loopSec=L*60/bpm, sr=44100;
@@ -439,7 +466,7 @@ async function makeMp3(tracks,loopsOrSeconds,onProgress){
     if(k%300===0){ if(onProgress) onProgress(i/total); await nextFrame(); }
   }
   const end=enc.flush(); if(end.length) out.push(new Uint8Array(end));
-  return {blob:new Blob(out,{type:'audio/mpeg'}),seconds:total/sr,loops};
+  return {blob:new Blob(mp3Gapless(out,total),{type:'audio/mpeg'}),seconds:total/sr,loops};
 }
 async function exportMp3(lenOverride){
   if(!PROJ.tracks.length){ toast('Make something first, then download it as an MP3.'); return null; }

@@ -1,0 +1,54 @@
+{
+  "bugs": [
+    {
+      "area": "assistant",
+      "severity": "medium",
+      "text": "\"Another one\" often gives back a groove you already had. Over 8 tries, some come back note-for-note on the 16th grid, so the owner's rule that every \"another one\" is different isn't met.",
+      "steps": "1. New song. Type \"drums like Ben Böhmer\". 2. Type \"another one\" 8 times and listen to each. Happens: tries 6 and 7 are exact copies of earlier grooves (similarity 1.00 on the 16th grid). With \"124 bpm drums like Stephan Bodzin\", tries 3 to 8 are each 0.97 like an earlier one (0.93 without the hats). With \"house drums\", try 5 is an exact copy. Only 5 or 6 of the 8 replies are different text. In every try the kick, clap and hats stay the same; only the percussion pair (congas, rims, toms) and the 8-bar fill rotate, and there are only a few of each. Expected: each try is a groove you haven't heard yet in this song (hat pattern, kick variation, percussion), and it never repeats one. Likely files: the vary/add_drums path in src/actions.js and the drum generator in src/groove.js."
+    },
+    {
+      "area": "assistant",
+      "severity": "medium",
+      "text": "Saying \"turn the voice note into a bassline\" starts recording a NEW voice note from the mic instead of converting the one you have. The reply then tells you to say that same sentence. Happens in Basic mode and whenever the AI call fails, because the offline parser falls back.",
+      "steps": "1. Import a recording (Import audio / MIDI, e.g. tests/fixtures/sing.wav), or record a voice note. 2. Type \"turn the voice note into a bassline\". Happens: \"Recording a voice note after the count-in: 4 bars\". The mic records 4 bars into a new track \"Voice note 1\", then Keys says: \"Saved 'Voice note 1'… Say 'Keys, turn the voice note into a bassline' to play it on an instrument.\" Doing what it says records yet another voice note. Expected: the existing recording becomes a bassline (the transcribe action), as the \"Turn into notes… → Bassline\" menu does. Cause: in src/maker.js the rule /voice note|record (my )?voice/ (line 67) is checked before the turn/convert … into bass|chords|melody rule (line 68). Not changed on any preview branch (checked ai-1, ai-4, se-7, ux-5, ux-7)."
+    },
+    {
+      "area": "studio",
+      "severity": "medium",
+      "text": "A sung bassline stutters. Several held notes come out as a 1/16 stub followed by the same note again, because the take's recording has many short holes of silence and each hole looks like a new attack.",
+      "steps": "1. Type \"124 bpm drums like Ben Böhmer\". 2. Type \"let me sing the bassline\" and sing (fake mic: tests/fixtures/sing.wav, steady notes with 0.1 s gaps). Happens: \"Sung bassline\" has 11 to 13 notes, and 2 to 4 of them are doubled, e.g. G2 at beat 8.75 lasting 1/16, then G2 again at beat 9. Another take gave A2@0.5/0.25 then A2@0.75, G2@3/0.25 then G2@3.25. The same file brought in with Import, then Turn into notes, gives clean notes. Evidence: the recording that src/studio.js TAKE.finish builds had 87 runs of exact zeros, each 256 to 768 samples (5 to 16 ms), inside the sung notes. The chunks are placed by AudioContext.currentTime at each ScriptProcessor callback, so callback jitter leaves gaps. audioToNotes in src/edit.js then splits the note when the level jumps back up (the reatt rule). Expected: one note per sung note. Fix idea: write the chunks one after another (keep a running sample count, aligned once at the start), or ignore re-attacks that follow a hole of exact zeros. Seen in headless Chrome on a busy machine. Real laptops with main-thread jitter are likely affected too."
+    },
+    {
+      "area": "assistant",
+      "severity": "medium",
+      "text": "Offline, a mix request that names a part adds or regenerates that part: \"turn the melody down a bit\" adds a new track \"Melody 2\", and \"make the kick punchier\" replaces the whole drum groove. preview-ai-4 fixes \"the bass is muddy\" but not these two (checked).",
+      "steps": "1. Basic mode (local file) or AI down. Type \"make a track like Stephan Bodzin\", \"add a bassline\", \"add a melody\". 2. Type \"turn the melody down a bit\". Happens: \"Melody 2 (new track) on Melodic Pluck\", so there are now two identical melodies (both -17.7 LUFS) and the melody is louder, not quieter. 3. Type \"make the kick punchier\". Happens: a new drum pattern (\"…rims, a clap build every 8 bars\"); the groove you had is gone (Undo brings it back). Expected: a volume change of about -3 dB on Melody, and kick EQ/compression or a louder kick. At minimum, never add or replace a part when the sentence is about level or tone. \"melody quieter\" already works (mix -12). localBrain gives add_melody and add_drums for these on main and on preview-ai-4."
+    },
+    {
+      "area": "assistant",
+      "severity": "low",
+      "text": "\"Straighten it a bit\" removes all the swing instead of a little. \"A bit straighter\", \"less bounce\" and \"make it bouncier\" aren't understood.",
+      "steps": "1. Drums, then \"swing it harder\" (heavy swing, about 70%). 2. Type \"too swingy, straighten it a bit\". Happens: \"Straight, no swing\". \"straighten the hats a little\" does the same. Expected: one step down (70 → 66 → 58), as \"too swingy\" and \"less shuffle\" already do. Also: \"a bit straighter\", \"a little less bounce\" and \"make it bouncier\" do nothing; the reply suggests \"add a trap beat at 140\". Cause: in swingSaid (src/maker.js), \\bstraighten\\b in the no-swing rule is checked before the 'a bit less' rule."
+    },
+    {
+      "area": "assistant",
+      "severity": "low",
+      "text": "The reply to \"let me sing the bassline\" ends by suggesting \"Bassline next? … or sing it: 'let me sing the bassline'\", the thing you just asked for, while the count-in is running.",
+      "steps": "1. Drums only. 2. Type \"let me sing the bassline\". Happens: \"Done: Sing the bassline after the count-in: 4 bars. Bassline next? Say 'add a bassline', or sing it: 'let me sing the bassline'.\" Expected: no next-step suggestion while a take is about to start (or suggest what comes after the bassline). nextStep() in src/assistant.js runs before the sung part exists."
+    }
+  ],
+  "ideas": [
+    {
+      "area": "studio",
+      "text": "Scale mode in the note editor (as in Ableton Live 12): with a key set, the arrow keys and dragging move notes by scale steps and keep them in key. Why: in A minor, Arrow Up turned the A-C-E chords into B♭-D♭-F, which is out of key. Producers who sing or draw chords want +1 to mean the next chord, not a semitone."
+    },
+    {
+      "area": "studio",
+      "text": "Download just the selected section or the loop brace as an MP3 (\"export the drop\"). Why: the whole-song MP3 of a 120-bar song took over 15 minutes here (on a busy test machine), and influencers and sketchers mostly want a 15-30 s clip of the drop for a reel."
+    },
+    {
+      "area": "assistant",
+      "text": "\"Another one, but keep the …\": vary only what you name (\"new percussion, keep the hats\", \"same groove, different fill\"). Why: after a few tries, one groove is nearly right. Today \"another one\" redraws everything, so you can't keep the part you like and change the rest."
+    }
+  ]
+}

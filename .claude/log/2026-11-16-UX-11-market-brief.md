@@ -1,0 +1,4 @@
+# UX-11 market check brief — music-researcher
+
+Proposal: `/home/claude/studio-keys-repo/.claude/work/proposals/UX-11.md` (mute or solo single drum sounds inside a Keys drum part, by click in the drum editor / a KIT panel on drum tracks, or by voice "mute the open hats").
+Give a verdict: great / good / risky / skip, with one line why, and 2-4 short "For the devs" notes (how Ableton Drum Rack, FL Studio channel rack, Logic Drum Machine Designer and AI beat tools handle per-pad mute/solo; anything producers would expect, e.g. choke groups, mute vs delete). Also answer the proposal's research question: should muting a pad also silence the user's live playing on that pad? Quick job (about 10 minutes). Write JSON `{verdict, why, notes[], answer, sources[]}` to `/tmp/research/market/UX-11.json` and reply with the same content.
