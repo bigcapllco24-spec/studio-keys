@@ -321,7 +321,7 @@ function artPart(ev,how){ const L=L_(), on=onsets(ev); return on.flatMap(([b,es]
 function shapeEvents(t,ev){ let x=ev; const dn=t.dens||0; for(let i=0;i<Math.abs(dn);i++){ const y=dn<0?thinPart(x,t.role):busyPart(x,t.role); if(y) x=y; } if(t.art) x=artPart(x,t.art); return x; }
 /* every part's earlier versions this session, newest last: what "go back to the previous chords" brings back */
 const keyNamedIn=t=>!t||/\b[a-g](?:#|♯|b|♭| sharp| flat)? ?(?:major|minor|maj|min|m)\b|\bkey of\b|\bin the key\b/i.test(String(t));
-const VERSIONS=[];
+const VERSIONS=[], REVERT_AT=new Map(); /* REVERT_AT: the version each part went back to last, so going back again walks further back */
 /* a new or replaced generated part starts plain; a held sound keeps the chord rhythm it was given (SE-4 note: regenTrack forgot it) */
 function freshShape(t,cs){ if(!t) return; t.cs=cs; delete t.bs; delete t.dens; delete t.art; }
 const partCopy=t=>({events:JSON.parse(JSON.stringify(t.events||[])),inst:t.inst,name:t.name,seed:t.seed,recipe:t.recipe?JSON.parse(JSON.stringify(t.recipe)):t.recipe,desc:t.desc,cs:t.cs,bs:t.bs,dens:t.dens,art:t.art});
@@ -397,15 +397,23 @@ const ACT={
     const y=artPart(t.events,how); if(JSON.stringify(y)===JSON.stringify(t.events)){ songNote(`The ${name} ${pl?'are':'notes are'} already as ${how==='shorter'?'short':'long'} as they go.`); BATCH.declined=true; return; }
     t.events=y; t.art=how; return `${t.name}: ${how==='shorter'?'shorter, tighter notes':'longer, held notes'}, same ${t.role==='chords'?'chords':'notes'}`; },
   /* the part as it was before its last change ("go back to the previous chords", "no, the other one"); the rest of the song stays */
-  revert(a){ const t=findTrack(a.track)||(ASSIST.focus&&partTrack(ASSIST.focus))||null; let i=VERSIONS.length-1;
-    /* a version that sounds like the part does now (after an Undo, say) is skipped */
-    if(t){ const cur=partSig(t); while(i>=0&&(!VERSIONS[i].tracks[t.id]||partSig(VERSIONS[i].tracks[t.id])===cur)) i--; } if(i<0||!t){ songNote(t?`There’s no earlier ${ROLE_TXT[t.role]||t.name} this session to go back to. Say “undo” to take back the last change.`:'Which part should go back? Say “go back to the previous bassline”, for example.'); BATCH.declined=true; return; }
-    const v=VERSIONS.splice(i,1)[0], ids=[t.id].concat(t.role==='chords'?Object.keys(v.tracks).filter(id=>id!==t.id&&v.follow&&v.follow.includes(id)):[]);
+  revert(a){ const t=findTrack(a.track)||(ASSIST.focus&&partTrack(ASSIST.focus))||null, said=String(LAST_TEXT.text||'').toLowerCase();
+    /* "the original/first chords": the oldest version this session; "go back" again right after going back: one more step back;
+       "no, the other one": the one just before, so it toggles (QA, 22 Nov fix 2). Versions are kept, never used up. */
+    const first=a.to==='first'||/\b(original|first|very first|start)\b/.test(said), toggle=!first&&/\bother one\b/.test(said);
+    let i=VERSIONS.length-1, chain=false;
+    if(t){ const cur=partSig(t), w=REVERT_AT.get(t.id), wi=w?VERSIONS.indexOf(w):-1;
+      if(!first&&!toggle&&wi>=0&&w.tracks[t.id]&&partSig(w.tracks[t.id])===cur){ i=wi-1; chain=true; }
+      const ok=k=>VERSIONS[k].tracks[t.id]&&partSig(VERSIONS[k].tracks[t.id])!==cur;
+      if(first){ i=VERSIONS.findIndex((v,k)=>ok(k)); }
+      else while(i>=0&&!ok(i)) i--; }
+    if(i<0||!t){ songNote(t?(chain||first?`${/^(chords|drums)$/.test(t.role)?'These are':'That’s'} already the first ${ROLE_TXT[t.role]||t.name} of this session. Say “new ${ROLE_TXT[t.role]||t.name}” for another one.`:`There’s no earlier ${ROLE_TXT[t.role]||t.name} this session to go back to. Say “undo” to take back the last change.`):'Which part should go back? Say “go back to the previous bassline”, for example.'); BATCH.declined=true; return; }
+    const v=VERSIONS[i], ids=[t.id].concat(t.role==='chords'?Object.keys(v.tracks).filter(id=>id!==t.id&&v.follow&&v.follow.includes(id)):[]);
     ids.forEach(id=>{ const T=PROJ.tracks.find(x=>x.id===id); if(T) Object.assign(T,JSON.parse(JSON.stringify(v.tracks[id]))); });
     /* the version this saves (the chords as they were a moment ago) keeps its bassline too, so going back again brings both (QA, 22 Nov) */
     ids.slice(1).forEach(id=>(BATCH.follow=BATCH.follow||new Set()).add(id));
-    if(t.role==='chords'&&v.prog!==undefined){ PROJ.prog=v.prog; PROJ.progLocked=v.locked; } BATCH.reverted=true;
-    return `${t.name}: back to the previous version${ids.length>1?' (the bassline follows it)':''}`; },
+    if(t.role==='chords'&&v.prog!==undefined){ PROJ.prog=v.prog; PROJ.progLocked=v.locked; } BATCH.reverted=true; REVERT_AT.set(t.id,v);
+    return `${t.name}: back to the ${first?'first version':chain?'version before that':'previous version'}${ids.length>1?' (the bassline follows it)':''}`; },
   tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
   bars(a){ setBars(+a.bars||+a.value||4); return `${PROJ.bars} bars`; },
   key(a){ const k=parseKey(a.key||a.value); if(!k) return; setKey(k); BATCH.key=true; return `Key ${keyName(k)}`; },
