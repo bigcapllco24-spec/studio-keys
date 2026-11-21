@@ -371,6 +371,20 @@ try {
     await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
     await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
   ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
+  // UX-15: controllers. A fake Akai MPK mini and an unknown USB keyboard: sustain holds notes, knobs on any device move an effect, the Akai map stays CC 70-77 → K1-K8
+  const mi = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); ensureAudio();
+    const mk = (id, name, manufacturer) => ({ id, name, manufacturer, type: 'input', state: 'connected', connection: 'open', onmidimessage: null });
+    const ins = [mk('sa', 'MPK mini 3', 'AKAI'), mk('sg', 'Smoke USB MIDI', '')], send = (i, d) => ins[i].onmidimessage({ data: new Uint8Array(d), timeStamp: performance.now() });
+    attachAccess({ inputs: new Map(ins.map(i => [i.id, i])), outputs: new Map(), onstatechange: null }); const R = {};
+    for (const i of [0, 1]) { send(i, [0xB0, 64, 127]); send(i, [0x90, 60, 100]); await W(30); send(i, [0x80, 60, 0]); await W(150); R['held' + i] = sustained.size === 1 && !active.size; send(i, [0xB0, 64, 0]); R['free' + i] = !sustained.size && !sustainOn; }
+    $('#susBtn').click(); noteOn(62, 100, 'p9'); noteOff(62, 'p9'); R.latch = sustained.size === 1 && $('#susBtn').getAttribute('aria-pressed') === 'true'; $('#susBtn').click(); R.latchOff = !sustained.size;
+    const a0 = FX.slots[0].amount; for (let v = 8; v <= 64; v += 4) send(1, [0xB0, 21, v]); R.knob = [DEVICES['|Smoke USB MIDI'].cc[21], +a0.toFixed(2), +FX.slots[0].amount.toFixed(2)]; R.toast = $('#toast').textContent;
+    for (const cc of [73, 70, 71, 72, 74, 75, 76, 77]) send(0, [0xB0, cc, 20]); R.akai = JSON.stringify(DEVICES['AKAI|MPK mini 3'].cc);
+    send(1, [0xFA]); await W(30); R.start = LOOP.state; send(1, [0xFC]); await W(30); R.stop = LOOP.state;
+    attachAccess({ inputs: new Map(), outputs: new Map(), onstatechange: null }); return R; });
+  ok('controller: sustain pedal holds a note on the Akai and on an unknown keyboard, the on-screen Sustain button too', mi.held0 && mi.free0 && mi.held1 && mi.free1 && mi.latch && mi.latchOff, JSON.stringify(mi));
+  ok('controller: an unknown keyboard\'s first knob is picked up and moves an effect', mi.knob[0] === 'fx0' && mi.knob[2] > mi.knob[1] && /Knob 1 →/.test(mi.toast) && mi.start === 'playing' && mi.stop === 'stopped', `${mi.knob.join(' ')} · ${mi.toast}`);
+  ok('controller: Akai MPK mini knobs keep CC 70-77 → K1-K8', mi.akai === JSON.stringify(Object.fromEntries([70, 71, 72, 73, 74, 75, 76, 77].map((c, i) => [c, 'fx' + i]))), mi.akai);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
