@@ -379,11 +379,11 @@ try {
     R.min = Math.min(...sp); R.low = Math.min(...g.flat()); R.n = g.length;
     const seen = new Set(); for (let i = 0; i < 60; i++) { ensureProg(true); seen.add(PROJ.prog.join()); }
     R.fresh = ['0,6,3,5', '4,5,0,6', '5,2,6,0', '0,4,5,4', '4,5,6,0', '5,0,6,4'].filter(x => seen.has(x)).length;
-    setBars(8); PROJ.prog = [0, 6, 3, 5]; R.hold = chordPlan().plan.map(c => c.deg).join('');
+    setBars(8); PROJ.prog = [0, 6, 3, 5]; R.hold = chordPlan().plan.map(c => c.deg).join(''); PROJ.prog = [3, 3, 0, 0]; R.hold2 = chordPlan().plan.map(c => c.deg).join('');
     const s0 = shape(chordsT()); runActions([{ type: 'vary', track: 'chords', progression: false }]); R.same = s0 === shape(chordsT());
     const s1 = shape(chordsT()); runActions(localBrain('give me another chord progression').actions); R.same2 = s1 === shape(chordsT()); return R; });
   ok('SE-4: new pad chords are open (every chord spans ≥ 14 semitones, low root C3 or above)', se4.n >= 2 && se4.min >= 14 && se4.low >= 48, `${se4.n} chords, narrowest ${se4.min} semitones, lowest note ${se4.low}`);
-  ok('SE-4: the new progressions come up, and hold 2 bars each in an 8-bar loop', se4.fresh >= 2 && se4.hold === '00663355', `${se4.fresh} of 6 new minor progressions in 60 picks · i VII iv VI over 8 bars: ${se4.hold}`);
+  ok('SE-4: the new progressions come up, and hold 2 bars each in an 8-bar loop', se4.fresh >= 2 && se4.hold === '00663355' && se4.hold2 === '33003300', `${se4.fresh} of 6 new minor progressions in 60 picks · i VII iv VI over 8 bars: ${se4.hold} · IV I: ${se4.hold2}`);
   ok('SE-4: "another one" on the chords changes the voicing too', !se4.same && !se4.same2, JSON.stringify(se4));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));

@@ -78,8 +78,9 @@ const PROGS={minor:[[0,5,2,6],[0,5,3,4],[0,6,5,6],[0,2,5,6],[0,3,6,5],[0,0,5,6],
     [0,6,3,5],[4,5,0,6],[5,2,6,0],[0,4,5,4],[4,5,6,0],[5,0,6,4]],
   major:[[0,4,5,3],[0,5,3,4],[0,3,4,4],[3,4,0,5],[0,4,3,4],[5,3,0,4],[3,3,0,0],[0,2,4,4],[0,3,5,3]]};
 /* in the pack these progressions hold each chord for 2 bars of an 8-bar loop; here they do the same in loops of 8 bars or
-   more (a 4-bar loop plays one chord per bar). PROJ.progHold true/false overrides it. */
-const PROG_HOLD=new Set(['0,6,3,5','0,4,5,4','3,3,0,0','0,2,4,4','0,3,5,3']);
+   more (a 4-bar loop plays one chord per bar). PROJ.progHold true/false overrides it. IV I is stored already held
+   ([3,3,0,0] = IV IV I I), so it is not in the set (holding it again gave 4 bars per chord). */
+const PROG_HOLD=new Set(['0,6,3,5','0,4,5,4','0,2,4,4','0,3,5,3']);
 function progHolds(prog,bars){ if(!prog||prog.length!==4||bars<8) return false; if(PROJ.progHold!=null) return !!PROJ.progHold; return PROG_HOLD.has(prog.join()); }
 function genBass(style,L,seed){
   const st=STYLES[style]||STYLES.house, {plan}=chordPlan(), ev=[], kick=pat((st.drums[36]||'x...x...x...x...'),0), r=rng(seed||5), pick=a=>a[Math.floor(r()*a.length)];
@@ -127,14 +128,22 @@ function chordVoicer(key,fam,r){
   if(si===VOICE_LAST[fam]) si=(si+1+Math.floor(r()*(n-1)))%n; VOICE_LAST[fam]=si;
   const shape=shapes[si], memo={}; let prevUp=null;
   /* colour per chord degree, the same each time it comes round: add9 about 15%, a 7th about 12%, otherwise plain.
-     Only colours that sound right on that chord: a 9th a whole tone above the root, a 7th on chords with a perfect fifth. */
+     Only colours that sound right on that chord: a 9th a whole tone above the root, a 7th on chords with a perfect fifth.
+     The 7th-chord styles (hip-hop, lo-fi, deep house, boom bap, amapiano, liquid) keep their flavour but follow the
+     owner's D2 ("mostly plain, add9 or 7ths sometimes"): about half their chords get the 7th ('7', or '79' with a 9th
+     on top), the rest are plain triads or plain add9. The split leans back towards half and half within each take,
+     so a 4-chord loop doesn't come out all 7ths or all plain. */
+  let n7=0, nPlain=0;
   const colourOf=c=>{ const rt=c.pcs[0], fifth=mod(c.pcs[2]-rt,12), nine=mod((SCALES[key.mode][(c.deg+1)%7]+key.tonic)%12-rt,12), x=r();
-    if(fam==='seventh') return x<0.3&&nine===2?'9':null;
+    if(fam==='seventh'){ const p7=Math.min(0.85,Math.max(0.15,0.5+0.35*(nPlain-n7))), y=r();
+      if(x<p7){ n7++; return y<0.3&&nine===2?'79':'7'; } nPlain++; return y<0.3&&nine===2?'9':null; }
     if(x<0.15) return nine===2?'9':fifth===7?'7':null; if(x<0.27) return fifth===7?'7':nine===2?'9':null; return null; };
   return c=>{
     if(memo[c.deg]) return memo[c.deg];
     const rt=c.pcs[0], iv={R:0,'3':mod(c.pcs[1]-rt,12),'5':mod(c.pcs[2]-rt,12),'7':mod(c.sev[3]-rt,12),'9':2};
-    const up=shape.up.slice(), col=colourOf(c);
+    let up=shape.up.slice(), col=colourOf(c);
+    /* 7th-family shapes carry the 7th: a plain chord swaps it for the root an octave up, a plain add9 for the 9th */
+    if(fam==='seventh'){ if(col==='79') col='9'; else { if(col!=='7') up=up.map(k=>k==='7'?(col==='9'?'9':'R'):k); col=null; } }
     if(col&&!up.includes(col)){ const j=up.indexOf('R'); if(j>=0) up[j]=col; else if(up.length<3) up.push(col); else { const k=up.indexOf('5'); if(k>=0) up[k]=col; } }
     const R0=nearestAbove(rt,VOICE_LO), low=shape.low.map(k=>R0+iv[k]), minUp=Math.max(R0+10,Math.max(...low)+3);
     const opts=up.map(k=>{ let p=minUp; while(mod(p-R0,12)!==iv[k]%12) p++; return [p,p+12]; });
