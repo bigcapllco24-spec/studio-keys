@@ -1,0 +1,18 @@
+# AI-1 · Build mode (release merge) · assistant-dev · 21 Nov 2026
+Read `.claude/standards/dev-standards.md` first. Sections that matter: "Production and assistant rules" (the 14 Nov AI-1 approval line), "Owner rules from 19 Nov 2026", "Quality bar" (every new action in worker prompt + actions.js + maker.js; check.sh passes; undoable), "How we build" (no backticks or `${` in cloudflare/worker.js).
+
+Repo: /home/claude/studio-keys-repo (work in a separate clone so you don't disturb other agents: `git clone -q https://github.com/bigcapllco24-spec/studio-keys /home/claude/sk-ai1 && cd /home/claude/sk-ai1 && git checkout preview-ai-1`).
+
+## Situation
+The owner approved AI-1 at gate 2 (round 2) on 19 Nov with these choices: D1 about 3 minutes (16-bar sections) unless he says club, extended or DJ (then about 6 minutes); D2 add missing parts only when he says 'full track', otherwise arrange what's there; D3 ship with drum transitions (snare roll, gap before the drop, fill, crash), a 'riser' uses a roll plus crash and Keys says so. That is what the branch already does.
+Tonight the lead released AI-4, AI-6, AI-8 (your offline-brain fixes), AI-7, UX-7, UX-12 and UX-13 to main (merge d35b13f). preview-ai-1 (head 848933a) now conflicts with main in: cloudflare/worker.js (the SYSTEM prompt line), src/actions.js (3 blocks), src/assistant.js (2: projectState() — keep `arrangement` FIRST and ALSO keep main's `soloed` and `generated` fields; the reply logic — keep main's `brainReply(L,done)` and the `BATCH.take` no-hint rule AND AI-1's riser filter, BATCH.same and BATCH.notes handling), src/groove.js (ARTISTS rows: keep AI-1's 8th arrangement element on each row and main's exact name aliases, e.g. main's 'Afterlife|Massano|Argy|Innellea|Kevin de Vries|kevin de vries|...'), src/maker.js (2), tests/smoke.mjs (keep all checks from both), index.html (just rebuild).
+For worker.js the lead has already worked out the combined prompt: main's line plus AI-1's four edits (the SONG ARRANGEMENT block before STYLES, the 'For "make it a full track (like X)"...' sentence, the 'On an arranged song, suggest only song moves...' sentence appended right after main's 'only tell them to sing after the count-in.' sentence, and AI-1's two example pairs added after the swing example). Do the same; check with a word diff that every edit from both sides is present exactly once.
+
+## Job
+1. `git merge origin/main` into preview-ai-1 and resolve every conflict so BOTH sides' behaviour survives (main's AI-4/6/8 offline fixes + AI-1 song sections). Read both sides of each block before choosing; where both changed the same logic, combine.
+2. `python3 tools/build.py`, then `bash .claude/tools/check.sh` (the save/reopen pair "opening the app starts a new empty song" + "Undo right after opening a song" is known to flake under load; if only those two fail, run again). All checks must pass, both AI-1's and main's.
+3. Commit ("AI-1: merge main (AI-4/6/8, AI-7, UX-7/12/13) into song sections") and push preview-ai-1. Push WIP commits as you go (after the merge resolves, after the check) — that push is how other lead sessions know the work is alive.
+4. Don't add features. Don't touch files outside your area except the merge results of files that were already changed on either side.
+
+## Report (short, plain)
+What conflicted and how you combined each block; check.sh summary line (checks count); anything you weren't sure about; the new head hash. Also tell me in one line whether the 'add a bassline and give me another one' rule works on the AI path (today the live Llama sent vary:drums for it; actions.js could guard it the way the offline brain does). Don't fix that here; it goes into AI-9.

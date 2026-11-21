@@ -1,5 +1,5 @@
 # Studio Keys development standards
-Owned by the lead. Every developer reads this before every job. Last updated: 15 Nov 2026.
+Owned by the lead. Every developer reads this before every job. Last updated: 21 Nov 2026.
 
 ## What Studio Keys is for (the owner's words, 12-13 Nov 2026)
 - "A talk assistant to make, mix and produce music, and a software like Ableton/FL in it."
@@ -26,6 +26,17 @@ Owned by the lead. Every developer reads this before every job. Last updated: 15
 - (owner, 14 Nov, AI-1 approval) "Make it a full track" is about 3 minutes (16-bar sections) unless the user says club, extended or DJ (then about 6 minutes). "Arrange it" arranges only the parts that exist and suggests adding bass or chords; it never adds parts by itself. Transitions ship as drum transitions (snare roll, gap before the drop, fill, crash); a "riser" request uses a roll plus crash and Keys says so, until the engine has real risers.
 - (owner, 14 Nov, SE-7 approval) The key is shown honestly (sureness, a second guess, "no key yet"), with the DJ key code labelled "DJ key" (never "Camelot", a trademark). Live listening from the mic comes later (7d). If a user wants the same melody or chords as a song they bring in, Keys lets them do it: the user has a free pass. Keys itself still never copies a song's melody unasked; it offers a new melody over the chords by default.
 - (owner, 14 Nov, SE-3 release) "More swing" means full triplet swing (about 66%), and the measured drummer feel applies to every style.
+
+## Owner rules from 19 Nov 2026 (HQ lead chat and gate-2 notes)
+- Keys keeps a step-by-step memory of the conversation and of what it changed. A comment about one element ("make the bass softer") changes ONLY that element; it never redoes or regenerates the rest of the project (AI-9).
+- While the user talks to Keys, the playing music eases down (ducks) so the mic hears them, and comes back when they stop (AI-10).
+- Sung parts keep the user's notes as sung (pitch and rhythm). Keys never replaces what they sang with a generated idea (UX-14).
+- The studio should look and work more like Ableton, improved one element at a time, keeping the matte themes (no orange, no AI-looking gradients) (UX-16).
+- MIDI controllers: sustain and the standard buttons work on every device; knobs map to effects automatically on any controller, not only the Akai, with a manual learn option (UX-15).
+- (AI-1 note) The loop stays as the elements the user made. When they ask for it as a song, Keys builds the whole track track by track, instrument by instrument, like a professional Ableton producer, not just the same loop switched on and off (AI-12).
+- (AI-7 note) Saying "Keys" wakes the assistant every time the user talks or gives feedback (AI-13).
+- (AI-6 note) Copy, paste and duplicate must be simple: drag a box to select, then copy/paste/duplicate (UX-17).
+- The owner finds Llama 3.3 weak and wants a better model; a paid model (Claude) needs his OK and his own API key (AI-11).
 
 ## How we build
 - Source in `src/`, one file per area (see `.claude/CLAUDE.md` for owners). `python3 tools/build.py` writes `index.html`; never edit `index.html` by hand.
