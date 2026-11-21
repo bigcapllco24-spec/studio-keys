@@ -371,6 +371,17 @@ try {
     await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
     await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
   ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
+  // SE-11 (QA, 21 Nov): the Ableton zip's stems add up to Mix.wav (null test), no stem or stem sum clips, README says what to put on the master
+  const nz = await E(async () => { await newSong('Smoke stems'); runActions([{ type: 'add_drums', style: 'house', seed: 5210 }]); runActions([{ type: 'add_bass', seed: 5211 }]);
+    const sf = window.saveFile; let z = null; window.saveFile = async (n, bl) => { z = bl; return 'saved'; }; try { await exportZip(); } finally { window.saveFile = sf; }
+    const u = new Uint8Array(await z.arrayBuffer()), dv = new DataView(u.buffer), F = {}; let o = 0;
+    while (dv.getUint32(o, true) === 0x04034b50) { const sz = dv.getUint32(o + 18, true), nl = dv.getUint16(o + 26, true); F[new TextDecoder().decode(u.slice(o + 30, o + 30 + nl))] = u.subarray(o + 30 + nl, o + 30 + nl + sz); o += 30 + nl + sz; }
+    const wav = d => { const v = new DataView(d.buffer, d.byteOffset + 44, d.byteLength - 44), x = new Float32Array(v.byteLength / 2); for (let i = 0; i < x.length; i++) x[i] = v.getInt16(i * 2, true) / 32768; return x; };
+    const ks = Object.keys(F), mix = wav(F[ks.find(k => / Mix\.wav$/.test(k))]), st = ks.filter(k => /\/Stems\//.test(k)).map(k => wav(F[k])), sum = new Float32Array(mix.length); st.forEach(x => x.forEach((v, i) => sum[i] += v));
+    const db = a => 10 * Math.log10(a.reduce((q, v) => q + v * v, 0) / a.length || 1e-30), pk = a => 20 * Math.log10(a.reduce((m, v) => Math.max(m, Math.abs(v)), 0) || 1e-9);
+    const rd = new TextDecoder().decode(F[ks.find(k => /README/.test(k))]), up = +((rd.match(/Gain \+([\d.]+) dB/) || [0, 0])[1]), k = Math.pow(10, up / 20); /* stems may sit a stated few dB under the mix */
+    return { stems: st.length, duck: PROJ.tracks.some(t => t.fx && t.fx.duck > 0), up, null: db(mix.map((v, i) => v - k * sum[i])) - db(mix), mixPk: pk(mix), sumPk: pk(sum), stemPk: Math.max(...st.map(pk)), readme: /On the Ableton master/.test(rd) }; });
+  ok('Ableton zip: stems add up to the mix (null test), nothing clips', nz.stems === 2 && nz.duck && nz.null < -40 && nz.sumPk < 0 && nz.stemPk < 0 && nz.readme, `residual ${nz.null.toFixed(1)} dB vs the mix (stems +${nz.up} dB on the master), mix peak ${nz.mixPk.toFixed(2)}, stems summed ${nz.sumPk.toFixed(2)}, loudest stem ${nz.stemPk.toFixed(2)} dBFS`);
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
