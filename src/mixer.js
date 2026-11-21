@@ -80,6 +80,31 @@ function masterGain(y,x,a,n){
   if(last<0) g.fill(1); else for(let j=last+1;j<n;j++) g[j]=g[last];
   return {g,D};
 }
+/* SE-11 fix 1: the master Drive and Bitcrush knobs shape the summed bus (X) into Z, which no set of separately driven stems
+   can add up to. shaperSplit finds the shaper's latency D, then a smooth level change h(t): the peak of Z over the peak of
+   X(t-D) in ~23 ms windows (both channels together, so stems keep their stereo image and get no audio-rate modulation; peak
+   rather than a least-squares fit, so a clean stem's peaks are never louder than its part in the driven mix: tested 4.5 vs
+   1.6 dB of stem headroom at Drive 10%). Each stem gets h, and the rest r = Z − h·X(t-D) (the grit and extra loudness:
+   harmonics, intermodulation, clipping, bit noise) becomes its own stem, so the stems still add up exactly. */
+const SHAPE_TYPES=new Set(['drive','crush']);
+const shapeKnob=s=>(s.type==='drive'&&Math.round(s.amount*40)/40>=0.02)||(s.type==='crush'&&s.amount>=0.03); /* the curve is on (see FX_LIB) */
+const shapeOn=slots=>slots.some(shapeKnob);
+function shaperSplit(X,Z){
+  const [X0,X1]=X, [Z0,Z1]=Z, N=Z0.length, W=1024, H=256, MAXD=512, P=8192;
+  let best=-1, w0=MAXD; /* the latency: highest correlation of Z with a delayed X, in the loudest stretch */
+  for(let s=MAXD;s+P<=N;s+=P){ let e=0; for(let i=s;i<s+P;i++) e+=Z0[i]*Z0[i]+Z1[i]*Z1[i]; if(e>best){ best=e; w0=s; } }
+  let D=0, cbest=-Infinity;
+  for(let d=0;d<=MAXD;d++){ let c=0, q=0; for(let i=w0;i<w0+P&&i<N;i++){ const u=X0[i-d], v=X1[i-d]; c+=Z0[i]*u+Z1[i]*v; q+=u*u+v*v; } const r=q>0?c/Math.sqrt(q):0; if(r>cbest){ cbest=r; D=d; } }
+  const xa=(c,i)=>i>=D?c[i-D]:0;
+  const K=Math.ceil(N/H)+1, hr=new Float32Array(K), hk=new Float32Array(K);
+  for(let k=0;k<K;k++){ const s=k*H-W/2; let pz=0, px=0;
+    for(let j=Math.max(0,-s);j<W&&s+j<N;j++){ const i=s+j, z=Math.max(Math.abs(Z0[i]),Math.abs(Z1[i])), x=Math.max(Math.abs(xa(X0,i)),Math.abs(xa(X1,i))); if(z>pz) pz=z; if(x>px) px=x; }
+    hr[k]=px>1e-6?pz/px:(k?hr[k-1]:1); }
+  for(let k=0;k<K;k++){ let m=hr[k]; for(let j=Math.max(0,k-2);j<=Math.min(K-1,k+2);j++) if(hr[j]<m) m=hr[j]; hk[k]=m; } /* the lowest of the windows each sample is in, so a kick right after a quiet bit isn't boosted */
+  const h=new Float32Array(N), r0=new Float32Array(N), r1=new Float32Array(N);
+  for(let i=0;i<N;i++){ const k=Math.floor(i/H), f=i/H-k, g=hk[k]+(hk[Math.min(K-1,k+1)]-hk[k])*f; h[i]=g; r0[i]=Z0[i]-g*xa(X0,i); r1[i]=Z1[i]-g*xa(X1,i); }
+  return {h,D,r:[r0,r1]};
+}
 const isKick=(tr,n)=>(n===35||n===36)&&(tr.role==='drums'||(INST.get(tr.inst)||{}).drums);
 const MIX=Object.assign({keys:{vol:0.85,lo:0,mid:0,hi:0,mute:false},pads:{vol:0.85,lo:0,mid:0,hi:0,mute:false},master:{vol:1,lo:0,mid:0,hi:0,mute:false}},store.get('mix',{}));
 let mixSaveT=0; const saveMix=()=>{ clearTimeout(mixSaveT); mixSaveT=setTimeout(()=>store.set('mix',MIX),300); };
