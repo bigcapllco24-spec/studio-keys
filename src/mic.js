@@ -60,7 +60,8 @@ function micLoop(){
   if(voiced){
     MIC.med.push(ftom(r.f)); if(MIC.med.length>5) MIC.med.shift();
     const sorted=[...MIC.med].sort((a,b)=>a-b); let m=sorted[sorted.length>>1]+shift;
-    const key=$('#micSnap').checked?PROJ.key:null; let n=Math.round(m); if(key) n=snapToKey(n,key);
+    /* the key snap is for playing live only: notes going into a take or to the assistant stay as sung (UX-14) */
+    const key=$('#micSnap').checked&&!ASSIST.listening&&LOOP.state!=='take'&&LOOP.state!=='counting'?PROJ.key:null; let n=Math.round(m); if(key) n=snapToKey(n,key);
     const cents=Math.round((m-Math.round(m))*100);
     MIC.trace.push({t,m}); MIC.silent=0;
     $('#micHz').textContent=r.f.toFixed(1)+' Hz'; $('#micCents').textContent=(cents>0?'+':'')+cents+'¢'; $('#micNeedle').style.left=`calc(${50+cents}% - 2px)`;

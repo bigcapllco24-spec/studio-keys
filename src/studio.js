@@ -182,21 +182,42 @@ function tick(){
 setInterval(tick,25);
 
 /* ---------- sung takes: notes + raw voice, recorded for one pass of the song ---------- */
-/* turn sung notes into a part: bass drops into the bass register and holds to the next note, chords build a
-   diatonic chord on each sung note, melody stays as sung */
+/* turn sung notes into a part: bass drops into the bass register (whole octaves) and holds over short breaths, chords build
+   a chord on each sung note, melody stays as sung. Sung pitches are never moved to the key (owner, 19 Nov, UX-14): before,
+   every bass and chord take (and melodies, with "Snap to the song's key" on by default) was snapped to the song's key, so a
+   bassline sung in E minor over a beat in A minor lost its F# and G#. Only a pitch sung right between two semitones (c, from
+   audioToNotes) goes to the one in the key */
 const PART_NAME={bass:'Sung bassline',chords:'Sung chords',melody:'Sung melody'};
 function partInst(part){ const {s,artist}=resolveVibe({}), S=STYLES[s]||STYLES.house, snd=artist?artist.sounds:{};
   if(part==='bass') return snd.bass||S.bass||'subbass'; if(part==='chords') return snd.chords||S.chords||'pad';
   const z=zoneInst('keys'); return PROJ.style?(snd.lead||S.lead||'lead'):(z.percussive?'piano':z.id); }
+const inKey=(n,k)=>!!k&&SCALES[k.mode].includes(mod(n-k.tonic,12));
+/* how much of what was sung (by length) is in the key's scale, 0..1 */
+function keyFit(notes,k){ let a=0, w=0; notes.forEach(e=>{ const x=Math.max(0.25,e.d||0.25); w+=x; if(inKey(e.n,k)) a+=x; }); return w?a/w:0; }
+/* a note sung clearly between two semitones (25-50 cents off after the singer's tuning) and outside the key goes to its
+   neighbour when that one is in the key; a note sung on its semitone always stays, in the key or not */
+function sungPitch(e,key){ if(!key||e.c==null||Math.abs(e.c)<0.25||inKey(e.n,key)) return e.n; const nb=e.n+Math.sign(e.c); return inKey(nb,key)?nb:e.n; }
+/* the key to build sung chords in: the song's key when every sung root is in it, else the major or minor key that holds the
+   most of them (the closest to the song's key on a tie), so a root is never moved to fit */
+function chordKey(notes,key){ if(key&&keyFit(notes,key)>0.999) return key; const det=notes.length>=3?detectKey(notes):null; let best=null;
+  for(let t=0;t<12;t++) for(const mode of ['major','minor']){ const k={tonic:t,mode}, f=keyFit(notes,k);
+    const near=key?SCALES[mode].filter(x=>inKey(x+t,key)).length/7:0, sc=f*100+near+(det&&det.tonic===t&&det.mode===mode?0.5:0)+(key&&key.tonic===t&&key.mode===mode?0.6:0);
+    if(!best||sc>best.sc) best={k,sc}; }
+  return best?best.k:(key||{tonic:9,mode:'minor'}); }
+/* the chord on a sung root: the key's own chord when the root is in it, else a major chord on it (a borrowed chord), or minor
+   when that one fits the key better */
+function chordOn(pc,k){ const sc=SCALES[k.mode], deg=sc.indexOf(mod(pc-k.tonic,12)); if(deg>=0) return triad(k,deg);
+  const min=inKey(pc+3,k)&&!inKey(pc+4,k); return [pc,pc+(min?3:4),pc+7].map(x=>mod(x,12)); }
 function shapePart(notes,part,key){
   let ev=notes.map(e=>Object.assign({},e)).sort((a,b)=>a.b-b.b); const L=PROJ.bars*4; if(!ev.length) return ev;
-  if(key) ev.forEach(e=>e.n=snapToKey(e.n,key));
-  const legato=max=>{ for(let i=0;i<ev.length;i++){ const nx=i+1<ev.length?ev[i+1].b:L; ev[i].d=Math.max(ev[i].d,Math.min(max,nx-ev[i].b-0.02)); } };
-  if(part==='bass'){ const med=ev.map(e=>e.n).sort((a,b)=>a-b)[ev.length>>1], sh=Math.round((40-med)/12)*12; ev.forEach(e=>{ e.n+=sh; e.v=Math.max(e.v,0.8); }); legato(2); }
-  else if(part==='chords'){ const k=key||{tonic:0,mode:'major'}, sc=SCALES[k.mode], out=[];
+  ev.forEach(e=>{ e.n=sungPitch(e,key); delete e.c; });
+  /* a bass note holds to the next one across a breath (up to a 16th); a rest the singer left stays a rest */
+  const legato=gap=>{ for(let i=0;i<ev.length;i++){ const nx=i+1<ev.length?ev[i+1].b:L; if(nx-(ev[i].b+ev[i].d)<=gap+1e-6) ev[i].d=Math.max(ev[i].d,nx-ev[i].b-0.02); } };
+  if(part==='bass'){ const med=ev.map(e=>e.n).sort((a,b)=>a-b)[ev.length>>1], sh=Math.round((40-med)/12)*12; ev.forEach(e=>{ e.n+=sh; e.v=Math.max(e.v,0.8); }); legato(0.25); }
+  else if(part==='chords'){ const k=chordKey(ev,key), out=[];
     /* chord changes land on beats (half bars when the singing is slow); the note sung longest in a slot picks the chord,
        repeats of the same chord merge, and each chord holds to the next one (at least a beat, up to a bar past what was sung) (UX-2) */
-    const degOf=n=>{ const pc=mod(n-k.tonic,12); let deg=sc.indexOf(pc); if(deg<0) deg=sc.reduce((bi,x,i)=>Math.abs(x-pc)<Math.abs(sc[bi]-pc)?i:bi,0); return deg; };
+    const degOf=n=>mod(n,12); /* a chord is named by its sung root (UX-14: it was the nearest scale step, so an F# became F) */
     const ioi=ev.slice(1).map((e,i)=>e.b-ev[i].b).filter(x=>x>0).sort((a,b)=>a-b), g=ioi.length&&ioi[ioi.length>>1]>=2?2:1;
     const slots=new Map(); ev.forEach(e=>{ const s=clamp(Math.round(e.b/g)*g,0,L-g), w=slots.get(s)||new Map(), deg=degOf(e.n); w.set(deg,(w.get(deg)||0)+Math.max(0.25,e.d)); slots.set(s,w);
       e.s=s; e.deg=deg; });
@@ -204,7 +225,7 @@ function shapePart(notes,part,key){
     ev.forEach(e=>{ const c=ch.find(x=>x.b===e.s); if(c&&c.deg===e.deg) c.end=Math.max(c.end,e.b+e.d); });
     const m=[]; ch.forEach(c=>{ const p=m[m.length-1]; if(p&&p.deg===c.deg) p.end=Math.max(p.end,c.end); else m.push(c); }); ch=m;
     ch.forEach((c,i)=>{ const nx=i+1<ch.length?ch[i+1].b:L, sung=Math.ceil((c.end-c.b)/g-1e-6)*g; let d=Math.min(nx-c.b,Math.max(4,sung)); if(nx-c.b-d<1) d=nx-c.b; c.d=d;
-      voice(triad(k,c.deg),55).forEach(n=>out.push({b:c.b,d:c.d,n,v:0.7})); }); ev=out; }
+      voice(chordOn(c.deg,k),55).forEach(n=>out.push({b:c.b,d:c.d,n,v:0.7})); }); ev=out; }
   return ev;
 }
 const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
@@ -238,7 +259,7 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     const q=0.25; let notes=this.notes.map(e=>({b:Math.round(e.b/q)*q,d:Math.max(q,Math.round(e.d/q)*q),n:e.n,v:clamp(e.v/127,0.4,1)})).filter(e=>e.b<L);
     /* the live pitch tracker runs a little behind the voice; the recording itself gives exact onsets */
     if(this.part!=='voice'&&typeof audioToNotes==='function'){ try{ const det=audioToNotes(makeBuf(pcm,sr)), sb=spb();
-      if(det.length>=Math.min(2,notes.length||2)) notes=det.map(x=>({b:Math.round(x.t0/sb/q)*q,d:Math.max(q,Math.round((x.t1-x.t0)/sb/q)*q),n:x.n,v:clamp(x.v,0.45,1)})).filter(e=>e.b<L); }catch(e){ console.warn('take analysis',e); } }
+      if(det.length>=Math.min(2,notes.length||2)) notes=det.map(x=>({b:Math.round(x.t0/sb/q)*q,d:Math.max(q,Math.round((x.t1-x.t0)/sb/q)*q),n:x.n,c:x.c,v:clamp(x.v,0.45,1)})).filter(e=>e.b<L); }catch(e){ console.warn('take analysis',e); } }
     notes.sort((a,b)=>a.b-b.b); notes=notes.filter((e,i)=>!(i&&notes[i-1].b===e.b&&notes[i-1].n===e.n));
     for(let i=0;i<notes.length-1;i++){ if(notes[i+1].b===notes[i].b){ notes.splice(i+1,1); i--; continue; } if(notes[i].b+notes[i].d>notes[i+1].b) notes[i].d=notes[i+1].b-notes[i].b; }
     notes.forEach(e=>e.d=Math.min(e.d,L-e.b));
@@ -246,8 +267,12 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     if(part==='voice'){ const n=PROJ.tracks.filter(t=>/^Voice note/.test(t.name)).length+1; const at=makeTrack({kind:'audio',role:'voice',inst:null,name:'Voice note '+n,events:[],cyc:0,start:0,trim:0}); PROJ.tracks.push(at); AUD.set(at.id,makeBuf(pcm,sr)); IDB.put('aud:'+at.id,{sr,data:pcm},'audio').catch(()=>{});
       this.chunks=[]; this.notes=[]; LOOP.state='playing'; saveProject(); renderTracks(); uiLoop(); $('#micStatus').textContent=`Saved “${at.name}”.`; this.backSong();
       ASSIST.say(`Saved “${at.name}”. It plays with the loop. Say “${ASSIST.name}, turn the voice note into a bassline” to play it on an instrument.`,{chips:[at.name]}); return; }
-    const key=PROJ.key||(part==='melody'?detectKey(notes):null); if(!PROJ.key && key && notes.length>=3) setKey(key);
-    if($('#micSnap').checked||part!=='melody') notes=shapePart(notes,part,PROJ.key||key);
+    /* the key follows the singing when nothing else sets it: no key yet, or only a style's default key and no other part with
+       notes (drums only), and the take clearly sits in another key. The take itself is never moved to a key (UX-14) */
+    const others=PROJ.tracks.some(t=>t.kind==='notes'&&t.take!==part&&t.role!=='drums'&&!(INST.get(t.inst)||{}).drums&&t.events.length);
+    if(notes.length>=3){ const k=part==='chords'?chordKey(notes,null):detectKey(notes);
+      if(k&&(!PROJ.key||!others&&keyFit(notes,PROJ.key)<0.85&&keyFit(notes,k)>=0.9)){ PROJ.key=null; setKey(k); } }
+    notes=shapePart(notes,part,PROJ.key);
     notes.forEach(e=>e.cyc=0);
     const prevTake=PROJ.tracks.find(t=>t.take===part), prevParts=prevTake?JSON.stringify(songSections().map(s=>[s.id,s.parts[prevTake.id]])):null;
     PROJ.tracks.filter(t=>t.take===part||t.take===part+'-voice').forEach(t=>removeTrack(t.id)); /* a new take of the same part replaces the last one */
@@ -260,7 +285,8 @@ const TAKE={chunks:[],notes:[],open:null,proc:null,part:'melody',
     this.backSong();
     const what=part==='chords'?`${new Set(notes.map(e=>e.b)).size} chords built on the notes you sang`:`${notes.length} notes`;
     $('#micStatus').textContent=`Take saved: ${what} on “${PART_NAME[part]}”. It’s playing back now.`;
-    ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
+    const outside=PROJ.key&&part!=='chords'?notes.filter(e=>!inKey(e.n,PROJ.key)).length:0, kept=outside?` (${outside} outside the key, kept as you sang ${outside>1?'them':'it'})`:'';
+    ASSIST.say(notes.length?`Got it: ${what}${PROJ.key?' in '+keyName(PROJ.key):''}${kept} on “${PART_NAME[part]}” with ${INST.get(inst).name}. Say “${ASSIST.name}, again” to redo it.`:`I didn’t catch any notes in that take. Try singing a bit louder, or closer to the mic, and say “${ASSIST.name}, sing the ${part} again”.`,{chips:notes.length?[PART_NAME[part],INST.get(inst).name]:[]});
   }
 };
 function makeBuf(pcm,sr){ const b=new AudioBuffer({length:Math.max(1,pcm.length),numberOfChannels:1,sampleRate:sr}); b.copyToChannel(pcm,0); return b; }

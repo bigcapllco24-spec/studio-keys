@@ -66,11 +66,39 @@ function audioToNotes(buf){
   }
   if(cur) notes.push(cur);
   const pk=Math.max(1e-6,...notes.map(n=>n.pk));
-  return notes.filter(n=>n.t1-n.t0>=0.08).map(n=>({t0:n.t0,t1:n.t1,n:n.n,v:clamp(0.45+0.55*n.pk/pk,0.3,1)}));
+  return tidySung(notes,frames,gate,hop/sr).filter(n=>n.t1-n.t0>=0.08).map(n=>({t0:n.t0,t1:n.t1,n:n.n,c:n.c,v:clamp(0.45+0.55*n.pk/pk,0.3,1)}));
+}
+/* the notes as they were sung (owner, 19 Nov: "it doesn't listen to my notes", UX-14). The tracker above names a note by the
+   pitch of its first few frames and splits it when the pitch moves 0.7 semitone, so a voice gave wrong or extra notes:
+   - a scoop up into the note (singers start low) named the note a semitone flat, and a 50-90 ms stub came before it;
+   - vibrato or drift across the half-semitone split one held note into 2-10 short ones;
+   - a singer who is a bit flat or sharp all through (25-45 cents) got notes a semitone off;
+   - a pitch change with no gap (legato) started 40-80 ms late, a 16th late once quantized.
+   Here each note's pitch is the median of all its frames (after the first 50 ms), pieces of one wobbling note join up, a short
+   scoop joins the note it slides into, the singer's own tuning is measured over the take (circular mean of every note's
+   offset, used when the notes agree on it), and a legato note starts at the first frame on its new pitch.
+   c: how far the note sits from its semitone (−0.5..0.5) after that tuning; the take uses it to settle a pitch sung right
+   between two notes (shapePart), and never moves a note sung on its semitone. */
+function tidySung(notes,frames,gate,hs){
+  const fm=fr=>fr.f>0&&fr.clar>0.85&&fr.rms>gate?ftom(fr.f):null;
+  const at=t=>{ let lo=0, hi=frames.length; while(lo<hi){ const m=(lo+hi)>>1; if(frames[m].t<t) lo=m+1; else hi=m; } return lo; };
+  const pitchOf=(t0,t1)=>{ const ms=[], skip=t1-t0>0.15?0.05:0; for(let k=at(t0+skip);k<frames.length&&frames[k].t<=t1;k++){ const m=fm(frames[k]); if(m!=null) ms.push(m); }
+    ms.sort((a,b)=>a-b); return ms.length?ms[ms.length>>1]:null; };
+  const out=notes.map(n=>{ const m=pitchOf(n.t0,n.t1); return Object.assign({},n,{m:m==null?n.n:m}); });
+  for(let i=0;i+1<out.length;i++){ const a=out[i], b=out[i+1]; if(a.n===b.n||b.t0-a.t1>2.5*hs) continue; /* same pitch twice is a re-sung note */
+    const wobble=Math.abs(a.m-b.m)<0.7, scoop=a.t1-a.t0<0.09&&b.t1-b.t0>a.t1-a.t0&&b.m>a.m&&b.m-a.m<2.5;
+    if(wobble||scoop){ a.t1=Math.max(a.t1,b.t1); a.pk=Math.max(a.pk,b.pk); const m=pitchOf(a.t0,a.t1); a.m=m==null?b.m:m; a.n=Math.round(a.m); out.splice(i+1,1); i--; } }
+  let sx=0, sy=0, sw=0; out.forEach(n=>{ const w=n.t1-n.t0, d=n.m-Math.round(n.m); sx+=w*Math.cos(2*Math.PI*d); sy+=w*Math.sin(2*Math.PI*d); sw+=w; });
+  let off=out.length>=3&&sw>0&&Math.hypot(sx,sy)/sw>0.6?Math.atan2(sy,sx)/(2*Math.PI):0; if(Math.abs(off)<0.1) off=0;
+  out.forEach(n=>{ const f=n.m-off; n.n=Math.round(f); n.c=+(f-n.n).toFixed(2); });
+  for(let i=1;i<out.length;i++){ const a=out[i-1], b=out[i]; if(a.n===b.n||b.t0-a.t1>2.5*hs) continue;
+    let k=at(b.t0); while(k>0&&frames[k-1].t>a.t0+0.06){ const m=fm(frames[k-1]); if(m==null||Math.round(m-off)!==b.n) break; k--; }
+    if(k<frames.length&&frames[k].t<b.t0){ b.t0=frames[k].t; a.t1=Math.min(a.t1,b.t0); } }
+  return out;
 }
 function transcribeTrack(t,part){
   const buf=AUD.get(t.id); if(!buf) return null; const s=spb(), L=PROJ.bars*4, q=0.25, st=t.start||0, trim=t.trim||0;
-  let ev=audioToNotes(buf).map(n=>({b:Math.round((st+(n.t0-trim)/s)/q)*q,d:Math.max(q,Math.round((n.t1-n.t0)/s/q)*q),n:n.n,v:n.v})).filter(e=>e.b>=0&&e.b<L);
+  let ev=audioToNotes(buf).map(n=>({b:Math.round((st+(n.t0-trim)/s)/q)*q,d:Math.max(q,Math.round((n.t1-n.t0)/s/q)*q),n:n.n,c:n.c,v:n.v})).filter(e=>e.b>=0&&e.b<L);
   if(!ev.length) return {count:0};
   for(let i=0;i<ev.length-1;i++) if(ev[i].b+ev[i].d>ev[i+1].b) ev[i].d=Math.max(q,ev[i+1].b-ev[i].b);
   const key=PROJ.key||detectKey(ev); if(!PROJ.key&&key&&ev.length>=4) setKey(key);
