@@ -74,7 +74,7 @@ function audioToNotes(buf){
    - vibrato or drift across the half-semitone split one held note into 2-10 short ones;
    - a singer who is a bit flat or sharp all through (25-45 cents) got notes a semitone off;
    - a pitch change with no gap (legato) started 40-80 ms late, a 16th late once quantized.
-   Here each note's pitch is the median of all its frames (after the first 50 ms, or 30% of a short note), pieces of one wobbling note join up, a short
+   Here each note's pitch is the median of its frames (not the first 50 ms or the last 60 ms), pieces of one wobbling note join up, a short
    scoop joins the note it slides into, the singer's own tuning is measured over the take (circular mean of every note's
    offset, used when the notes agree on it), and a legato note starts at the first frame on its new pitch.
    c: how far the note sits from its semitone (−0.5..0.5) after that tuning; the take uses it to settle a pitch sung right
@@ -87,8 +87,9 @@ function tidySung(notes,frames,gate,hs){
   for(let i=1;i<out.length;i++){ const a=out[i-1], b=out[i]; if(a.n===b.n||b.t0-a.t1>2.5*hs) continue;
     let k=at(b.t0); const k0=k; while(k>0&&k0-k<6&&frames[k-1].t>a.t0+0.06){ const m=fm(frames[k-1]); if(m==null||Math.round(m)!==b.n) break; k--; }
     if(k<frames.length&&frames[k].t<b.t0){ b.t0=frames[k].t; a.t1=Math.min(a.t1,b.t0); } }
-  /* 2. each note's pitch: the median of its frames, after the first 50 ms (30% of a short note) */
-  const pitchOf=(t0,t1)=>{ const ms=[], skip=Math.min(0.05,(t1-t0)*0.3); for(let k=at(t0+skip);k<frames.length&&frames[k].t<=t1;k++){ const m=fm(frames[k]); if(m!=null) ms.push(m); }
+  /* 2. each note's pitch: the median of its frames, leaving out the first 50 ms (a scoop) and the last 60 ms (a glide to the
+     next note), or 30% at each end of a short note */
+  const pitchOf=(t0,t1)=>{ const ms=[], d=t1-t0, skip=Math.min(0.05,d*0.3), end=t1-Math.min(0.06,d*0.3); for(let k=at(t0+skip);k<frames.length&&frames[k].t<=end;k++){ const m=fm(frames[k]); if(m!=null) ms.push(m); }
     ms.sort((a,b)=>a-b); return ms.length?ms[ms.length>>1]:null; };
   out.forEach(n=>{ const m=pitchOf(n.t0,n.t1); n.m=m==null?n.n:m; });
   /* 3. pieces of one note join up: split by vibrato or drift (their pitches under 0.7 semitone apart), or a short scoop into

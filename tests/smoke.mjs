@@ -371,6 +371,16 @@ try {
     await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
     await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
   ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
+  // UX-14 (owner, 19 Nov: "when I sing the bassline it doesn't listen to my notes"): synthetic sung takes (tests/sung-synth.js: vibrato,
+  // drift, scoops, onsets up to 35 ms off the grid) go through TAKE.finish; the part keeps the notes as sung, off the song's key too
+  await p.addScriptTag({ path: path.join(root, 'tests/sung-synth.js') });
+  const sg = await E(async () => { const o = ASSIST.say; ASSIST.say = () => {}; try { const L = await window.__sungLab(['bass E2-A2, song key A minor (vibe)', 'octave-jump bass E2/E3, A2/A3', 'chord roots D A Bm F#m, key A minor']);
+    const B = window.__sungBase, mel = [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 14].map((b, i) => ({ b, len: 0.6, n: [62, 66, 69, 66, 64, 61, 62, 71, 69, 66, 64, 61, 62][i] }));
+    const o2 = Object.assign({}, B, { key: { tonic: 9, mode: 'minor' }, flat: -35, vib: 45, scoop: 90, seed: 41 }); L.push(window.__sungScore('melody 35c flat, wide vibrato, scoops', 'melody', mel, await window.__sungRun('melody', mel, o2), o2)); return L; } finally { ASSIST.say = o; } });
+  sg.forEach(r => ok(`sung take keeps the notes: ${r.name}`, r.pitchOk === r.in && r.missing === 0 && r.extra === 0 && r.onsetErr === 0, `${r.pitchOk}/${r.in} ${r.diff}`));
+  const sa = await E(async () => { await newSong('Smoke sing alone'); runActions([{ type: 'add_drums', style: 'house', seed: 5200 }]); const d = runActions([{ type: 'add_chords' }, { type: 'add_bass' }, { type: 'sing', part: 'bass' }]);
+    return { roles: PROJ.tracks.map(t => t.role).join(), take: BATCH.take, d: d.length }; });
+  ok('a sung take stands alone (no made-up bassline next to "sing the bassline")', sa.roles === 'drums,chords' && sa.take === 'bass', JSON.stringify(sa));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
