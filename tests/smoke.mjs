@@ -393,12 +393,25 @@ try {
     attachAccess({ inputs: new Map(ins.map(i => [i.id, i])), outputs: new Map(), onstatechange: null }); M.selected = 'all';
     send(1, [0xB0, 64, 0]); send(1, [0xB0, 64, 127], 500); send(1, [0x90, 60, 90], 50); send(1, [0x80, 60, 0], 300); R.held = sustained.size === 1; send(1, [0xB0, 64, 0], 1500); R.free = !sustained.size; R.notFlipped = !ds(1).pedalRev;
     send(2, [0xB0, 64, 0], 500); for (let k = 0; k < 3; k++) { send(2, [0x90, 60 + k, 90], 50); send(2, [0x80, 60 + k, 0], 900); send(2, [0xB0, 64, 127], 300); send(2, [0x90, 65 + k, 90], 60); send(2, [0xB0, 64, 0], 200); send(2, [0x80, 65 + k, 0], 400); }
-    R.casio = !!ds(2).pedalRev && /other way round/.test($('#toast').textContent) && !!$('#toast button'); send(2, [0xB0, 64, 127], 300);
+    R.casio = pedalRevOf(ds(2)) && !ds(2).pedalRev && /other way round/.test($('#toast').textContent) && !!$('#toast button'); send(2, [0xB0, 64, 127], 300);
     send(0, [0xB0, 64, 127], 100); send(0, [0xB0, 64, 0], 100); renderSeen(); const rows = [...document.querySelectorAll('#devSeen [data-pedalflip]')].map(b => b.dataset.pedalflip).join();
-    document.querySelector('#devSeen [data-pedalflip="py"]').click(); R.flip = rows + ' · ' + [ds(0).pedalRev, ds(1).pedalRev, ds(2).pedalRev].map(Boolean).join();
+    document.querySelector('#devSeen [data-pedalflip="py"]').click(); R.flip = rows + ' · ' + [ds(0), ds(1), ds(2)].map(pedalRevOf).join();
     attachAccess({ inputs: new Map(), outputs: new Map(), onstatechange: null }); return R; });
   ok('controller: a pedal held while connecting and then lifted is not flipped; a reversed pedal is flipped from how it is played, with Undo', pr.held && pr.free && pr.notFlipped && pr.casio, JSON.stringify(pr));
   ok('controller: with two keyboards, Flip changes only the keyboard on its own row', pr.flip === 'pa,py,pc · false,true,true', pr.flip);
+  // UX-15 fix 2: an automatic pedal flip is for this visit only and learning goes on (normal pedalling puts it back); Keep saves it; a plain toast after one with buttons doesn't catch clicks
+  const pk = await E(async () => { ensureAudio(); const R = {};
+    const mk = (id, name, manufacturer) => ({ id, name, manufacturer, type: 'input', state: 'connected', connection: 'open', onmidimessage: null });
+    const ins = [mk('qa', 'Smoke Tapper', 'Roland'), mk('qb', 'Smoke Reversed', 'Kawai')]; let T = performance.now() + 1000;
+    const send = (i, d, dt = 0) => { T += dt; ins[i].onmidimessage({ data: new Uint8Array(d), timeStamp: T }); }, ds = i => DEVICES[devKey(ins[i])] || {}, saved = i => store.get('devices', {})[devKey(ins[i])] || {};
+    attachAccess({ inputs: new Map(ins.map(i => [i.id, i])), outputs: new Map(), onstatechange: null }); M.selected = 'all';
+    const legato = (i, up, dn, n) => { send(i, [0xB0, 64, dn], 300); for (let k = 0; k < n; k++) { send(i, [0x90, 60 + k, 90], 50); send(i, [0x80, 60 + k, 0], 900); send(i, [0xB0, 64, up], 300); send(i, [0x90, 65 + k, 90], 60); send(i, [0xB0, 64, dn], 200); send(i, [0x80, 65 + k, 0], 400); } };
+    for (let k = 0; k < 4; k++) { for (let n = 0; n < 5; n++) { send(0, [0x90, 72 + n, 90], 250); send(0, [0x80, 72 + n, 0], 200); } send(0, [0x90, 48, 90], 100); send(0, [0xB0, 64, 127], 20); send(0, [0xB0, 64, 0], 250); send(0, [0x80, 48, 0], 300); }
+    R.tapFlip = pedalRevOf(ds(0)); R.tapSaved = !!saved(0).pedalRev; legato(0, 0, 127, 3); R.back = !pedalRevOf(ds(0)) && !saved(0).pedalRev;
+    legato(1, 127, 0, 3); R.rev = pedalRevOf(ds(1)) && !saved(1).pedalRev; [...document.querySelectorAll('#toast button')].find(b => b.textContent === 'Keep').click(); R.kept = saved(1).pedalRev === true && saved(1).pedalHow === 'user';
+    toastAct('x', 'Go', () => {}); toast('plain'); await new Promise(r => setTimeout(r, 30)); R.act = $('#toast').classList.contains('act');
+    attachAccess({ inputs: new Map(), outputs: new Map(), onstatechange: null }); return R; });
+  ok('controller: an automatic pedal flip is never saved and normal pedalling puts it back; Keep saves it; plain toasts don\'t catch clicks', !pk.tapSaved && pk.back && pk.rev && pk.kept && !pk.act, JSON.stringify(pk));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
