@@ -202,7 +202,7 @@ const ACT={
     return `Quantized ${t.name} to ${gridName(q)} (${moved} of ${t.events.length} notes moved)`; },
   transpose(a){ const t=findTrack(a.track); if(!t||(INST.get(t.inst)||{}).percussive) return; const s=Math.round(+a.semitones||0); t.events.forEach(e=>e.n+=s); return `${t.name} ${s>0?'up':'down'} ${Math.abs(s)}`; },
   transport(a){ const d=String(a.do||a.value||'').toLowerCase(); if(/stop|pause/.test(d)){ loopStop(); return 'Stopped'; } if(/rec/.test(d)){ recordPress(); return 'Recording'; } if(PROJ.tracks.length && !TR.running){ loopPlay(); return 'Playing'; } },
-  sing(a){ const raw=String(a.part||a.role||a.track||'melody').toLowerCase(); const part=/voice|audio|note/.test(raw)&&!/melody/.test(raw)?'voice':/bass/.test(raw)?'bass':/chord|pad|harmon/.test(raw)?'chords':'melody';
+  sing(a){ const part=singPart(a);
     BATCH.take=part; return part==='voice'?`Recording a voice note after the count-in: ${PROJ.bars} bars`:`Sing the ${part==='bass'?'bassline':part==='chords'?'chord roots (one note per chord)':'melody'} after the count-in: ${PROJ.bars} bars`; },
   convert(a){ const t=findTrack(a.track||'melody'); if(!t||t.kind!=='notes'||(INST.get(t.inst)||{}).percussive) return; const to=/bass/.test(a.to||'')?'bass':/chord|pad/.test(a.to||'')?'chords':'melody';
     t.events=shapePart(t.events,to,projectKey()); t.role=to; t.inst=partInst(to); loadI(t.inst); t.gen=false; t.name=(to==='bass'?'Bassline':to==='chords'?'Chords':'Melody')+' (from '+t.name.replace(/^(Sung|Hummed) /,'').toLowerCase()+')';
@@ -280,11 +280,20 @@ function fxPartSaid(text,t){ const FXW='reverb|verb|delay|echo|sidechain|side ch
   /* no clause names this part: an effect-off clause that names no part at all ("remove the reverb") */
   for(const c of cl){ const fw=off(c); if(fw&&!part(' '+c+' ')) return {fx:fw}; }
   return null; }
+/* which part a sing action records */
+function singPart(a){ const raw=String(a.part||a.role||a.track||'melody').toLowerCase(); return /voice|audio|note/.test(raw)&&!/melody/.test(raw)?'voice':/bass/.test(raw)?'bass':/chord|pad|harmon/.test(raw)?'chords':'melody'; }
+/* a sung take stands alone (UX-14): when a request sings a part, a made-up part, a variation or written notes for that same
+   part in the same request are dropped (the AI sometimes sent add_bass or vary next to sing), so only what was sung lands */
+function singAlone(list){ const A=list.map(normAction), s=A.find(a=>a&&(a.type==='sing'||a.type==='again'&&LAST_TAKE.part)); if(!s) return list;
+  const part=s.type==='again'?LAST_TAKE.part:singPart(s); if(part==='voice') return list;
+  const roleOf=a=>{ if(a.type==='add_'+part) return part; if(!/^(vary|notes|convert)$/.test(a.type)) return null;
+    const t=a.track&&findTrack(a.track); return t?t.role:/bass/i.test(a.track||'')?'bass':/chord|pad/i.test(a.track||'')?'chords':/melod|lead|hook/i.test(a.track||'')?'melody':a.type==='vary'&&!a.track?'drums':null; };
+  return list.filter((raw,i)=>{ const a=A[i]; return !a||a===s||!(a.type==='sing'||a.type==='again'||roleOf(a)===part); }); }
 function runActions(list){
   const done=[]; let changed=false; BATCH={startBpm:CTRL.bpm}; if(typeof undoBoundary==='function') undoBoundary();
   /* done.segs[i]: which half of a two-part sentence each result came from (offline "mute the drums and solo the bass") */
   done.segs=[]; const u0=typeof UNDO!=='undefined'?(UNDO.pushes||0):-1;
-  for(const raw of list||[]){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; try{ const r=ACT[a.type](a); if(r){ done.push(r); done.segs.push(a.seg); changed=true; } }catch(e){ console.warn('action failed',a,e); } }
+  for(const raw of singAlone(list||[])){ const a=normAction(raw); if(!a||!ACT[a.type]) continue; try{ const r=ACT[a.type](a); if(r){ done.push(r); done.segs.push(a.seg); changed=true; } }catch(e){ console.warn('action failed',a,e); } }
   if(changed){ saveProject(); renderTracks(); uiLoop(); }
   /* one request is one Undo step, even when a slow machine saves the parts more than 120 ms apart (QA, 16 Nov: "add a melody" left 2 steps).
      Count the steps this request pushed (the history drops its oldest step at 120, so its length can stay the same): keep the first, drop the rest. */

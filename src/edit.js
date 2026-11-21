@@ -94,7 +94,7 @@ function tidySung(notes,frames,gate,hs){
   let off=out.length>=3&&sw>0&&Math.hypot(sx,sy)/sw>0.6?Math.atan2(sy,sx)/(2*Math.PI):0; if(Math.abs(off)<0.1) off=0;
   out.forEach(n=>{ const f=n.m-off; n.n=Math.round(f); n.c=+(f-n.n).toFixed(2); });
   for(let i=1;i<out.length;i++){ const a=out[i-1], b=out[i]; if(a.n===b.n||b.t0-a.t1>2.5*hs) continue;
-    let k=at(b.t0); while(k>0&&frames[k-1].t>a.t0+0.06){ const m=fm(frames[k-1]); if(m==null||Math.round(m-off)!==b.n) break; k--; }
+    let k=at(b.t0); const k0=k; while(k>0&&k0-k<4&&frames[k-1].t>a.t0+0.06){ const m=fm(frames[k-1]); if(m==null||Math.round(m-off)!==b.n) break; k--; }
     if(k<frames.length&&frames[k].t<b.t0){ b.t0=frames[k].t; a.t1=Math.min(a.t1,b.t0); } }
   return out;
 }
