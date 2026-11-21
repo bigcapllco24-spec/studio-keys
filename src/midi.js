@@ -419,7 +419,7 @@ function renderSeen(){
   const list=(a,f)=>a.slice(0,6).map(f).join(', ')+(a.length>6?` +${a.length-6}`:'');
   const pedals=(M.selected==='all'?M.inputs:[p]).filter(i=>M.seen[i.id]&&M.seen[i.id].ccs.has(64));
   const pedalRow=i=>{ const d=settingsFor(i), many=pedals.length>1||i!==p;
-    return row('Sustain pedal'+(many?` <span class="muted">· ${esc(i.name)}</span>`:''),true,`${pedalRevOf(d)?(d.pedalHow==='user'?'Reversed':'Reversed for now'):'CC 64'} <button class="btn small ghost" type="button" data-pedalflip="${esc(i.id)}" aria-label="Flip the sustain pedal of ${esc(i.name)}" title="Use this if notes hold when you let go of the pedal">Flip</button>`); };
+    return row('Sustain pedal'+(many?` <span class="muted">· ${esc(i.name)}</span>`:''),true,`${pedalRevOf(d)?(d.pedalHow==='user'?'Reversed':'<span title="Flipped for this visit only, from how you play">Reversed?</span>'):'CC 64'} <button class="btn small ghost" type="button" data-pedalflip="${esc(i.id)}" aria-label="Flip the sustain pedal of ${esc(i.name)}" title="Use this if notes hold when you let go of the pedal">Flip</button>`); };
   box.innerHTML=
     row('Keys',S.low!=null,S.low!=null?`${noteName(S.low)}–${noteName(S.high)}`:'Play a few notes')+
     row('Velocity',S.count>0,S.count?`${S.vmin}–${S.vmax}`:'—')+
