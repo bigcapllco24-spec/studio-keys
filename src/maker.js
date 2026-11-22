@@ -79,6 +79,38 @@ function sectionSayFix(t){
   if(!A.length){ const bIn=prev&&prev.kind==='build'&&PROJ.tracks.some(x=>x.role==='bass'&&prev.parts[x.id]&&prev.parts[x.id].on);
     return {actions:[],reply:`${The} already has ${big?'every part':'its drums'}${into&&into.end?` and a ${String((END_WORD[into.end.to]||'transition')).split(' (')[0]} ${big?'into it':'at the end'}`:''}. I can’t make one section louder on its own yet. ${big&&bIn?`Want me to take the bass out of the ${prev.name.toLowerCase()} so the ${low} lands harder?`:big&&prev?`Want a longer snare roll into the ${low}?`:`Want a snare roll at the end of the ${low}?`}`}; }
   return {actions:A,reply:done=>done.length?`Made the ${low} bigger: ${done.join(', ')}. Levels stay the same, because one section can’t be turned up on its own yet.`:''}; }
+/* ---- pan: "pan the melody left", "put the chords a bit to the left", "move the bass hard right", "centre the bass", "chords thoda left mein daalo".
+   The existing track moves (track_fx pan, -100 left to 100 right: about 40 plain, 20 a bit, 100 hard); never a new or remade part (QA, 22 Nov bug 4). ---- */
+const PAN_DIR=/\b(left|right|cent(?:re|er)(?:ed)?|middle|mono)\b/;
+const PAN_SAID=/\bpan(?:s|ned|ning)?\b|\b(?:to|towards|on|in) the (?:left|right)\b|\b(?:hard|fully|all the way|slightly|a bit|a little|little|bit|thoda|thodi|zara|more|further) (?:to the )?(?:left|right)\b|\b(?:left|right) (?:side|channel|ear|speaker)\b|\b(?:left|right) (?:mein|me|main|pe|par|taraf|side)\b|\b(?:move|put|send|place|shift|keep|push|nudge|bring) (?:the |my )?[a-z0-9 ]{2,24}? (?:to the |more |a bit |slightly |hard |a little |back to the |back )?(?:left|right|cent(?:re|er)|middle)\b|\bcent(?:re|er) (?:the |my )\w+|\b(?:in|to|into) the (?:middle|cent(?:re|er))\b/;
+function panFix(t){ if(!PAN_SAID.test(t)||/\b(notes?|beats?|bars?|octaves?|semitones?|earlier|later|grid|timeline|track list|order|above|below)\b/.test(t)) return null;
+  const dv=DRUM_VOICE.find(([k,re])=>re.test(t)), role=(ROLE_WORDS.find(([k,re])=>re.test(t.replace(/\bhats\b/,' ')))||[])[0], nm=v=>String(v).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), s=' '+nm(t)+' ';
+  const named=PROJ.tracks.filter(x=>x.name&&nm(x.name).length>2&&s.includes(' '+nm(x.name)+' ')).sort((a,b)=>b.name.length-a.name.length)[0];
+  let T=named||null;
+  if(!T&&dv&&!role){ const own=PROJ.tracks.find(x=>songRole(x)===(dv[0]==='hats'?'hats':'x')); if(own) T=own; else if(PROJ.tracks.some(x=>x.role==='drums')) return {actions:[],reply:`${dv[3][0].toUpperCase()+dv[3].slice(1)} ${dv[0]==='hats'?'are':'is'} part of the drums track, so I can’t pan ${dv[0]==='hats'?'them':'it'} on ${dv[0]==='hats'?'their':'its'} own. Say “pan the drums ${(t.match(/\b(left|right)\b/)||[])[1]||'left'}” to move the whole kit.`}; }
+  if(!T&&role) T=[...PROJ.tracks].reverse().find(x=>x.role===role)||null;
+  if(!T){ if(role||dv) return {actions:[],reply:`There’s no ${(TONE_PART[role||'drums']||'that part').replace(/^the /,'')} in the song yet to pan.`}; return null; }
+  const d=(t.match(PAN_DIR)||[])[1]; if(!d) return {actions:[],reply:`Left or right? Say “pan ${T.name.toLowerCase()} a bit left” or “pan ${T.name.toLowerCase()} hard right”.`};
+  const cur=Math.round(((T.fx||{}).pan||0)*100);
+  if(/^(cent|middle|mono)/.test(d)){ if(!cur) return {actions:[],reply:`${T.name} is already in the centre.`}; return {actions:[{type:'track_fx',track:T.id,effect:'pan',amount:0}],reply:`${T.name} is back in the centre, same notes.`}; }
+  const num=t.match(/\b(\d{1,3})\s*(?:%|percent)?\s*(?:to the )?(?:left|right)\b|\b(?:left|right)\s*(?:by |to )?(\d{1,3})\b/), hard=/\b(hard|fully|all the way|completely|100)\b/.test(t), bit=/\b(a (?:little|bit|touch|tad)( bit)?|slightly|bit|little|thoda|thodi|zara|a hair)\b/.test(t), more=/\b(more|further)\b/.test(t);
+  let n=num?Math.min(100,+(num[1]||num[2])):hard?100:bit?20:40; const sign=d==='left'?-1:1;
+  if(more&&!num&&Math.sign(cur)===sign) n=Math.min(100,Math.abs(cur)+(bit?10:20));
+  const want=sign*n; if(want===cur) return {actions:[],reply:`${T.name} is already panned ${n===100?'hard ':''}${d} (${d==='left'?'L':'R'} ${n}).`};
+  return {actions:[{type:'track_fx',track:T.id,effect:'pan',amount:want}],reply:`Panned ${T.name} ${n>=100?'hard ':n<=25?'a bit ':''}${d} (${d==='left'?'L':'R'} ${n}), same notes.`}; }
+/* ---- space: "it sounds too dry", "the chords are too dry", "give it more space"; "it's too wet" the other way. Reverb on the parts that
+   carry it (chords, melody, vocals), a step at a time; bass and drums stay dry unless they are named (QA, 22 Nov bug 4). ---- */
+function spaceFix(t){ const dry=/\b(too dry|so dry|very dry|sounds? dry|bit dry|kinda dry|dry sounding|needs? (?:more )?(?:space|room|air|depth|ambience)|more (?:space|room|ambience|depth)|more spacious|feels? (?:flat|small)|sounds? (?:flat|small|boxed in))\b/.test(t)&&!/\b(drier|less|reduce|too wet|too much)\b/.test(t);
+  const wet=!dry&&/\b(too wet|so wet|too much reverb|too washy|washy|too much space|too roomy|drier|dry it up)\b/.test(t); if(!dry&&!wet) return null;
+  if(/\b(reverb|delay|echo)\b/.test(t)&&!/\btoo much reverb\b/.test(t)) return null; /* the effect named: the effect rules */
+  if(!PROJ.tracks.length) return {actions:[],reply:'There’s nothing in the song yet. Say “make a house beat” to start.'};
+  const role=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0]||(DRUM_VOICE.some(([k,re])=>re.test(t))?'drums':null), heard=x=>!x.mute;
+  let list=role?PROJ.tracks.filter(x=>x.role===role&&heard(x)):PROJ.tracks.filter(x=>heard(x)&&/^(chords|melody|voice)$/.test(x.role)&&(x.kind==='notes'||x.kind==='audio'));
+  if(wet&&!role) list=PROJ.tracks.filter(x=>heard(x)&&/^(chords|melody|voice)$/.test(x.role)&&((x.fx||{}).rev||0)>0.001);
+  if(!list.length) return {actions:[],reply:role?`There’s no ${(TONE_PART[role]||role).replace(/^the /,'')} playing to change.`:dry?'So far it’s drums and bass, and those usually stay dry. Say “more reverb on the drums” if you want space on them anyway.':'There’s no reverb on anything yet.'};
+  const A=[], said=[]; list.forEach(x=>{ const r=Math.round(((x.fx||{}).rev||0)*100), nv=dry?Math.min(100,r+15):Math.max(0,r-15); if(nv===r) return; A.push({type:'track_fx',track:x.id,effect:'reverb',amount:nv,remove:nv===0||undefined}); said.push(`${x.name} ${nv}%`); });
+  if(!A.length) return {actions:[],reply:dry?'The reverb is already all the way up there. Try “more delay on the chords” for more space.':'There’s no reverb left to take off.'};
+  return {actions:A,reply:`${dry?'More space':'Drier'}: reverb ${dry?'up':'down'} on ${said.length>1?said.slice(0,-1).join(', ')+' and '+said[said.length-1]:said[0]}${dry&&!role?'; bass and drums stay dry':''}. Say “${dry?'still too dry':'still too wet'}” to go further.`}; }
 /* one request (one command); localBrain splits a sentence with two commands first */
 function brainOne(raw){
   /* "make the bass bouncier": more notes on that part; bounce alone (or on the beat) is swing (QA, 22 Nov fix 4) */
@@ -128,6 +160,8 @@ function brainCore(raw,sws){
   { const tc=audioConvert(t); if(tc) return tc; }
   { const ms=muteSoloFix(t); if(ms) return ms; }
   { const q=quantizeFix(t); if(q) return q; }
+  { const pn=panFix(t); if(pn) return pn; }
+  { const sp=spaceFix(t); if(sp) return sp; }
   { const FXRE=/\b(reverb|delay|echo|sidechain|side chain|pump|compress(?:ion|or)?|drive|saturation|distortion|width|wider|stereo|low ?cut|high ?cut|effects|fx)\b/g, fxs=[...t.matchAll(FXRE)].map(m=>m[1]), tr=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
     /* "remove the melody, no reverb": the clause that names the melody removes it; the effect half has no part left, so it is skipped and the reply says so (QA, 16 Nov) */
     if(fxs.length&&tr&&typeof removesPart==='function'){ const T=findTrack(tr); if(removesPart(t,{role:tr,name:T&&T.name})) return {actions:[{type:'remove',track:tr}],reply:done=>done.length?`${done.join('. ')}. I skipped the ${fxs[0]} change, because that part is gone.`:''}; }
@@ -288,6 +322,8 @@ function focusText(raw){ const f=typeof ASSIST!=='undefined'&&ASSIST.focus, w={d
   /* only a request about "it" ("make it softer", "put it on strings"); "thats it", "keep it" are not the part's name (QA, 22 Nov fix 5) */
   if(/\b(?:it all|all of it|them all|all of them|the whole thing)\b/.test(t)) return raw; /* the whole song, never the focus part (QA, 22 Nov fix 8) */
   if(/\b(it|that|this|them|those)\b/.test(t)&&/\b(make|turn|put|give|change|try|set|move|bring|take|add|swap|switch|play|mute|solo|unmute|remove|delete|quantize|transpose|double|copy|boost|cut|lower|raise|shorten|lengthen|simplify|vary|redo|fix|tweak|louder|softer|quieter|brighter|darker|warmer|simpler|busier|shorter|longer|higher|up|down|more|less|another|again|new|different|replace|karo|kar do|badlo|banao|lagao|daalo|hatao|thoda|thodi)\b/.test(t)&&!(typeof closingSaid==='function'&&closingSaid(raw))) return raw.replace(/\b(it|that|this|them|those)\b/i,'the '+w);
+  /* "a bit more to the left" right after panning a part: that part (QA, 22 Nov bug 4) */
+  if(/^\s*(?:(?:and|now|ok|okay|then|maybe)\s+)*(?:a (?:bit|little|touch) |slightly |little |thoda |zara )?(?:more |further )?(?:to the |towards the |over to the )?(left|right)(?: a (?:bit|little|touch))?(?: please)?\s*$|^\s*(?:pan (?:it )?)?(?:back )?(?:to the )?(?:cent(?:re|er)|middle)(?: please)?\s*$/.test(t)) return 'pan the '+w+' '+raw.trim();
   /* one word after a part ("louder", "a bit softer", "simpler"): that part */
   if(typeof BARE_LEVEL!=='undefined'&&BARE_LEVEL.test(raw)) return 'make the '+w+' '+raw.trim();
   if(/\b(another|one more|new one|different one|the other one|previous one|last one)\b/.test(t)) return raw+' '+w;

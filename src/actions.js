@@ -386,6 +386,11 @@ function onePart(list,depth){
   const levelOnly=/\b(softer|quieter|louder|less loud|too loud|too quiet|turn (?:it |them |the \w+ )?(?:down|up)|volume|db|kam karo|soft karo)\b/.test(lc)&&!CHANGE_SAID.test(lc)&&!again&&!reshapeSaid(lc);
   /* a question ("which chords are these", "what key is it in") changes nothing, whatever the AI sent with its answer */
   const askQ=!depth&&typeof askFix==='function'&&(()=>{ try{ const q=askFix(said.toLowerCase(),said); return q&&!(q.actions||[]).length?q:null; }catch(e){ return null; } })(), asked=!!askQ;
+  /* words with one clear meaning that the AI sometimes sends as a new or remade part (QA, 22 Nov, AI-14): "pan the melody left" as add_melody,
+     "bring the bass in at the intro" as add_bass. The offline brain's action runs instead, with its reply */
+  if(!depth&&ASSIST.engine&&typeof panFix==='function'&&list.some(a=>/^(add_\w+|vary|notes|hats|groove|reshape|sing)$/.test(a.type))){ try{ const tt=askText(said);
+    const L=PAN_SAID.test(tt)&&!list.some(a=>a.type==='track_fx'&&/pan/i.test(String(a.effect||'')))?panFix(tt):songArranged()&&secSaid()&&/\b(bring|start|let|add|put|take|drop|remove|kill|cut|pull)\b/.test(tt)&&!/\b(a|an|some|new|another|second)\s+(bass ?line|bass|chords?|melody|beat|drums)\b/.test(tt)?localBrain(said):null;
+    if(L&&(L.reply||(L.actions||[]).length)&&(!(L.actions||[]).length||L.actions.every(a=>/^(track_fx|parts|mix)$/.test(a.type)))){ BATCH.local=L; return (L.actions||[]).map(normAction).filter(a=>a&&ACT[a.type]); } }catch(e){ console.warn('words first',e); } }
   for(let a of list){
     if(kept.size){ const r0=actRole(a);
       if(r0&&kept.has(r0)&&a.type!=='transport'){ dropped.push(a); continue; }

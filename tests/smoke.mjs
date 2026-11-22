@@ -553,6 +553,16 @@ try {
     for (const x of ['make the drop bigger', 'give the drop more energy', 'drop ko aur bada karo']) { r = await A14.say(x); R[x] = r.same && r.steps === 0 && /can’t make one section louder/.test(r.reply) && !/^Keys ?Done/.test(r.reply); }
     runActions(localBrain('take the chords out of the drop').actions); r = await A14.say('make the drop bigger'); R.back = r.same && r.steps === 1 && /^Intro\[[^\]]*\] Build\[[^\]]*\] Drop\[[^\]]*Chords/.test(r.secs); return R; });
   ok('AI-14 bug 3: "the melody is too loud in the drop" turns the melody down and says it is the whole song; "make the hats softer in the break" softens the hats, not the drums fader; "make the drop bigger", "give the drop more energy" and "drop ko aur bada karo" say honestly what the drop already has (no change); with the chords out of the drop, "make the drop bigger" brings them back in', Object.values(a14b3).every(Boolean), JSON.stringify(a14b3));
+  // AI-14 bug 4: pan words pan the existing track (one undo step), never add or remake a part; "it sounds too dry" adds reverb
+  const a14b4 = await E(async () => { const R = {}, P = n => Math.round(((PROJ.tracks.find(t => t.name === n).fx || {}).pan || 0) * 100);
+    await A14.song(false); let r = await A14.say('pan the melody left'); R.mel = r.same && r.added === 0 && r.steps === 1 && P('Melody') === -40;
+    r = await A14.say('put the chords a bit to the left'); R.ch = r.same && r.added === 0 && P('Chords') === -20;
+    r = await A14.say('move the melody hard right'); R.hard = r.same && P('Melody') === 100; r = await A14.say('chords thoda left mein daalo'); R.hin = r.same && r.added === 0;
+    r = await A14.say('pan the hats right'); R.hats = r.same && r.steps === 0 && /part of the drums track/.test(r.reply);
+    const rv = (PROJ.tracks.find(t => t.name === 'Chords').fx || {}).rev || 0; r = await A14.say('it sounds too dry'); R.dry = r.same && r.added === 0 && (PROJ.tracks.find(t => t.name === 'Chords').fx.rev || 0) > rv;
+    const eng = ASSIST.engine, of = window.fetch; await A14.song(false); ASSIST.engine = 'llama'; window.fetch = async () => new Response(JSON.stringify({ reply: 'Added a melody on the left.', actions: [{ type: 'add_melody' }] }), { status: 200 });
+    try { r = await A14.say('pan the melody left'); } finally { window.fetch = of; ASSIST.engine = eng; } R.ai = r.same && r.added === 0 && P('Melody') === -40; return R; });
+  ok('AI-14 bug 4: "pan the melody left" (L 40), "put the chords a bit to the left" (L 20), "move the melody hard right", "chords thoda left mein daalo" pan the track with no new part; "pan the hats right" says the hats are in the drums track; "it sounds too dry" adds reverb; an AI add_melody for "pan the melody left" pans instead', Object.values(a14b4).every(Boolean), JSON.stringify(a14b4));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
