@@ -607,6 +607,15 @@ try {
     await A14.song(false); const m = PROJ.tracks.find(t => t.name === 'Melody'); m.events.push({ b: 0, d: 0.5, n: 48, v: 0.8 }); saveProject(); const lowHz = 440 * Math.pow(2, (48 - 69) / 12);
     r = await A14.say('the mix is muddy'); R.mud = ((m.fx || {}).hp || 0) <= lowHz && /Melody \(low cut down to \d+ Hz, under its lowest note\)/.test(r.reply); R.hp = (m.fx || {}).hp; return R; });
   ok('AI-14 fix 5: "make the break bigger" says what the break really has (never "already has its drums" when it has none); "Drop 2 already has" (not "The drop 2"); "the mix is muddy" brings a melody low cut above its lowest note (C3) down under it, as the reply says', a14f5.brk && a14f5.d2 && a14f5.mud, JSON.stringify(a14f5));
+  // AI-14 fix 2 (QA re-check, 22 Nov): a "right" that answers Keys's own "Left or right?" pans; one stray low note can't pull the melody's low cut under 100 Hz
+  const a14g1 = await E(async () => { const P = () => Math.round(((PROJ.tracks.find(t => t.name === 'Melody').fx || {}).pan || 0) * 100);
+    await A14.song(false); let r = await A14.say('pan the melody'); const asked = /Left or right/.test(r.reply) && r.steps === 0; r = await A14.say('right'); return { ok: asked && P() === 40 && r.steps === 1, asked, pan: P(), steps: r.steps }; });
+  ok('AI-14 re-check 1: "pan the melody" asks "Left or right?", and "right" then pans the melody R 40 (one undo step)', a14g1.ok, JSON.stringify(a14g1));
+  const a14g2 = await E(async () => { const R = {}; await A14.song(false); const m = PROJ.tracks.find(t => t.name === 'Melody'); m.events.push({ b: 0.5, d: 0.25, n: 24, v: 0.6 }); m.fx = Object.assign({}, m.fx, { hp: 220 }); saveProject();
+    let r = await A14.say('the mix is muddy'); R.c1 = ((m.fx || {}).hp || 0) >= 100; R.hp = (m.fx || {}).hp; R.c1say = !/under its lowest note/.test((r.reply.match(/Melody \([^)]*\)/) || [''])[0]);
+    await A14.song(false); const m2 = PROJ.tracks.find(t => t.name === 'Melody'); m2.events.push({ b: 0.5, d: 0.25, n: 48, v: 0.6 }); m2.fx = Object.assign({}, m2.fx, { hp: 300 }); saveProject();
+    r = await A14.say('the melody is muddy'); R.own = (m2.fx || {}).hp === 300 && /stays at 300 Hz/.test(r.reply); return R; });
+  ok('AI-14 re-check 2: a melody with one stray C1 note keeps its low cut at 100 Hz or more on "the mix is muddy" (no "under its lowest note" claim); a 300 Hz cut stays 300 Hz on "the melody is muddy"', a14g2.c1 && a14g2.c1say && a14g2.own, JSON.stringify(a14g2));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
