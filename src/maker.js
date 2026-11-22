@@ -232,7 +232,7 @@ function partEditFix(t,raw){
   /* "what if the chords were on strings?", "how about the chords on an electric piano?": the same notes on that sound (QA, 22 Nov fix 3) */
   { const ia=instAsked(t); if(ia&&ia!==T.inst&&role!=='drums'&&!/\b(new|different|another|fresh)\b/.test(t)) return {actions:[{type:'instrument',track:role,instrument:ia}]}; }
   const iw=(INST_WORDS.find(([k,re])=>re.test(t))||[])[0], fresh=/\b(redo|rework|rewrite|regenerate|new|different|other|fresh|try (some )?(other|different|something else)|do something(?: (?:else|new|different|fresh|cool|fun))?(?: (?:with|to|about|on|for))?|something (?:else|different|new|fresh)|badal\w*|badl\w*|naya|nayi|naye|koi aur|dusr[aie]|alag)\b/.test(t);
-  if(fresh||/\b(change|replace|swap( out)?|switch( up)?)\b/.test(t)){
+  if(fresh||/\b(change|changed|changing|replace|replaced|swap( out)?|swapped|switch( up)?)\b/.test(t)){
     const inst=iw&&iw!==T.inst&&/\b(to|with|for|on|into|as|by)\b/.test(t)?{type:'instrument',track:role,instrument:role==='drums'&&iw==='bass808'?'kit808':iw}:null;
     if(role==='drums') return inst?{actions:[inst]}:null;
     /* "the bass and melody need work, give me new ones": a new version of each pitched part named (QA, 22 Nov fix 4) */
