@@ -37,7 +37,7 @@ function setBars(n){
 }
 /* the note lists that follow the key: every pitched track (never drums or percussive kits), its main loop and every pattern */
 const keyedTrack=t=>t.kind==='notes'&&t.role!=='drums'&&!(INST.get(t.inst)||{}).percussive;
-const keyedLists=()=>{ const out=new Set(); PROJ.tracks.filter(keyedTrack).forEach(t=>{ out.add(t.events||[]); Object.values(t.patterns||{}).forEach(p=>out.add(p.events||[])); }); return [...out]; };
+const keyedLists=genOnly=>{ const out=new Set(); PROJ.tracks.filter(t=>keyedTrack(t)&&(!genOnly||t.gen)).forEach(t=>{ out.add(t.events||[]); Object.values(t.patterns||{}).forEach(p=>out.add(p.events||[])); }); return [...out]; };
 /* UX-19: the key the loop's notes are in while the key is still auto, or null with fewer than 4 pitched notes.
    1) the key the generators wrote in (PROJ.genKey), while the notes still fit it; 2) else the key with the most note time
    in its scale. A tie (A minor and C major are the same notes) goes to the key on the bass's first note (the loop's
@@ -72,17 +72,23 @@ function notesKey(){ const ev=[].concat(...keyedLists()), fit=c=>c&&(ev.length<4
    setKey(k,{move:true}) (the user picks a key: the Key menu, Keys' "key" action on its own): the notes move from the key
    they are in (notesKey) by the tonic difference, the shortest way. A change of mode alone (C minor → C major) keeps the
    tonic, and the relative key (C major on A minor notes: the same scale) only changes the label (lead, 22 Nov).
+   setKey(k,{move:'gen'}) (a key named inside a request for a part, "add a melody in F minor"): only Keys' generated parts
+   move the same way; the user's own, sung or edited parts stay as they are (UX-19 fix 1e).
    Returns how far the notes moved (semitones). */
 function setKey(k,o={}){
-  const from=k&&o.move?notesKey():null; let d=0; PROJ.key=k;
-  if(from){ const rel=from.mode!==k.mode&&mod(k.tonic-from.tonic,12)===(from.mode==='minor'?3:9);
-    if(from.tonic!==k.tonic&&!rel){ d=mod(k.tonic-from.tonic,12); if(d>6) d-=12; keyedLists().forEach(ev=>ev.forEach(e=>e.n+=d)); }
-    PROJ.noteKey=rel?{tonic:from.tonic,mode:from.mode}:{tonic:k.tonic,mode:from.mode}; }
-  else if(k&&!keyedLists().some(l=>l.length)) PROJ.noteKey=null; /* no notes yet: the next parts are made in the label */
+  const from=k&&o.move?notesKey():null, gen=o.move==='gen', lists=keyedLists(gen); let d=0; PROJ.key=k;
+  if(k&&!keyedLists().some(l=>l.length)) PROJ.noteKey=null; /* no notes yet: the next parts are made in the label */
+  else if(from){ const rel=from.mode!==k.mode&&mod(k.tonic-from.tonic,12)===(from.mode==='minor'?3:9);
+    if(from.tonic!==k.tonic&&!rel&&lists.some(l=>l.length)){ d=mod(k.tonic-from.tonic,12); if(d>6) d-=12; lists.forEach(ev=>ev.forEach(e=>e.n+=d)); }
+    if(!gen||!keyUserParts().length) PROJ.noteKey=rel?{tonic:from.tonic,mode:from.mode}:{tonic:k.tonic,mode:from.mode}; }
   $('#keySel').value=k?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks(); return d;
 }
 /* what a key pick did, in words: "up 2 semitones", and that audio parts (voice notes, imports) stay as recorded */
 const keyMoved=d=>`${d>0?'up':'down'} ${Math.abs(d)} semitone${Math.abs(d)>1?'s':''}`;
+/* the user's own pitched parts (sung, played, drawn, or a generated part they edited) and how Keys says they stayed */
+const keyUserParts=()=>PROJ.tracks.filter(t=>keyedTrack(t)&&!t.gen&&(t.events||[]).length);
+const keyUserNote=()=>{ const u=keyUserParts(); if(!u.length) return ''; if(u.length>1) return ', your own parts stay as you made them';
+  const t=u[0], sung=!!t.take||/^(sung|hummed)\b/i.test(t.name||''); return `, your ${String(t.name||'part').toLowerCase()} stays as you ${sung?'sang':'played'} it`; };
 const keyAudioNote=()=>PROJ.tracks.some(t=>t.kind==='audio')?', audio parts stay as recorded':'';
 $('#keySel').innerHTML='<option value="">Key: auto</option>'+['major','minor'].map(m=>PC_NAMES.map((n,i)=>`<option value="${i}:${m}">${n} ${m}</option>`).join('')).join('');
 $('#keySel').addEventListener('change',e=>{ const v=e.target.value, k=v?{tonic:+v.split(':')[0],mode:v.split(':')[1]}:null;
