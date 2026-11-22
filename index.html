@@ -3456,7 +3456,7 @@ function keyShare(ev,k){ const sc=SCALES[k.mode]; let a=0,t=0; ev.forEach(e=>{ c
 const ALL_KEYS=['minor','major'].flatMap(mode=>PC_NAMES.map((n,tonic)=>({tonic,mode})));
 const bestShare=ev=>Math.max(...ALL_KEYS.map(k=>keyShare(ev,k)));
 function loopKey(){ const ev=[].concat(...keyedLists()); if(ev.length<4) return null;
-  const best=bestShare(ev), g=PROJ.genKey; if(g&&keyShare(ev,g)>=best-0.02) return {tonic:g.tonic,mode:g.mode};
+  const best=bestShare(ev), g=genKeyLive(); if(g&&keyShare(ev,g)>=best-0.02) return {tonic:g.tonic,mode:g.mode};
   const tied=ALL_KEYS.filter(k=>keyShare(ev,k)>=best-0.02), bs=PROJ.tracks.filter(t=>keyedTrack(t)&&t.role==='bass'&&(t.events||[]).length),
     src=(bs.length?bs:PROJ.tracks.filter(keyedTrack)).flatMap(t=>t.events||[]), b0=src.length?Math.min(...src.map(e=>e.b)):0,
     root=src.length?mod(Math.min(...src.filter(e=>e.b<b0+0.01).map(e=>Math.round(e.n))),12):-1, onRoot=tied.filter(k=>k.tonic===root), pool=onRoot.length?onRoot:tied;
@@ -3466,16 +3466,20 @@ function loopKey(){ const ev=[].concat(...keyedLists()); if(ev.length<4) return 
   const sc=k=>h[k.tonic]+0.5*h[(k.tonic+7)%12], w=pool.reduce((a,k)=>sc(k)>sc(a)?k:a); return {tonic:w.tonic,mode:w.mode}; }
 /* while the key is auto, remember the key a generated pitched part was written in (projectKey); the first one holds while the
    notes still fit it (a generated melody can tilt projectKey to the relative major) */
+/* the remembered key counts only while a generated pitched part is still in the song (QA, 22 Nov: it went stale after they were removed) */
+const genKeyLive=()=>PROJ.genKey&&PROJ.tracks.some(t=>t.gen&&keyedTrack(t))?PROJ.genKey:null;
 function noteGenKey(o){ if(PROJ.key||!o||!o.gen||o.kind==='audio'||o.role==='drums'||(INST.get(o.inst)||{}).percussive) return;
-  const g=PROJ.genKey, ev=[].concat(...keyedLists()); if(g&&(ev.length<4||keyShare(ev,g)>=bestShare(ev)-0.02)) return; PROJ.genKey=projectKey(); }
+  const g=genKeyLive(), ev=[].concat(...keyedLists()); if(g&&(ev.length<4||keyShare(ev,g)>=bestShare(ev)-0.02)) return; PROJ.genKey=projectKey(); }
 /* setKey(k): the key the notes are already in, or one for parts not made yet; the notes only move from a key set before.
    setKey(k,{move:true}) (the user picks a key: the Key menu, Keys' "key" action on its own): from auto, the notes move from
    the key they are in now. Either way they move by the tonic difference, the shortest way; a change of mode alone (C minor →
-   C major) keeps the tonic and moves nothing (lead, 22 Nov). Back to auto remembers the key the notes are in.
+   C major) keeps the tonic and moves nothing, and a key whose scale already holds 98% of the note time (C major on an
+   A minor loop) only changes the label (lead, 22 Nov). Back to auto remembers the key the notes are in.
    Returns how far the notes moved (semitones). */
 function setKey(k,o={}){
   const old=PROJ.key, from=old||(k&&o.move?loopKey():null); PROJ.key=k; let d=0; if(!k&&old) PROJ.genKey=old;
-  if(from && k && from.tonic!==k.tonic){ d=mod(k.tonic-from.tonic,12); if(d>6) d-=12; keyedLists().forEach(ev=>ev.forEach(e=>e.n+=d)); }
+  const ev=k?[].concat(...keyedLists()):[], fits=ev.length>=4&&keyShare(ev,k)>=0.98;
+  if(from && k && from.tonic!==k.tonic && !fits){ d=mod(k.tonic-from.tonic,12); if(d>6) d-=12; keyedLists().forEach(ev=>ev.forEach(e=>e.n+=d)); }
   $('#keySel').value=k?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks(); return d;
 }
 /* what a key pick did, in words: "up 2 semitones", and that audio parts (voice notes, imports) stay as recorded */
