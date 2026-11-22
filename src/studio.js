@@ -40,16 +40,21 @@ const keyedTrack=t=>t.kind==='notes'&&t.role!=='drums'&&!(INST.get(t.inst)||{}).
 const keyedLists=()=>{ const out=new Set(); PROJ.tracks.filter(keyedTrack).forEach(t=>{ out.add(t.events||[]); Object.values(t.patterns||{}).forEach(p=>out.add(p.events||[])); }); return [...out]; };
 /* UX-19: the key the loop's notes are in while the key is still auto, or null with fewer than 4 pitched notes.
    1) the key the generators wrote in (PROJ.genKey), while the notes still fit it; 2) else the key with the most note time
-   in its scale; a tie (A minor and C major are the same notes) goes to detectKey, then to the key whose tonic and fifth
-   sound longest (bass notes count double). detectKey alone misreads some progressions (QA, 22 Nov: i-VII-VI-VII as E minor) */
+   in its scale. A tie (A minor and C major are the same notes) goes to the key on the bass's first note (the loop's
+   downbeat root: right on 58 of 60 generated loops, detectKey on 33), then detectKey, then the key whose tonic and fifth
+   sound longest. detectKey alone misreads some progressions (QA, 22 Nov: i-VII-VI-VII read as E minor) */
 function keyShare(ev,k){ const sc=SCALES[k.mode]; let a=0,t=0; ev.forEach(e=>{ const w=e.d||0.5; t+=w; if(sc.includes(mod(Math.round(e.n)-k.tonic,12))) a+=w; }); return t?a/t:0; }
 const ALL_KEYS=['minor','major'].flatMap(mode=>PC_NAMES.map((n,tonic)=>({tonic,mode})));
 const bestShare=ev=>Math.max(...ALL_KEYS.map(k=>keyShare(ev,k)));
 function loopKey(){ const ev=[].concat(...keyedLists()); if(ev.length<4) return null;
   const best=bestShare(ev), g=PROJ.genKey; if(g&&keyShare(ev,g)>=best-0.02) return {tonic:g.tonic,mode:g.mode};
-  const tied=ALL_KEYS.filter(k=>keyShare(ev,k)>=best-0.02), dk=detectKey(ev); if(dk&&tied.some(k=>k.tonic===dk.tonic&&k.mode===dk.mode)) return {tonic:dk.tonic,mode:dk.mode};
+  const tied=ALL_KEYS.filter(k=>keyShare(ev,k)>=best-0.02), bs=PROJ.tracks.filter(t=>keyedTrack(t)&&t.role==='bass'&&(t.events||[]).length),
+    src=(bs.length?bs:PROJ.tracks.filter(keyedTrack)).flatMap(t=>t.events||[]), b0=src.length?Math.min(...src.map(e=>e.b)):0,
+    root=src.length?mod(Math.min(...src.filter(e=>e.b<b0+0.01).map(e=>Math.round(e.n))),12):-1, onRoot=tied.filter(k=>k.tonic===root), pool=onRoot.length?onRoot:tied;
+  if(pool.length===1) return {tonic:pool[0].tonic,mode:pool[0].mode};
+  const dk=detectKey(ev); if(dk&&pool.some(k=>k.tonic===dk.tonic&&k.mode===dk.mode)) return {tonic:dk.tonic,mode:dk.mode};
   const h=new Array(12).fill(0); PROJ.tracks.filter(keyedTrack).forEach(t=>{ const w=t.role==='bass'?2:1; [t.events||[],...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(l=>l.forEach(e=>h[mod(Math.round(e.n),12)]+=w*(e.d||0.5))); });
-  const sc=k=>h[k.tonic]+0.5*h[(k.tonic+7)%12]; return tied.reduce((a,k)=>sc(k)>sc(a)?k:a); }
+  const sc=k=>h[k.tonic]+0.5*h[(k.tonic+7)%12], w=pool.reduce((a,k)=>sc(k)>sc(a)?k:a); return {tonic:w.tonic,mode:w.mode}; }
 /* while the key is auto, remember the key a generated pitched part was written in (projectKey); the first one holds while the
    notes still fit it (a generated melody can tilt projectKey to the relative major) */
 function noteGenKey(o){ if(PROJ.key||!o||!o.gen||o.kind==='audio'||o.role==='drums'||(INST.get(o.inst)||{}).percussive) return;

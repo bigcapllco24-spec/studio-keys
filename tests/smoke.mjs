@@ -442,14 +442,32 @@ try {
       return R; } finally { ASSIST.engine = eng; } });
   ok('Key menu on an auto-key C minor loop picks D minor: notes up 2, drums stay, one undo step back to auto; "put it in the key of F sharp minor" moves them too; patterns move; a vibe key leaves a sung bass as sung',
     ux19.menu === '2|D minor|true|1' && ux19.undo === 'true||' && ux19.say === '6|F♯ minor|true' && ux19.undo2 === 'true|' && ux19.pat && ux19.vibe === 'F minor|true', JSON.stringify(ux19));
+  // UX-19 fix 1: a generated i-VII-VI-VII loop (prog 0656, which detectKey reads as E minor) moves from the key it was written in (A minor) to D minor;
+  // without that memory the scale share and the bass's first note still read A minor; a mode change alone keeps the tonic; a key inside "add house drums in F minor" leaves a sung bass as sung
+  const kf = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)), eng = ASSIST.engine, R = {};
+    const pit = () => PROJ.tracks.filter(t => t.kind === 'notes' && t.role !== 'drums').flatMap(t => t.events.map(e => e.n)), moved = a => [...new Set(pit().map((n, i) => n - a[i]))].join();
+    const inKey = k => { const sc = SCALES[k.mode].map(x => (x + k.tonic) % 12), ns = pit(); return Math.round(100 * ns.filter(n => sc.includes(((n % 12) + 12) % 12)).length / ns.length); };
+    try { ASSIST.engine = null;
+      await newSong('Smoke UX-19 fix 1'); runActions([{ type: 'add_drums', style: 'house', seed: 21 }]); PROJ.prog = [0, 6, 5, 6]; runActions([{ type: 'add_bass', seed: 22 }, { type: 'add_chords', seed: 23 }]); await W(100);
+      const ev = PROJ.tracks.filter(t => t.kind === 'notes' && t.role !== 'drums').flatMap(t => t.events); R.prog = PROJ.prog.join(''); R.detect = keyName(detectKey(ev)); R.gen = keyName(PROJ.genKey);
+      const g = PROJ.genKey; delete PROJ.genKey; R.noMemory = keyName(loopKey()); PROJ.genKey = g;
+      const p0 = pit(), el = $('#keySel'); el.value = '2:minor'; el.dispatchEvent(new Event('change')); R.menu = [moved(p0), inKey(PROJ.key)].join('|'); undo(); await W(100);
+      el.value = '9:major'; el.dispatchEvent(new Event('change')); R.mode = [moved(p0), keyName(PROJ.key), $('#toast').textContent].join('|'); undo(); await W(100);
+      await newSong('Smoke UX-19 sung key'); runActions([{ type: 'add_drums', style: 'house', seed: 5300 }]); await W(100);
+      addTrack({ role: 'bass', inst: 'bass', name: 'Sung bassline', take: 'bass', events: [48, 44, 36, 43, 43, 45, 48, 48, 43].map((n, i) => ({ b: i * 1.5, d: 1, n, v: 0.8 })) }); await W(100);
+      const s0 = pit(); await handleRequest('add house drums in F minor'); await W(150); R.sung = [moved(s0), keyName(PROJ.key)].join('|');
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('Key menu on a generated i-VII-VI-VII loop moves from A minor to D minor (+5, all notes in D minor); A major picked keeps the tonic (no move); "add house drums in F minor" leaves a sung bass as sung',
+    kf.prog === '0656' && kf.gen === 'A minor' && kf.noMemory === 'A minor' && kf.menu === '5|100' && /^0\|A major\|Key set to A major, notes unchanged/.test(kf.mode) && kf.sung === '0|F minor', JSON.stringify(kf));
   // UX-19 (QA bug 9): a long "no clap, snare, kick" label in a narrow Song-view part clips on the right (start visible), full text in the tooltip
   const pwo = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); await newSong('Smoke UX-19 label'); runActions([{ type: 'add_drums', style: 'house', seed: 5400 }, { type: 'add_bass', seed: 5401 }]); await W(150);
     runActions([{ type: 'arrange', length: 'full' }]); loopStop(); await W(200); const S = songSections(), dr = PROJ.tracks.find(t => t.role === 'drums');
     songSetPart(S[0].id, dr.id, { on: true, without: ['clap', 'snare', 'kick'] }); songRender(); songZoom(0.4); songRender(); await W(200);
     const e = document.querySelector('.pwo'); if (!e) return null; const pr = e.parentElement.getBoundingClientRect(), r = e.getBoundingClientRect();
     const out = { left: r.left >= pr.left - 0.5, right: r.right <= pr.right + 0.5, clipped: e.scrollWidth > e.clientWidth, ell: getComputedStyle(e).textOverflow, title: e.title };
+    songZoom(0.8); const e2 = document.querySelector('.pwo'); out.w = Math.round(e2.parentElement.getBoundingClientRect().width); out.hiddenUnder50 = getComputedStyle(e2).display === 'none';
     songMode('loop'); return out; });
-  ok('Song view: a long part label clips on the right with an ellipsis and keeps its full text as a tooltip', !!pwo && pwo.left && pwo.right && pwo.clipped && pwo.ell === 'ellipsis' && pwo.title === 'no clap, snare, kick', JSON.stringify(pwo));
+  ok('Song view: a long part label clips on the right with an ellipsis and keeps its full text as a tooltip; under 50 px it hides', !!pwo && pwo.left && pwo.right && pwo.clipped && pwo.ell === 'ellipsis' && pwo.title === 'no clap, snare, kick' && pwo.w < 50 && pwo.hiddenUnder50, JSON.stringify(pwo));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
