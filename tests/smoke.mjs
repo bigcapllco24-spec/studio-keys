@@ -20,8 +20,9 @@ await p.evaluateOnNewDocument(() => { window.__sr = []; class SR { start() { thi
 const W = ms => new Promise(r => setTimeout(r, ms)), E = (f, ...a) => p.evaluate(f, ...a);
 // QA-2 (22 Nov): wait on the app's state, not fixed delays (this runs on busy 2-core machines), and never leave Chrome behind
 const until = (f, arg, timeout = 30000) => p.waitForFunction(f, { timeout, polling: 50 }, arg).then(() => true, () => false); // false on timeout: the check after it reports
-const settle = sel => E(async s => { const el = document.querySelector(s) || document.body, k = () => { const r = el.getBoundingClientRect(); return [r.x, r.y, r.width, r.height, scrollX, scrollY].map(Math.round).join(); };
-  let last = k(), same = 0; for (const t0 = Date.now(); same < 3 && Date.now() - t0 < 5000;) { await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0))); const n = k(); same = n === last ? same + 1 : 0; last = n; } }, sel || 'body'); // smooth scrolls finished
+const settle = sel => E(async s => { const el = document.querySelector(s) || document.body, sc = [...document.querySelectorAll('*')].filter(x => x.scrollWidth > x.clientWidth || x.scrollHeight > x.clientHeight),
+    k = () => { const r = el.getBoundingClientRect(); return [r.x, r.y, r.width, r.height, scrollX, scrollY, ...sc.flatMap(x => [x.scrollLeft, x.scrollTop])].map(Math.round).join(); };
+  let last = k(), t1 = Date.now(); for (const t0 = t1; Date.now() - t1 < 300 && Date.now() - t0 < 6000;) { await new Promise(r => setTimeout(r, 50)); const n = k(); if (n !== last) { last = n; t1 = Date.now(); } } }, sel || 'body'); // the page and every scroller stood still for 300 ms (openEditor scrolls smoothly, and keeps going after an instant scroll)
 let closing = null; const closeChrome = () => closing || (closing = (async () => { const pid = b.process() && b.process().pid; await Promise.race([b.close().catch(() => {}), W(15000)]); for (const id of [-pid, pid]) try { if (pid) process.kill(id, 'SIGKILL'); } catch {} })());
 setTimeout(async () => { console.log('FAIL test run · the smoke test took over 15 minutes and was stopped'); await closeChrome(); process.exit(1); }, 15 * 60000).unref();
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, async () => { await closeChrome(); process.exit(1); });
