@@ -47,6 +47,9 @@ function swingOnly(raw,hasDrums){ let s=' '+String(raw||'').toLowerCase().replac
 const SWING_ADD_PART=/\b(add|adding|bring in|layer|put in|write|create|make|give me|want|need)( me)?( a| an| some| new| another| more)? (?!(?:the|my|it|this|that|its|your) )([a-z]+ )?(bass ?lines?|bass|chords?|pads?|harmony|progression|melody|lead|hook|riff|keys|piano|synths?|arps?)\b/;
 /* one request (one command); localBrain splits a sentence with two commands first */
 function brainOne(raw){
+  /* "make the bass bouncier": more notes on that part; bounce alone (or on the beat) is swing (QA, 22 Nov fix 4) */
+  if(/\b(bouncier|bouncy|bouncey|more bounce)\b/i.test(raw)&&!/\b(swing|shuffle|drums?|beat|groove|hats|kick|everything|song|track)\b/i.test(raw)){ const r=(ROLE_WORDS.find(([k,re])=>re.test(askText(raw)))||[])[0];
+    if(r&&r!=='drums'&&r!=='voice'&&PROJ.tracks.some(x=>x.role===r&&x.kind==='notes')) return {actions:[{type:'reshape',track:r,do:'busier'}]}; }
   const sws=swingSaid(raw), anyDrums=PROJ.tracks.some(x=>x.role==='drums'), hasDrums=PROJ.tracks.some(x=>x.role==='drums'&&x.recipe);
   if(sws!=null&&swingOnly(raw,hasDrums)){
     if(hasDrums) return {actions:[{type:'groove',track:'drums',swing:sws}]};
@@ -192,7 +195,7 @@ function askFix(t,raw){
 function partAsk(t){
   const q=/^\s*(?:(?:hey|so|ok|okay|and|um)\b[\s,]*)*(is|are|was|were|does|do|did|what|which|whats|what's|what’s|how|where|tell me|do you know)\b/.test(t)||/\?\s*$/.test(t);
   if(!q||/^\s*(?:(?:hey|so|ok|okay|and)\b[\s,]*)*(can|could|would|will|why|how about|what if|should)\b/.test(t)) return null;
-  if(/\b(add|give|change|new|different|make|replace|try|turn|put|remove|mute|unmute|solo|delete|swap|switch|redo|regenerate|transpose|move|set|please|let'?s|another|too|so (?:loud|quiet|busy|boring))\b/.test(t)) return null;
+  if(/\b(add|give|change|new|different|make|replace|try|turn|put|remove|mute|unmute|solo|delete|swap|switch|redo|regenerate|transpose|move|set|please|let'?s|another|too|so (?:loud|quiet|busy|boring)|do something|something (?:else|different|new|fresh))\b/.test(t)) return null;
   const role=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0]; if(!role||role==='chords') return null; /* the chords have their own answer */
   const T=[...PROJ.tracks].reverse().find(x=>x.role===role&&x.kind==='notes'), nm={drums:'drums',bass:'bassline',melody:'melody',voice:'vocal'}[role]||role;
   if(!T) return {actions:[],reply:`There’s no ${nm} in the song yet. Say “add a ${nm==='drums'?'beat':nm}” and I’ll tell you about it.`};
@@ -207,6 +210,8 @@ function partAsk(t){
   const em=/\b([a-g])(?: (sharp|flat))?\b.*?\bor\b.*?\b([a-g])(?: (sharp|flat))?\s*\??\s*$/.exec(t), P0={c:0,d:2,e:4,f:5,g:7,a:9,b:11}, pcOf=(l,a)=>mod(P0[l]+(a==='sharp'?1:a==='flat'?-1:0),12);
   const nmOf=(l,a)=>l.toUpperCase()+(a?' '+a:''), enh=em&&(em[2]||em[4])?(pcOf(em[1],em[2])===pcOf(em[3],em[4])?` ${nmOf(em[1],em[2])} and ${nmOf(em[3],em[4])} are the same note; in ${kn} it’s written ${say(pcOf(em[1],em[2]))}.`:''):'';
   return {actions:[],reply:`The ${nm} plays ${list(seen.slice(0,6).map(say))}, in ${kn}${inst?', on '+inst:''}.${enh}`}; }
+/* the part a shape word is about when several are named ("the melody is too busy make it simpler"): the one said last before it (QA, 22 Nov fix 4) */
+function roleBefore(t,re){ const m=re.exec(t); if(!m) return null; let best=null, at=-1; ROLE_WORDS.forEach(([k,r])=>{ const g=new RegExp(r.source,'g'); let x; while((x=g.exec(t))&&x.index<m.index){ if(x.index>at){ at=x.index; best=k; } } }); return best; }
 function partEditFix(t,raw){
   const role=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0], songW=/\b(intro|outro|drop|break|build|section|verse|chorus|bridge)\b/.test(t);
   if(/\b(go back to|back to|bring back|return to|restore|switch back to|undo) (the |my |that )?(previous|last|old|older|earlier|original|first|other)\b|\b(previous|last|old|other|first|original) (one|version|take|chords?|bass ?line|bass|melody|drums?|beat)( was| is| sounded| sounds)? better\b|\bi (liked|prefer(red)?|like|want) the (previous|last|old|other|first|original)\b|^\s*(no,? )?the other one\b|\b(bring|put|change) (it|that|them) back\b|\b(pehl[aei]|pahl[aei]|purane|purani|purana|pichh?l[aei]|original|first)\b.*\b(wapas|vapas|waapas|vaapas)\b|\b(wapas|vapas) (lao|laao|le aao|karo|kar do|do)\b.*\b(pehl[aei]|pahl[aei]|purane|purani|purana|pichh?l[aei])\b/.test(t)&&!songW)
@@ -217,14 +222,16 @@ function partEditFix(t,raw){
   /* "play the bass an octave lower": the same notes 12 semitones down, never a volume move (QA, 22 Nov) */
   { const o=t.match(/\b(?:(an?|one|two|2) )?octaves? (lower|down|higher|up)\b|\b(lower|higher|down|up) (?:by )?(an?|one|two|2) octaves?\b/);
     if(o&&role!=='drums'){ const n=/two|2/.test((o[1]||'')+(o[4]||''))?2:1, dn=/lower|down/.test(o[2]||o[3]); return {actions:[{type:'transpose',track:T.id,semitones:(dn?-12:12)*n}],reply:`${T.name} ${n>1?'two octaves':'an octave'} ${dn?'lower':'higher'}, same notes and rhythm.`}; } }
-  const sh=reshapeSaid(t);
-  if(sh&&role!=='drums'||sh&&/^(simpler|busier)$/.test(sh)){ const A=[{type:'reshape',track:role,do:sh}], lv=levelFix(t.replace(/\b(simpler|simplify|simple|busier|less busy|too busy|more busy|shorter|longer)\b/g,' '));
+  const sh=reshapeSaid(t), shRole=sh&&ROLE_WORDS.filter(([k,re])=>re.test(t)).length>1?roleBefore(t,/\b(simpler|simplify|simple|less busy|too busy|busier|more busy|shorter|longer|staccato|legato|fewer notes|more notes)\b/)||role:role;
+  if(sh&&shRole!=='drums'||sh&&/^(simpler|busier)$/.test(sh)){ const A=[{type:'reshape',track:shRole,do:sh}], lv=levelFix(t.replace(/\b(simpler|simplify|simple|busier|less busy|too busy|more busy|shorter|longer)\b/g,' '));
     if(lv&&lv.actions&&lv.actions.length) A.push(...lv.actions); return {actions:A}; }
   /* "happier chords", "make the melody darker": a new version that leans that way (bright/dark alone on a melody is its EQ, toneFix) */
   if(role==='chords'&&moodSaid(t)&&!/\b(brighter|darker)\b.*\b(sound|tone|eq)\b/.test(t)&&(!/\b(bright|brighter|dark|darker|dull|duller|muffled)\b/.test(t)||/\bprogressions?\b|\b(darker|brighter|sadder|happier|moodier) (chords?|progression)\b/.test(t))) return {actions:[{type:'vary',track:'chords',mood:moodSaid(t)}]};
+  /* "make the melody happier", "a sadder melody": a new melody that leans that way (QA, 22 Nov fix 4) */
+  if(role==='melody'&&/\b(happ(y|ier)|sad(der)?|uplifting|cheer\w*|hopeful|melanchol\w*|moodier|emotional|euphoric)\b/.test(t)) return {actions:[{type:'vary',track:'melody',mood:moodSaid(t)}]};
   /* "what if the chords were on strings?", "how about the chords on an electric piano?": the same notes on that sound (QA, 22 Nov fix 3) */
   { const ia=instAsked(t); if(ia&&ia!==T.inst&&role!=='drums'&&!/\b(new|different|another|fresh)\b/.test(t)) return {actions:[{type:'instrument',track:role,instrument:ia}]}; }
-  const iw=(INST_WORDS.find(([k,re])=>re.test(t))||[])[0], fresh=/\b(redo|rework|rewrite|regenerate|new|different|other|fresh|try (some )?(other|different|something else)|badal\w*|badl\w*|naya|nayi|naye|koi aur|dusr[aie]|alag)\b/.test(t);
+  const iw=(INST_WORDS.find(([k,re])=>re.test(t))||[])[0], fresh=/\b(redo|rework|rewrite|regenerate|new|different|other|fresh|try (some )?(other|different|something else)|do something(?: (?:else|new|different|fresh|cool|fun))?(?: (?:with|to|about|on|for))?|something (?:else|different|new|fresh)|badal\w*|badl\w*|naya|nayi|naye|koi aur|dusr[aie]|alag)\b/.test(t);
   if(fresh||/\b(change|replace|swap( out)?|switch( up)?)\b/.test(t)){
     const inst=iw&&iw!==T.inst&&/\b(to|with|for|on|into|as|by)\b/.test(t)?{type:'instrument',track:role,instrument:role==='drums'&&iw==='bass808'?'kit808':iw}:null;
     if(role==='drums') return inst?{actions:[inst]}:null;
