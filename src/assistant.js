@@ -51,7 +51,9 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
     if(!ideas.length) ideas.push('“play the whole song”'); const k=ASSIST.history.length%ideas.length;
     const two=[ideas[k],ideas[(k+1)%ideas.length]].filter((x,i,a)=>x&&a.indexOf(x)===i);
     return `Shape the song: ${two.join(', ')}, or download the MP3.`; }
-  return `Shape it with effects (“more reverb on the chords”), mix it, make it a full track, or download the MP3.`; }
+  /* the tip names the part just worked on (QA, 22 Nov fix 4: no chords tip while working on the bass) */
+  const fp={drums:'drums',bass:'bass',chords:'chords',melody:'melody'}[ASSIST.focus]||'chords';
+  return `Shape it with effects (“more reverb on the ${fp}”), mix it, make it a full track, or download the MP3.`; }
 /* the conversation's memory (AI-9): one line per request, what was said and what changed, the last 10 go to the AI as "recent".
    The focus is the one part the last request was about, so "make it softer" right after the bass means the bass. */
 function noteChange(said,acts,done,touched){ said=String(said||'').trim(); if(!said) return;

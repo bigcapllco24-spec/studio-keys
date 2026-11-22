@@ -5715,9 +5715,14 @@ function onePart(list,depth){
   return res; }
 /* the AI's reply after the guard dropped or moved some of its actions: its sentences about what didn't happen are left out
    ("Turned the whole song down 3 dB." when only the bass moved, "Here are fresh drums…" when the drums were kept). '' = say what changed. */
-function honestReply(reply){ reply=String(reply||''); const G=BATCH.guardActs||[]; if(!reply||!G.length&&!BATCH.redirected) return reply;
+/* the AI said it changed the whole song ("Turned the whole song down a bit.") but only one part's mix or notes moved (QA, 22 Nov fix 4) */
+const SONG_CLAIM=/\b(?:whole (?:song|track|mix)|every part|all (?:the )?parts|overall|master|everything(?!\s+else))\b/;
+function honestReply(reply){ reply=String(reply||''); const G=BATCH.guardActs||[];
+  const ran=BATCH.ran||[], songWide=ran.some(a=>/^(fx|tempo|key|vibe|style|arrange|new_project|bars|groove|swing)$/.test(a.type)||/^(mix|track_fx)$/.test(a.type)&&SONG_TRACK.test(String(a.track||'all'))), wrongSong=!songWide&&(BATCH.touched||[]).length>0&&SONG_CLAIM.test(reply.toLowerCase());
+  if(!reply||!G.length&&!BATCH.redirected&&!wrongSong) return reply;
   const touched=new Set(BATCH.touched||[]), roles=new Set(G.map(actRole).filter(r=>r&&!touched.has(r))), types=new Set(G.map(a=>a.type));
   const bad=[...roles].map(r=>(PART_SAID.find(x=>x[0]===r)||[])[1]).filter(Boolean);
+  if(wrongSong) bad.push(SONG_CLAIM);
   if(BATCH.redirected||G.some(a=>/^(mix|track_fx|fx)$/.test(a.type)&&SONG_TRACK.test(String(a.track||'all')))) bad.push(/\b(whole song|whole track|everything|every part|all (?:the )?parts|the (?:whole )?mix|overall|master)\b/);
   if(types.has('arrange')) bad.push(/\b(full (?:track|song)|arrange\w*|sections?|intro|outro|drops?|structure|\d+ bars|break)\b/);
   if(types.has('vibe')||types.has('style')||types.has('new_project')) bad.push(/\b(vibe|style|genre|tempo|bpm|new song|trap|house|drill|lo-?fi|techno|afro\w*|r&b|pop)\b/);
@@ -5735,7 +5740,7 @@ function shortDone(done){ const out=(done||[]).map(d=>{ d=String(d).replace(/\s*
     if((m=/^([\w ]+?): an? (?:new|fresh) ([\w ]+?)(?:[,;]|$)/.exec(d))) return 'New '+m[2];
     if((m=/^([\w ]+?): (up|down) ([\d.]+) dB/.exec(d))) return m[1]+' '+m[2]+' '+m[3]+' dB';
     if((m=/^([\w ]+?) (simpler|busier)\b/.exec(d))) return m[1]+' '+m[2];
-    if((m=/^([\w ]+?): (shorter|longer)\b/.exec(d))) return m[1]+' '+m[2]+' notes';
+    if((m=/^([\w ]+?): (shorter|longer)\b/.exec(d))) return m[2]+' '+m[1].toLowerCase()+' notes'; /* "Shorter melody notes." */
     return d.split(/[:;,]/)[0].trim(); }).filter(Boolean);
   return out.map(x=>x.replace(/^./,c=>c.toUpperCase())+'.').join(' '); }
 /* add_bass/add_chords/add_melody about a part that is already there, with no add word: change that part in place */
@@ -6259,7 +6264,7 @@ function runActions(list){
   const done=[], songDone=[], kinds=[]; let changed=false; BATCH={startBpm:CTRL.bpm,notes:[]}; if(typeof undoBoundary==='function') undoBoundary(); const last0=typeof UNDO!=='undefined'?UNDO.last:null;
   /* done.segs[i]: which half of a two-part sentence each result came from (offline "mute the drums and solo the bass") */
   done.segs=[]; const u0=typeof UNDO!=='undefined'?(UNDO.pushes||0):-1;
-  const raw=(list||[]).map(normAction).filter(a=>a&&ACT[a.type]), acts=orderActions(onePart(raw)), before=songSnapshot();
+  const raw=(list||[]).map(normAction).filter(a=>a&&ACT[a.type]), acts=orderActions(onePart(raw)), before=songSnapshot(); BATCH.ran=acts;
   /* each part as it is now, so its earlier version can come back later, and so the log knows which parts this request changed (AI-9) */
   const pre=new Map(PROJ.tracks.map(t=>[t.id,{sig:partSig(t),mix:partMix(t),copy:null,t}])), prog0={prog:PROJ.prog?PROJ.prog.slice():PROJ.prog,locked:PROJ.progLocked};
   pre.forEach(x=>{ if(x.t.kind==='notes') x.copy=partCopy(x.t); });
@@ -6602,7 +6607,9 @@ function nextStep(){ const has=r=>PROJ.tracks.some(t=>t.role===r);
     if(!ideas.length) ideas.push('“play the whole song”'); const k=ASSIST.history.length%ideas.length;
     const two=[ideas[k],ideas[(k+1)%ideas.length]].filter((x,i,a)=>x&&a.indexOf(x)===i);
     return `Shape the song: ${two.join(', ')}, or download the MP3.`; }
-  return `Shape it with effects (“more reverb on the chords”), mix it, make it a full track, or download the MP3.`; }
+  /* the tip names the part just worked on (QA, 22 Nov fix 4: no chords tip while working on the bass) */
+  const fp={drums:'drums',bass:'bass',chords:'chords',melody:'melody'}[ASSIST.focus]||'chords';
+  return `Shape it with effects (“more reverb on the ${fp}”), mix it, make it a full track, or download the MP3.`; }
 /* the conversation's memory (AI-9): one line per request, what was said and what changed, the last 10 go to the AI as "recent".
    The focus is the one part the last request was about, so "make it softer" right after the bass means the bass. */
 function noteChange(said,acts,done,touched){ said=String(said||'').trim(); if(!said) return;
