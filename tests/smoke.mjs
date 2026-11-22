@@ -25,6 +25,7 @@ const settle = sel => E(async s => { const el = document.querySelector(s) || doc
 let closing = null; const closeChrome = () => closing || (closing = (async () => { const pid = b.process() && b.process().pid; await Promise.race([b.close().catch(() => {}), W(15000)]); for (const id of [-pid, pid]) try { if (pid) process.kill(id, 'SIGKILL'); } catch {} })());
 setTimeout(async () => { console.log('FAIL test run · the smoke test took over 15 minutes and was stopped'); await closeChrome(); process.exit(1); }, 15 * 60000).unref();
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, async () => { await closeChrome(); process.exit(1); });
+if (+process.env.SK_CPU_SLOW > 1) await p.emulateCPUThrottling(+process.env.SK_CPU_SLOW); // SK_CPU_SLOW=4: run as on a 4x slower machine (to find timing flakes)
 process.on('unhandledRejection', async e => { console.log('FAIL test run · ' + (e && e.message || e)); await closeChrome(); process.exit(1); });
 try {
   await p.goto(target, { waitUntil: 'load', timeout: 60000 }); await W(2500);
