@@ -947,6 +947,8 @@ function songAddSec(a){ const raw=String(a.name||a.section||'Section'); const S=
   const tgA=a.after?findSec(a.after):null, tgB=a.before?findSec(a.before):null, outro=[...S].reverse().find(s=>s.kind==='outro');
   let at=tgA?S.indexOf(tgA)+1:tgB?S.indexOf(tgB):kind==='intro'?0:kind==='outro'||!outro?S.length:S.indexOf(outro);
   if(!songArranged()&&(kind==='intro'||kind==='build')) at=0;
+  /* a break next to a break is one long break, not two (QA, 22 Nov bug 6): say so and offer to make it longer */
+  if(kind==='break'&&songArranged()){ const nb=[S[at-1],S[at]].find(x=>x&&x.kind==='break'); if(nb){ const pr=S[S.indexOf(nb)-1]; songNote(`There’s already a ${nb.bars}-bar break there (${nb.name}${pr?', after '+pr.name:''}). Say “make the break longer” to stretch it.`); BATCH.declined=true; return; } }
   const made=[]; const bars=a.bars?snapBars(a.bars):null;
   if(kind==='drop'&&same.length&&!(S[at-1]&&(S[at-1].kind==='break'||S[at-1].kind==='build'))){ const br=S.find(s=>s.kind==='break'); made.push(songAdd(br?{copyOf:br.id,name:'Break',at,chip:false}:{name:'Break',kind:'break',bars:16,at,chip:false})); at++; }
   made.push(same.length&&['drop','chorus','hook','verse','break','build'].includes(kind)?songAdd({copyOf:same[0].id,name,at,chip:false,bars:bars||undefined}):songAdd({name,kind,bars:bars||SEC_BARS[kind],at,chip:false}));

@@ -332,6 +332,12 @@ function focusText(raw){ const f=typeof ASSIST!=='undefined'&&ASSIST.focus, w={d
    "add a second drop", "silence before the drop", "loop the break", "play from the second drop", Hinglish "lamba / chhota / hata do / daal do / se pehle".
    Runs before the loop-length rule, so "8-bar intro" is a section and "make the loop 8 bars" still sets the loop. Returns null when it isn't about the song layout. */
 const SB_PART='drums?|beat|kicks?|hats|claps?|snares?|perc|percussion|shakers?|bass ?line|bass|sub|chords?|pads?|keys|strings|choir|melody|lead|arp|pluck|vocals?|voice|everything|all';
+/* one section asked for on a plain loop: an intro or build-up goes before it, an outro after it, and a break (or bridge) in the middle,
+   so the song never starts with 30 seconds of pads (QA, 22 Nov bug 6) */
+function loopPlus(name,bars){ const main={name:'Main',bars:Math.max(8,PROJ.bars)};
+  if(name==='outro') return [main,{name:'Outro',bars:bars||8}];
+  if(/^(break|bridge)$/.test(name)) return [main,{name,bars},Object.assign({},main)];
+  return [{name,bars},main]; }
 const SB_NOSONG='There’s no song layout yet. Say “make it a full track” or “8-bar intro, then build up and drop” first.';
 function songBrain(raw,t0){
   let t=' '+t0.replace(/[.,!?;]+/g,' , ').replace(/\bbuild[\s-]?ups?\b/g,'build').replace(/\bbreak[\s-]?downs?\b/g,'break').replace(/\b(doosr[aie]|dusr[aie])\b/g,'second').replace(/\b(pehl[ai]|pahl[ai])\b/g,'first').replace(/\b(teesr[aie]|tisr[aie])\b/g,'third')
@@ -396,14 +402,14 @@ function songBrain(raw,t0){
   /* add a section, Hinglish with the verb last: "drop ke baad break daal do", "dusra drop add karo", "ek aur drop daal do" */
   if((m=t.match(new RegExp(`\\b(?:(?:a|an|ek|ek aur|aur ek|another|one more|new|naya|nayi) )?(?:(?:second|third|fourth|2nd|3rd|4th) )?(?:(\\d{1,2}) bar )?(${SEC}) (?:bhi |aur )?(?:daal do|daalo|dalo|daal|add karo|add kar do|add kardo|add karna|laga do|lagao|bana do|banao|chahiye|jodo|jod do)\\b`)))){
     const after=secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? ke baad\\b`))||secAt(new RegExp(`\\b(?:after) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`)), before=secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:se|ke) pehle\\b`));
-    if(!arr&&PROJ.tracks.length) return {actions:[{type:'arrange',template:'custom',sections:m[2]==='outro'?[{name:'Main',bars:Math.max(8,PROJ.bars)},{name:'Outro',bars:m[1]?+m[1]:8}]:[{name:m[2],bars:m[1]?+m[1]:undefined},{name:'Main',bars:Math.max(8,PROJ.bars)}]}]};
+    if(!arr&&PROJ.tracks.length) return {actions:[{type:'arrange',template:'custom',sections:loopPlus(m[2],m[1]?+m[1]:undefined)}]};
     return needArr({actions:[{type:'section',do:'add',name:m[2],after:after||undefined,before:before||undefined,bars:m[1]?+m[1]:undefined}]}); }
   /* add a section: "add a second drop", "add a break after the first drop", "add an outro" */
-  if((m=t.match(new RegExp(`\\b(?:add|insert|put in|throw in|make|create|daal|dalo|daalo)\\b(?: me| us)?(?: (?:a|an|another|one more|a new|new|some))?(?: (?:second|third|fourth|2nd|3rd|4th))? (?:\\d{1,2} bar )?(${SEC}|silence|gap)\\b`)))&&!(new RegExp(`\\b(${SB_PART})\\b`).test(t.replace(/\bbuild\b/g,'')))){
+  if((m=t.match(new RegExp(`\\b(?:add|insert|put in|put|throw in|make|create|daal|dalo|daalo)\\b(?: me| us)?(?: (?:a|an|another|one more|a new|new|some))?(?: (?:second|third|fourth|2nd|3rd|4th))? (?:\\d{1,2} bar )?(${SEC}|silence|gap)\\b`)))&&!(new RegExp(`\\b(${SB_PART})\\b`).test(t.replace(/\bbuild\b/g,'')))){
     const after=secAt(new RegExp(`\\b(?:after|ke baad) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`))||secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? ke baad\\b`)), before=secAt(new RegExp(`\\bbefore (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`))||secAt(new RegExp(`\\b${ORD}(${SEC})s?(?: (\\d))? (?:se|ke) pehle\\b`));
     const bars=(t.match(new RegExp(`\\b(\\d{1,2}) bar (?:${m[1]})\\b`))||[])[1];
     if(arr&&bars&&has(songKindOf(m[1]))&&/\b(make|create)\b/.test(t)&&!/\b(another|second|third|new|one more)\b/.test(t)) return {actions:[{type:'section',do:'length',section:m[1],bars:+bars}]}; /* "make an 8-bar intro" when there is one */
-    if(!arr&&PROJ.tracks.length&&!/silence|gap/.test(m[1])) return {actions:[{type:'arrange',template:'custom',sections:m[1]==='outro'?[{name:'Main',bars:Math.max(8,PROJ.bars)},{name:'Outro',bars:bars?+bars:8}]:[{name:m[1],bars:bars?+bars:undefined},{name:'Main',bars:Math.max(8,PROJ.bars)}]}]};
+    if(!arr&&PROJ.tracks.length&&!/silence|gap/.test(m[1])) return {actions:[{type:'arrange',template:'custom',sections:loopPlus(m[1],bars?+bars:undefined)}]};
     return needArr({actions:[{type:'section',do:'add',name:m[1],after:after||undefined,before:before||undefined,bars:bars?+bars:undefined}]}); }
   /* exact length: "make the drop 16 bars", "16 bar break" (in a song with a layout), "intro ko 8 bar karo" */
   if((m=t.match(new RegExp(`\\b(?:make|set|change|turn) (?:the )?${ORD}(${SEC})s?(?: (\\d))? (?:to |into )?(\\d{1,2}) bar\\b`)))) return needArr({actions:[{type:'section',do:'length',section:ref(m.slice(1)),bars:+m[4]}]});

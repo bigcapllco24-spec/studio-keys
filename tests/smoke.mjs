@@ -563,6 +563,11 @@ try {
     const eng = ASSIST.engine, of = window.fetch; await A14.song(false); ASSIST.engine = 'llama'; window.fetch = async () => new Response(JSON.stringify({ reply: 'Added a melody on the left.', actions: [{ type: 'add_melody' }] }), { status: 200 });
     try { r = await A14.say('pan the melody left'); } finally { window.fetch = of; ASSIST.engine = eng; } R.ai = r.same && r.added === 0 && P('Melody') === -40; return R; });
   ok('AI-14 bug 4: "pan the melody left" (L 40), "put the chords a bit to the left" (L 20), "move the melody hard right", "chords thoda left mein daalo" pan the track with no new part; "pan the hats right" says the hats are in the drums track; "it sounds too dry" adds reverb; an AI add_melody for "pan the melody left" pans instead', Object.values(a14b4).every(Boolean), JSON.stringify(a14b4));
+  // AI-14 bug 6: "add a breakdown" on a loop goes after the first main section, never first; a break next to a break is refused with a hint
+  const a14b6 = await E(async () => { const R = {}; await A14.song(false); let r = await A14.say('add a breakdown'); R.loop = /^Main\[[^\]]*Drums[^\]]*\] Break\[[^\]]*\] Main 2\[[^\]]*Drums/.test(r.secs) && r.steps === 1;
+    await A14.song(false); r = await A14.say('break daal do'); R.hin = /^Main\[.*\] Break\[/.test(r.secs);
+    await A14.song(true); const n = songSections().length; r = await A14.say('add a breakdown after the first drop'); R.next = songSections().length === n && r.steps === 0 && /already a 16-bar break/.test(r.reply) && /make the break longer/.test(r.reply); R.r = r.secs.slice(0, 50); return R; });
+  ok('AI-14 bug 6: "add a breakdown" and "break daal do" on a loop make Main, Break, Main (the song starts with the beat); "add a breakdown after the first drop" next to the break says it is there and offers to make it longer', a14b6.loop && a14b6.hin && a14b6.next, JSON.stringify(a14b6));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
