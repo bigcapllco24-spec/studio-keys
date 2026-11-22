@@ -116,9 +116,11 @@ function shaperSplit(Y,P){
     for(let a=0;a<k;a++){ const v=r[a]/A[a*k+a]; lg[a][q]=v>0?clamp(Math.log(v),LO,HI):LO; } }
   const h=lg.map(L=>{ let f=-1; for(let q=0;q<J;q++) if(L[q]===L[q]){ f=q; break; }
     if(f<0) L.fill(0); else { let last=f; for(let s=1;s<=J;s++){ const q=(f+s)%J; if(L[q]===L[q]){ const gap=(q-last+J)%J; for(let t=1;t<gap;t++) L[(last+t)%J]=L[last]+(L[q]-L[last])*t/gap; last=q; } } } /* silence: glide between its neighbours */
-    for(let rep=0;rep<3;rep++){ for(let q=1;q<=J;q++){ const i=q%J, p=q-1; L[i]=Math.min(L[p]+SLEW,Math.max(L[p]-SLEW,L[i])); }
-      for(let q=J-1;q>=0;q--){ const x=(q+1)%J; L[q]=Math.min(L[x]+SLEW,Math.max(L[x]-SLEW,L[q])); } } /* at most 1.5 dB per 23 ms, either way, round the loop */
-    const e=L.map(Math.exp), o=new Float32Array(n); for(let i=0;i<n;i++){ const q=Math.floor(i/H), f=i/H-q; o[i]=e[q]+(e[(q+1)%J]-e[q])*f; } return o; });
+    const R=1+2*Math.ceil(150/J), X=new Float64Array(R*J); for(let i=0;i<R*J;i++) X[i]=L[i%J]; /* at most 1.5 dB per 23 ms, either way: forward then */
+    for(let i=1;i<R*J;i++) X[i]=Math.min(X[i-1]+SLEW,Math.max(X[i-1]-SLEW,X[i])); /* backward over copies of the loop, keeping the middle one, */
+    for(let i=R*J-2;i>=0;i--) X[i]=Math.min(X[i+1]+SLEW,Math.max(X[i+1]-SLEW,X[i])); /* so the level also joins smoothly where the loop wraps */
+    const e=Array.from(X.subarray((R>>1)*J,((R>>1)+1)*J),Math.exp), o=new Float32Array(n), last=(J-1)*H;
+    for(let i=0;i<n;i++){ const q=Math.floor(i/H); o[i]=q<J-1?e[q]+(e[q+1]-e[q])*(i/H-q):e[J-1]+(e[0]-e[J-1])*(i-last)/(n-last); } return o; });
   const r0=Float32Array.from(Y0), r1=Float32Array.from(Y1);
   for(let a=0;a<k;a++){ const [A0,A1]=P[a], ha=h[a]; for(let i=0;i<n;i++){ r0[i]-=ha[i]*A0[i]; r1[i]-=ha[i]*A1[i]; } }
   return {h,r:[r0,r1]};
