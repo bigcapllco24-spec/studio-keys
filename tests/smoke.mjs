@@ -11,13 +11,21 @@ const chrome = [process.env.CHROME, '/usr/bin/google-chrome', '/usr/bin/chromium
 if (!chrome) { console.log('FAIL no Chrome/Chromium found (set CHROME=/path/to/chrome)'); process.exit(1); }
 const fx = n => path.join(root, 'tests/fixtures', n);
 const results = []; const ok = (name, pass, info = '') => { results.push(pass); console.log(`${pass ? 'PASS' : 'FAIL'} ${name}${info ? ' · ' + info : ''}`); };
-const b = await pc.launch({ executablePath: chrome, headless: 'new', args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--use-file-for-fake-audio-capture=' + fx('sing.wav')] });
+const b = await pc.launch({ executablePath: chrome, headless: 'new', protocolTimeout: 600000, args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--use-file-for-fake-audio-capture=' + fx('sing.wav')] });
 const p = await b.newPage(); await p.setViewport({ width: 1400, height: 1100 });
 const errs = []; p.on('pageerror', e => errs.push(e.message));
 await p.evaluateOnNewDocument(() => { if (!sessionStorage.getItem('skSmoke')) { localStorage.clear(); sessionStorage.setItem('skSmoke', '1'); } }); // clear once, so the reload check keeps the last song
 await p.evaluateOnNewDocument(() => { window.__sr = []; class SR { start() { this.on = true; window.__sr.push(this); } stop() { this.end(); } abort() { this.end(); } end() { if (this.on) { this.on = false; setTimeout(() => this.onend && this.onend(), 10); } } }
   window.SpeechRecognition = window.webkitSpeechRecognition = SR; }); // speech can't run headless: a fake recogniser that counts live ones
 const W = ms => new Promise(r => setTimeout(r, ms)), E = (f, ...a) => p.evaluate(f, ...a);
+// QA-2 (22 Nov): wait on the app's state, not fixed delays (this runs on busy 2-core machines), and never leave Chrome behind
+const until = (f, arg, timeout = 30000) => p.waitForFunction(f, { timeout, polling: 50 }, arg).then(() => true, () => false); // false on timeout: the check after it reports
+const settle = sel => E(async s => { const el = document.querySelector(s) || document.body, k = () => { const r = el.getBoundingClientRect(); return [r.x, r.y, r.width, r.height, scrollX, scrollY].map(Math.round).join(); };
+  let last = k(), same = 0; for (const t0 = Date.now(); same < 3 && Date.now() - t0 < 5000;) { await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0))); const n = k(); same = n === last ? same + 1 : 0; last = n; } }, sel || 'body'); // smooth scrolls finished
+let closing = null; const closeChrome = () => closing || (closing = (async () => { const pid = b.process() && b.process().pid; await Promise.race([b.close().catch(() => {}), W(15000)]); for (const id of [-pid, pid]) try { if (pid) process.kill(id, 'SIGKILL'); } catch {} })());
+setTimeout(async () => { console.log('FAIL test run · the smoke test took over 15 minutes and was stopped'); await closeChrome(); process.exit(1); }, 15 * 60000).unref();
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, async () => { await closeChrome(); process.exit(1); });
+process.on('unhandledRejection', async e => { console.log('FAIL test run · ' + (e && e.message || e)); await closeChrome(); process.exit(1); });
 try {
   await p.goto(target, { waitUntil: 'load', timeout: 60000 }); await W(2500);
   await p.click('#audioPill'); await E(() => { ASSIST.voice = false; });
@@ -35,11 +43,11 @@ try {
   ok('note editor copy/paste and undo', ed.open && ed.n1 === ed.n0 + 3 && un === ed.n0, `${ed.n0}→${ed.n1}→${un}`);
   // 3a. velocity lane fits in the editor box; dragging a selected bar moves all selected notes in one undo step (UX-2)
   await W(400); await E(() => { const t = PROJ.tracks.find(t => t.role === 'chords'); openEditor(t.id); $('#editor').scrollIntoView({ block: 'center' }); t.events.forEach((e, i) => e.v = i % 2 ? 0.5 : 0.7); ED.sel = new Set(t.events.slice(0, 6)); drawEditor(); saveProject(); });
-  await W(400); // QA: measure after the page settles (on a busy machine the drag missed the bar: flaky FAIL 15 Nov)
+  await settle('#edCanvas'); // QA: measure after the page settles (on a busy machine the drag missed the bar: flaky FAIL 15 Nov)
   const vl = await E(() => { const t = PROJ.tracks.find(t => t.role === 'chords'); $('#editor').scrollIntoView({ block: 'center' });
     const w = $('#edWrap'), G = edGeom(), cr = $('#edCanvas').getBoundingClientRect(), e = t.events[0], vy = cr.top + G.gh + 8;
     return { fits: w.scrollHeight <= w.clientHeight && cr.top + G.gh + 8 + ED.velH <= innerHeight, x: cr.left + G.K + e.b * G.bw + 1, y0: vy + 3 + 0.3 * (ED.velH - 6), y1: vy + 3 + 0.1 * (ED.velH - 6), u0: UNDO.stack.length }; });
-  await W(300); await p.mouse.move(vl.x, vl.y0); await p.mouse.down(); await p.mouse.move(vl.x, vl.y1, { steps: 4 }); await p.mouse.up(); await W(200);
+  await settle('#edCanvas'); await p.mouse.move(vl.x, vl.y0); await p.mouse.down(); await p.mouse.move(vl.x, vl.y1, { steps: 4 }); await p.mouse.up(); await W(200);
   const vg = await E(u0 => { const ev = PROJ.tracks.find(t => t.role === 'chords').events; return { v: ev.slice(0, 7).map(e => e.v), steps: UNDO.stack.length - u0 }; }, vl.u0);
   ok('velocity lane visible; dragging a selected bar moves all selected', vl.fits && vg.v.slice(0, 6).every((v, i) => Math.abs(v - (i % 2 ? 0.7 : 0.9)) < 0.03) && vg.v[6] === 0.7 && vg.steps === 1, vg.v.join(' '));
   // 3b. MP3 download: render, encode, decode back
@@ -110,7 +118,7 @@ try {
   ok('Play button plays a new song in Song mode', ps.run && ps.mode === 'song' && ps.st === 'playing', JSON.stringify(ps));
   // 5. import MIDI and audio, audio → notes
   await E(() => newSong('Smoke import')); await W(300);
-  const inp = await p.$('#importFile'); await inp.uploadFile(fx('test.mid')); await W(800); await inp.uploadFile(fx('sing.wav')); await W(1500);
+  const inp = await p.$('#importFile'); await inp.uploadFile(fx('test.mid')); await until(() => PROJ.tracks.some(t => t.name === 'Lead')); await inp.uploadFile(fx('sing.wav')); await until(() => PROJ.tracks.some(t => t.kind === 'audio'));
   const tv = await E(() => { const a = PROJ.tracks.find(t => t.kind === 'audio'); const x = localBrain('turn the voice note into a bassline').actions, y = localBrain('turn ' + a.name + ' into chords').actions; return { x: x.map(q => q.type).join(), y: y.map(q => q.type + ':' + q.to + ':' + (q.track === a.id)).join(), n: PROJ.tracks.length, r: runActions(y).join(), n2: PROJ.tracks.length }; });
   ok('"turn the voice note into a bassline" transcribes', tv.x === 'transcribe', tv.x);
   const tv2 = await E(() => ['make the voice note a bassline', 'turn the voice note I just recorded into a bassline', 'make a bassline from the voice note', 'turn the voice note into a base line', 'record a voice note'].map(s => localBrain(s).actions.map(a => a.type + ':' + (a.to || a.part)).join('+')).join(' | '));
@@ -130,22 +138,22 @@ try {
   // 6. sing a bassline over the beat (fake microphone sings C E G A C G)
   await E(() => newSong('Smoke sing')); await W(300);
   await E(() => { runActions([{ type: 'add_drums', style: 'house' }, { type: 'add_chords' }]); window.__sayLog = []; const o = ASSIST.say; ASSIST.say = function (m, op) { window.__sayLog.push(m); ASSIST.say = o; return o.call(this, m, op); }; ASSIST.run('let me sing the bassline'); });
-  await W(300); const sr = await E(() => (window.__sayLog || [])[0] || '');
+  await until(() => (window.__sayLog || []).length > 0, undefined, 10000); const sr = await E(() => (window.__sayLog || [])[0] || '');
   ok('the sing reply doesn\'t suggest singing what you just asked for', /Sing the bassline/.test(sr) && !/let me sing|Bassline next/.test(sr), sr);
-  await W(3500); const guide = await E(() => TAKE_GUIDE && PROJ.tracks.filter(trackAudible).every(t => t.role === 'drums'));
+  await until(() => LOOP.state === 'take', undefined, 30000); const guide = await E(() => TAKE_GUIDE && PROJ.tracks.filter(trackAudible).every(t => t.role === 'drums'));
   ok('while singing, only the drums play', guide);
   await E(() => { window.__live = 0; const orig = noteOn; window.noteOn = function () { if (LOOP.state === 'take') window.__live++; return orig.apply(this, arguments); }; });
-  await W(11000);
+  await until(() => PROJ.tracks.some(t => t.take === 'bass') && !/take|counting/.test(LOOP.state), undefined, 60000);
   const sb = await E(() => { const t = PROJ.tracks.find(t => t.take === 'bass'); return t ? { n: t.events.length, lo: Math.max(...t.events.map(e => e.n)) } : null; }); await E(() => loopStop());
   ok('sing the bassline → bass track', sb && sb.n >= 4 && sb.lo < 60, sb ? `${sb.n} notes` : 'no track');
   ok('a sung part doesn\'t add your raw voice as an extra track', await E(() => !PROJ.tracks.some(t => t.kind === 'audio')));
   ok('your voice isn\'t played back live while you sing, and the mic turns off after', await E(() => window.__live === 0 && !MIC.on));
-  const lo = await E(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), cb = $('#asListen'); cb.click(); await w(1200); const on = MIC.on, tr = MIC.stream && MIC.stream.getTracks()[0];
-    cb.click(); cb.click(); cb.click(); await w(1200); return { on, off: !MIC.on && !MIC.pending, ended: !!tr && tr.readyState === 'ended', live: __sr.filter(r => r.on).length, orb: $('#asOrb').dataset.state }; });
+  const lo = await E(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), cb = $('#asListen'), wt = async f => { for (const t0 = Date.now(); !f() && Date.now() - t0 < 15000;) await w(50); }; cb.click(); await wt(() => MIC.on); await w(300); const on = MIC.on, tr = MIC.stream && MIC.stream.getTracks()[0];
+    cb.click(); cb.click(); cb.click(); await w(300); await wt(() => !MIC.on && !MIC.pending && __sr.every(r => !r.on)); await w(300); return { on, off: !MIC.on && !MIC.pending, ended: !!tr && tr.readyState === 'ended', live: __sr.filter(r => r.on).length, orb: $('#asOrb').dataset.state }; });
   ok('listening off (even off-on-off fast) releases the mic and leaves no recogniser running', lo.on && lo.off && lo.ended && lo.live === 0 && lo.orb === 'idle', JSON.stringify(lo));
   ok('humming isn\'t mistaken for talking', await E(() => !isSpeechy('la la la da da') && isSpeechy('add a bassline please')));
   // 6b. sung chords land on the beat, no repeats back to back, each at least a beat (UX-2)
-  await E(() => { ASSIST.run('let me sing the chords'); }); await W(14500);
+  await E(() => { ASSIST.run('let me sing the chords'); }); await until(() => PROJ.tracks.some(t => t.take === 'chords') && !/take|counting/.test(LOOP.state), undefined, 60000);
   const sc = await E(() => { const t = PROJ.tracks.find(t => t.take === 'chords'); if (!t) return null; const by = new Map(); t.events.forEach(e => { if (!by.has(e.b)) by.set(e.b, { b: e.b, d: e.d, ns: [] }); by.get(e.b).ns.push(e.n); });
     const ch = [...by.values()].sort((a, b) => a.b - b.b).map(c => ({ b: c.b, d: c.d, ns: c.ns.sort((x, y) => x - y).join('.') }));
     return { n: ch.length, beat: ch.every(c => Math.abs(c.b - Math.round(c.b)) < 1e-6), rep: ch.some((c, i) => i && c.ns === ch[i - 1].ns), min: Math.min(...ch.map(c => c.d)), gap: ch.slice(1).some((c, i) => { const g = c.b - (ch[i].b + ch[i].d); return g > 1e-6 && g < 1; }) }; }); await E(() => loopStop());
@@ -167,9 +175,9 @@ try {
   const pt = await E(() => { songTemplate('club'); const s = songFind('drop'), t = PROJ.tracks[0]; const a = s.parts[t.id].on; songSetPart(s.id, t.id, { on: false }); const b = songFind('drop').parts[t.id].on; undo(); return { a, b, c: songFind('drop').parts[t.id].on }; });
   ok('song: switch a part off, Undo brings it back', pt.a === true && pt.b === false && pt.c === true, JSON.stringify(pt));
   // UX-1 fix: a relaxed double-click (0.35 s, a tablet double-tap) opens the editor and leaves the part and the undo history as they were
-  const dsel = await E(() => { songTemplate('club'); const s = songFind('drop 2'), t = PROJ.tracks[0]; const el = document.querySelector(`.part[data-sid="${s.id}"][data-tid="${t.id}"]`); el.scrollIntoView({ block: 'center' });
+  await settle(); const dsel = await E(() => { songTemplate('club'); const s = songFind('drop 2'), t = PROJ.tracks[0]; const el = document.querySelector(`.part[data-sid="${s.id}"][data-tid="${t.id}"]`); el.scrollIntoView({ block: 'center' });
     const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, on: !!(s.parts[t.id] && s.parts[t.id].on), st: UNDO.stack.length }; });
-  await p.mouse.move(dsel.x, dsel.y); await p.mouse.down(); await p.mouse.up(); await W(350); await p.mouse.down({ clickCount: 2 }); await p.mouse.up({ clickCount: 2 }); await W(400);
+  await p.mouse.move(dsel.x, dsel.y); await p.mouse.down(); await p.mouse.up(); await W(350); await p.mouse.down({ clickCount: 2 }); await p.mouse.up({ clickCount: 2 }); await until(() => !$('#editor').hidden, undefined, 5000);
   const dc = await E(() => { const s = songFind('drop 2'), t = PROJ.tracks[0]; const r = { on: !!(s.parts[t.id] && s.parts[t.id].on), st: UNDO.stack.length, ed: !$('#editor').hidden && ED.tid === t.id }; closeEditor(); return r; });
   ok('song: a relaxed double-click (0.35 s) on a part opens the editor and leaves the part as it was', dc.ed && dc.on === dsel.on && dc.st === dsel.st, JSON.stringify(dc));
   // UX-1 fix: each change shows its own Undo chip, and the chip only undoes what it names
@@ -178,28 +186,28 @@ try {
     el().click(); undoBoundary(); songResize('outro', 12); const label = $('#songChipT').textContent; undo(); undo(); return { text, back, label, outro: songFind('outro').bars }; });
   ok('song: clicking a part shows its own Undo chip, and that Undo undoes exactly it', /^\S.* (on|off) in Break$/.test(chp.text || '') && chp.back && /^Outro: 12 bars/.test(chp.label) && chp.outro === 16, JSON.stringify(chp));
   // UX-7 (QA, 14 Nov): after a double-click opens the note editor on a part, Ctrl+A / Delete / Ctrl+D act on its notes, never on the song's sections
-  const kxy = await E(() => { songTemplate('club'); const s = songFind('drop'), t = PROJ.tracks.find(t => t.role === 'chords'); const el = document.querySelector(`.part[data-sid="${s.id}"][data-tid="${t.id}"]`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
-  const kdbl = async () => { await p.mouse.move(kxy.x, kxy.y); await p.mouse.down(); await p.mouse.up(); await W(80); await p.mouse.down({ clickCount: 2 }); await p.mouse.up({ clickCount: 2 }); await W(400); };
-  const kmod = async k => { await p.keyboard.down('Control'); await p.keyboard.press(k); await p.keyboard.up('Control'); await W(150); };
+  await settle(); const kxy = await E(() => { songTemplate('club'); const s = songFind('drop'), t = PROJ.tracks.find(t => t.role === 'chords'); const el = document.querySelector(`.part[data-sid="${s.id}"][data-tid="${t.id}"]`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  const kdbl = async () => { await p.mouse.move(kxy.x, kxy.y); await p.mouse.down(); await p.mouse.up(); await W(80); await p.mouse.down({ clickCount: 2 }); await p.mouse.up({ clickCount: 2 }); await until(() => !$('#editor').hidden && !!edTrack(), undefined, 10000); };
+  const kmod = async (k, f, a) => { await p.keyboard.down('Control'); await p.keyboard.press(k); await p.keyboard.up('Control'); await (f ? until(f, a, 10000) : W(150)); }, kall = () => ED.sel.size > 0 && ED.sel.size === edTrack().events.length;
   const kst = () => E(() => ({ secs: songSections().length, bars: songBars(), notes: edTrack() ? edTrack().events.length : -1, ed: !$('#editor').hidden }));
-  await kdbl(); const k0 = await kst(); await kmod('a'); await p.keyboard.press('Delete'); await W(150); const k1 = await kst();
+  await kdbl(); const k0 = await kst(); await kmod('a', kall); await p.keyboard.press('Delete'); await until(() => edTrack() && !edTrack().events.length, undefined, 10000); const k1 = await kst();
   await p.keyboard.press('Delete'); await p.keyboard.press('Backspace'); await W(150); const k2 = await kst(); await E(() => undo()); await W(150); const k3 = await kst();
   ok('song: double-click Chords in the Drop, Ctrl+A, Delete removes its notes, not the Drop; Delete with nothing selected changes nothing; Undo brings the notes back', k0.ed && k0.notes > 0 && k1.secs === 6 && k1.bars === 96 && k1.notes === 0 && k2.secs === 6 && k2.bars === 96 && k3.notes === k0.notes, `${k0.notes} → ${k1.notes} → ${k3.notes} notes, ${k2.secs} sections, ${k2.bars} bars`);
-  await kmod('a'); await kmod('d'); const k4 = await kst(); await E(() => undo()); await W(150); const k5 = await kst();
+  await kmod('a', kall); await kmod('d', n => edTrack() && edTrack().events.length === 2 * n, k0.notes); const k4 = await kst(); await E(() => undo()); await W(150); const k5 = await kst();
   ok('song: Ctrl+D in the editor duplicates the notes, not the section (one Undo)', k4.secs === 6 && k4.notes === 2 * k0.notes && k5.notes === k0.notes, `${k0.notes} → ${k4.notes} → ${k5.notes} notes, ${k4.secs} sections`);
-  const bxy = await E(() => { const el = document.querySelector(`.sec[data-sid="${songFind('break').id}"] .sname`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
-  await p.mouse.click(bxy.x, bxy.y); await W(300); await p.keyboard.press('Delete'); await W(150);
+  await settle(); const bxy = await E(() => { const el = document.querySelector(`.sec[data-sid="${songFind('break').id}"] .sname`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  await p.mouse.click(bxy.x, bxy.y); await W(300); await p.keyboard.press('Delete'); await until(() => !songFind('break'), undefined, 5000);
   const k6 = await E(() => { const r = { secs: songSections().length, gone: !songFind('break') }; undo(); r.back = songSections().length; r.brk = !!songFind('break'); closeEditor(); return r; });
   ok('song: click a section name, then Delete still removes the section, and Undo restores it', k6.secs === 5 && k6.gone && k6.back === 6 && k6.brk, JSON.stringify(k6));
   // QA, 15 Nov (UX-7 re-check): after typing to Keys, the editor still takes the keyboard (double-click a part in Song mode, click a note in Loop mode); Space plays/stops there
   const kSay = async txt => { const n0 = await E(() => document.querySelectorAll('#asChat .bub.as').length); await p.$eval('#asIn', el => el.scrollIntoView({ block: 'center' })); await p.click('#asIn', { clickCount: 3 }); await p.keyboard.type(txt); await p.keyboard.press('Enter');
-    await p.waitForFunction(n => document.querySelectorAll('#asChat .bub.as').length > n, { timeout: 10000 }, n0).catch(() => {}); await W(300); await E(() => loopStop()); return E(() => document.activeElement.id); };
-  const kf0 = await kSay('more reverb on the chords'); const kxy2 = await E(() => { const el = document.querySelector(`.part[data-sid="${songFind('drop').id}"][data-tid="${PROJ.tracks.find(t => t.role === 'chords').id}"]`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
-  await p.mouse.move(kxy2.x, kxy2.y); await p.mouse.down(); await p.mouse.up(); await W(80); await p.mouse.down({ clickCount: 2 }); await p.mouse.up({ clickCount: 2 }); await W(400);
-  const kf1 = await E(() => document.activeElement.id); await p.keyboard.press(' '); await W(250); const kr1 = await E(() => TR.running); await p.keyboard.press(' '); await W(250); const kr2 = await E(() => TR.running);
+    await p.waitForFunction(n => document.querySelectorAll('#asChat .bub.as').length > n && !ASSIST.busy, { timeout: 20000 }, n0).catch(() => {}); await W(300); await E(() => loopStop()); return E(() => document.activeElement.id); };
+  const kf0 = await kSay('more reverb on the chords'); await settle(); const kxy2 = await E(() => { const el = document.querySelector(`.part[data-sid="${songFind('drop').id}"][data-tid="${PROJ.tracks.find(t => t.role === 'chords').id}"]`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  await p.mouse.move(kxy2.x, kxy2.y); await p.mouse.down(); await p.mouse.up(); await W(80); await p.mouse.down({ clickCount: 2 }); await p.mouse.up({ clickCount: 2 }); await until(() => !$('#editor').hidden && document.activeElement.id === 'edCanvas', undefined, 10000);
+  const kf1 = await E(() => document.activeElement.id); await p.keyboard.press(' '); await until(() => TR.running, undefined, 5000); const kr1 = await E(() => TR.running); await p.keyboard.press(' '); await until(() => !TR.running, undefined, 5000); const kr2 = await E(() => TR.running);
   await E(() => { closeEditor(); songMode('loop'); openEditor(PROJ.tracks.find(t => t.role === 'chords').id); }); const kf2 = await kSay('a bit louder chords');
-  const knx = await E(() => { const t = edTrack(), G = edGeom(); $('#editor').scrollIntoView({ block: 'center' }); const cr = $('#edCanvas').getBoundingClientRect(); for (const e of t.events) { const R = evRect(t, G, e); if (R && R.y > 2 && R.y + R.h < G.gh - 2) return { x: cr.left + R.x + Math.min(4, R.w / 2), y: cr.top + R.y + R.h / 2, n: t.events.length }; } return null; });
-  await p.mouse.click(knx.x, knx.y); await W(200); const kf3 = await E(() => document.activeElement.id); await p.keyboard.press('Delete'); await W(150); const kn = await E(() => edTrack().events.length); await E(() => { undo(); closeEditor(); songMode('song'); });
+  await settle(); const knx = await E(() => { const t = edTrack(), G = edGeom(); $('#editor').scrollIntoView({ block: 'center' }); const cr = $('#edCanvas').getBoundingClientRect(); for (const e of t.events) { const R = evRect(t, G, e); if (R && R.y > 2 && R.y + R.h < G.gh - 2) return { x: cr.left + R.x + Math.min(4, R.w / 2), y: cr.top + R.y + R.h / 2, n: t.events.length }; } return null; });
+  await p.mouse.click(knx.x, knx.y); await until(() => document.activeElement.id === 'edCanvas', undefined, 5000); const kf3 = await E(() => document.activeElement.id); await p.keyboard.press('Delete'); await until(n => edTrack().events.length === n - 1, knx.n, 5000); const kn = await E(() => edTrack().events.length); await E(() => { undo(); closeEditor(); songMode('song'); });
   ok('song/loop: after typing to Keys, double-click a part or click a note gives the editor the keys (Space plays/stops, Delete removes the note)', kf0 === 'asIn' && kf1 === 'edCanvas' && kr1 && !kr2 && kf2 === 'asIn' && kf3 === 'edCanvas' && kn === knx.n - 1, JSON.stringify({ song: kf1, space: [kr1, kr2], loop: kf3, notes: `${knx.n}→${kn}` }));
   const pl = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); const calls = []; const orig = scheduleEvent; window.scheduleEvent = function (tr, e) { calls.push(e.B); return orig.apply(this, arguments); };
     songPlay({ from: 33 }); await W(400); loopStop(); const first = calls[0], sec = first != null ? songAt(first).section.name : null;
@@ -237,7 +245,7 @@ try {
   ok('song: whole-song MP3 of the Short layout, drums (decodes back, no clipping)', Math.abs(sp.dec - 33.0) < 0.1 && sp.pk < 0 && sp.rms > -40, `${sp.dec.toFixed(2)} s, peak ${sp.pk.toFixed(2)} dBFS, RMS ${sp.rms.toFixed(1)} dB, ${sp.sec.toFixed(0)} s to make`);
   // UX-7 (QA, 14 Nov): importing a MIDI file with the Drop selected names every new track in the note
   await E(() => { songTemplate('club'); closeEditor(); songSelect(songFind('drop').id); window.__toasts = []; const o = window.toast; window.toast = function (m) { window.__toasts.push(m); return o.apply(this, arguments); }; window.__toastO = o; });
-  await (await p.$('#importFile')).uploadFile(fx('test.mid')); await W(1600);
+  await (await p.$('#importFile')).uploadFile(fx('test.mid')); await until(() => window.__toasts.some(m => /plays? in /.test(m)), undefined, 15000); await W(500);
   const mtn = await E(() => window.__toasts.filter(m => /plays? in /.test(m)).length);
   const mt = await E(() => { const m = window.__toasts.find(m => / in Drop\b/.test(m)) || ''; window.toast = window.__toastO; return m; });
   ok('song: a MIDI file imported into the Drop names both new tracks (one toast)', /Lead/.test(mt) && /Kick/.test(mt) && /play in Drop/.test(mt) && mtn === 1, `${mtn} toast: ${mt}`);
@@ -247,11 +255,11 @@ try {
   // a chords take left by check 6b would make this a re-sung take (keeps its old placement, no toast), so start from no chords take
   await E(() => { PROJ.tracks.filter(t => t.take === 'chords').forEach(t => removeTrack(t.id)); songTemplate('short'); songSelect('intro'); window.__toasts = []; const o = toast; window.toast = function (m) { window.__toasts.push(m); return o.apply(this, arguments); };
     runActions([{ type: 'add_melody' }]); window.__ref = PROJ.tracks[PROJ.tracks.length - 1].id; ASSIST.run('let me sing the chords'); });
-  await p.waitForFunction(() => PROJ.tracks.some(t => t.take === 'chords') && LOOP.state !== 'take', { timeout: 40000 }).catch(() => {}); await W(1300); // the toast shows 0.9 s after the take
+  await p.waitForFunction(() => PROJ.tracks.some(t => t.take === 'chords') && LOOP.state !== 'take', { timeout: 40000 }).catch(() => {}); await until(() => window.__toasts.some(m => /Sung chords/.test(m)), undefined, 10000); await W(400); // the toast shows 0.9 s after the take
   const sg = await E(() => { const S = songSections(), t = PROJ.tracks.find(t => t.take === 'chords'), on = id => S.filter(s => s.parts[id] && s.parts[id].on).map(s => s.name).join(',');
     const r = { mode: SONG.view.mode, sung: t ? on(t.id) : null, ref: on(window.__ref), toast: window.__toasts.find(m => /Sung chords/.test(m)) || null, n: window.__toasts.filter(m => /Sung chords.* plays? in /.test(m)).length }; loopStop(); return r; });
   ok('song: sing the chords in Song mode → plays in the selected section like an added part, and one toast says so', sg.mode === 'song' && sg.sung === 'Intro' && sg.sung === sg.ref && /^“Sung chords” plays in Intro\. Click its empty parts/.test(sg.toast || '') && sg.n === 1, JSON.stringify(sg));
-  const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); await new Promise(r => setTimeout(r, 600)); return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
+  const before = await E(async () => { songTemplate('short'); PROJ.name = 'Before reload'; saveProject(); /* QA-2: wait for the autosave to land (local copy + songs list), not 600 ms */ for (const t0 = Date.now(); Date.now() - t0 < 30000; await new Promise(r => setTimeout(r, 100))) { let r = null; try { r = await IDB.get(PROJ.id, 'projects'); } catch (e) {} if (!projSaveT && (store.get('project', {}) || {}).name === 'Before reload' && r && r.name === 'Before reload' && /^Saved/.test($('#saveState').textContent)) break; } return { id: PROJ.id, n: PROJ.tracks.length, s: songSections().length }; });
   await p.reload({ waitUntil: 'load', timeout: 60000 }); await W(1500);
   await p.waitForFunction(() => { const s = document.querySelector('#saveState'); return s && /New song/.test(s.textContent); }, { timeout: 15000 }).catch(() => {}); // keepLastSong is async: wait for it on a busy machine
   const rl = await E(async id => { const n0 = PROJ.tracks.length, name0 = PROJ.name; let r = null;
@@ -425,5 +433,5 @@ try {
   ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
-await b.close();
+await closeChrome();
 const failed = results.filter(x => !x).length; console.log(failed ? `SMOKE FAILED: ${failed} of ${results.length}` : `SMOKE OK: ${results.length} checks`); process.exit(failed ? 1 : 0);

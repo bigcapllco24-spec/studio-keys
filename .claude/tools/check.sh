@@ -5,6 +5,7 @@
 # 3) runs the headless smoke test (tests/smoke.mjs)
 set -u; cd "$(git rev-parse --show-toplevel)"; fail=0
 TD=$(mktemp -d /tmp/sk-check.XXXXXX); export TD  # own temp folder, so several checks can run at once (worktrees)
+trap 'rm -rf "$TD"' EXIT; T0=$SECONDS; took(){ printf '%dm%02ds' $(((SECONDS-T0)/60)) $(((SECONDS-T0)%60)); }
 cp index.html "$TD/index-before.html" 2>/dev/null || true
 python3 tools/build.py >/dev/null || { echo "FAIL build"; exit 1; }
 if ! cmp -s index.html "$TD/index-before.html"; then echo "NOTE index.html was rebuilt from src/ (commit it)"; fi
@@ -20,5 +21,6 @@ if ! node -e "require.resolve('puppeteer-core')" 2>/dev/null; then
   if [ ! -d /tmp/sk-test/node_modules/puppeteer-core ]; then mkdir -p /tmp/sk-test && (cd /tmp/sk-test && npm i --silent --no-audit --no-fund puppeteer-core >/dev/null 2>&1) || echo "NOTE couldn't install puppeteer-core"; fi
   export SK_NODE_MODULES=/tmp/sk-test/node_modules
 fi
-node tests/smoke.mjs || fail=1
-[ $fail -eq 0 ] && echo "CHECK OK" || { echo "CHECK FAILED"; exit 1; }
+# the smoke test stops itself (and its Chrome) after 15 minutes; timeout is the backstop if node itself hangs
+timeout -k 20 1200 node tests/smoke.mjs || fail=1
+[ $fail -eq 0 ] && echo "CHECK OK in $(took)" || { echo "CHECK FAILED in $(took)"; exit 1; }
