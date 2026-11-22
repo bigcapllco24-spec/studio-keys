@@ -525,7 +525,9 @@ function toneFix(t){
   if(!role&&/\b(still|even more|further|again)\b/.test(t)&&last&&last.role!=='mix') role=last.role;
   const A=[], hz=x=>x>=1000?(x/1000).toFixed(1)+' kHz':x+' Hz';
   const eq=(T,band,d)=>{ const f={low:'lo',mid:'mid',high:'hi'}[band]; A.push({type:'mix',track:T.id,[band]:clamp(Math.round((T[f]||0)+d),-15,15)}); };
-  const cut=T=>{ const cur=(T.fx&&T.fx.hp)||20, [mn,st,mx]=TONE_HP[T.role]||[120,1.4,400], v=Math.min(mx,Math.max(mn,st<2?Math.round(cur*st):cur+st)); if(v>cur) A.push({type:'track_fx',track:T.id,effect:'low cut',amount:v}); return Math.max(v,cur); };
+  /* a melody's low cut stays under its lowest note, so the cut never thins the tune itself (QA, 22 Nov bug 8: 308 Hz on a melody down to C3) */
+  const floorHz=T=>{ if(T.role!=='melody'||T.kind!=='notes'||!(T.events||[]).length) return Infinity; const lo=Math.min(...T.events.map(e=>+e.n).filter(isFinite)); return isFinite(lo)?Math.round(440*Math.pow(2,(lo-69)/12)*0.85):Infinity; };
+  const cut=T=>{ const cur=(T.fx&&T.fx.hp)||20, [mn,st,mx]=TONE_HP[T.role]||[120,1.4,400], v=Math.min(mx,floorHz(T),Math.max(mn,st<2?Math.round(cur*st):cur+st)); if(v>cur) A.push({type:'track_fx',track:T.id,effect:'low cut',amount:v}); else if(floorHz(T)<Infinity) keptLow.add(T); return Math.max(v,cur); }, keptLow=new Set();
   const more=kind==='warm'?' Say “warmer” again to go further.':` Say “still ${{mud:'muddy',box:'boxy',harsh:'harsh',dull:'dull',thin:'thin'}[kind]}” to go further.`;
   if(role){
     const list=PROJ.tracks.filter(x=>x.role===role), part=TONE_PART[role]||role;
@@ -544,9 +546,10 @@ function toneFix(t){
   const all=PROJ.tracks; ASSIST.lastTone={role:'mix',kind};
   if(!all.length) return {actions:[],reply:'There’s nothing in the song to mix yet. Start with drums or name an artist.'};
   if(kind==='mud'){
-    const up=all.filter(x=>x.role!=='bass'&&x.role!=='drums');
+    const up=all.filter(x=>x.role!=='bass'&&x.role!=='drums'&&!x.mute); /* a muted part isn't heard, so it isn't muddying anything (QA, 22 Nov bug 8) */
+    if(!up.length&&all.some(x=>x.mute&&x.role!=='bass'&&x.role!=='drums')) return {actions:[],reply:'Everything above the bass that plays is already clean, and the muted parts aren’t heard. Tell me which part sounds muddy: “the bass is muddy” or “the kick is boomy”.'};
     if(!up.length) return {actions:[],reply:!all.some(x=>x.role==='bass')?'So far it’s just the drums, and their low end is the groove. Say “the kick is boomy” if it’s the kick.':'So far it’s just drums and bass, and their low end is the groove. Tell me which one: “the bass is muddy” or “the kick is boomy”.'};
-    const done=up.map(T=>{ const v=cut(T), d=Math.max(-3,-12-(T.lo||0)); if(d<0) eq(T,'low',d); return `${T.name} (${hz(v)})`; });
+    const done=up.map(T=>{ const v=cut(T), d=Math.max(-3,-12-(T.lo||0)); if(d<0) eq(T,'low',d); return keptLow.has(T)?`${T.name} (low cut kept at ${hz(v)}, under its lowest note)`:`${T.name} (${hz(v)})`; });
     return {actions:A,reply:`Cleaned up the mix: higher low cuts and 3 dB less low end on ${done.length>1?done.slice(0,-1).join(', ')+' and '+done[done.length-1]:done[0]}; bass and kick untouched.`+more};
   }
   if(kind==='warm'){ all.forEach(T=>eq(T,'high',-2)); return {actions:A,reply:'Warmed up the mix: 2 dB less highs on every part.'+more}; }

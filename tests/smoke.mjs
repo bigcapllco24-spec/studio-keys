@@ -571,6 +571,11 @@ try {
   // AI-14 bug 7: "make it a short song" is the Short layout
   const a14b7 = await E(async () => { const R = []; for (const x of ['make it a short song', 'make it a short track', 'chhota song bana do']) { await A14.song(false); const r = await A14.say(x); loopStop(); R.push({ x, ok: /^Intro\[.*\] Drop\[.*\] Outro\[/.test(r.secs) && songSections().length === 3 && r.steps === 1, s: r.secs.slice(0, 40) }); } return R; });
   ok('AI-14 bug 7: "make it a short song", "make it a short track" and "chhota song bana do" make the Short layout (Intro, Drop, Outro), one undo step', a14b7.every(x => x.ok), JSON.stringify(a14b7.filter(x => !x.ok)));
+  // AI-14 bug 8: "the mix is muddy" skips muted parts (a voice note) and keeps a melody's low cut under its lowest note
+  const a14b8 = await E(async () => { await A14.song(false, true); const v = PROJ.tracks.find(t => t.name === 'sing'); runActions([{ type: 'mix', track: v.id, mute: true }]); const m = PROJ.tracks.find(t => t.name === 'Melody'); m.events.push({ b: 0, d: 0.5, n: 48, v: 0.8 }); saveProject();
+    const fx0 = JSON.stringify(v.fx || {}), lo0 = v.lo, r = await A14.say('the mix is muddy'), r2 = await A14.say('still muddy'), lowHz = 440 * Math.pow(2, (48 - 69) / 12);
+    return { voice: JSON.stringify(v.fx || {}) === fx0 && v.lo === lo0 && !/\bsing\b/.test(r.reply), mel: ((m.fx || {}).hp || 0) <= Math.max(220, lowHz), hp: (m.fx || {}).hp, r: r.reply.slice(0, 120) }; });
+  ok('AI-14 bug 8: "the mix is muddy" (twice) leaves a muted voice note alone and keeps the melody\'s low cut under its lowest note (C3)', a14b8.voice && a14b8.mel, JSON.stringify(a14b8));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
