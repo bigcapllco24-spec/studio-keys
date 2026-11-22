@@ -112,6 +112,7 @@ input[type=checkbox]{accent-color:var(--accent)}
 .seen-row:last-child{border-bottom:0}
 .seen-row .v{font:500 12px var(--mono);color:var(--muted);text-align:right}
 .seen-row>span:nth-child(2){white-space:nowrap}
+.seen-row.ped{grid-template-columns:auto minmax(0,1fr) auto}.seen-row.ped>span:nth-child(2){overflow:hidden;text-overflow:ellipsis}.seen-row.ped .v{white-space:nowrap}
 .seen-row.yes .v{color:var(--ink)}
 .empty{padding:14px;border:1px dashed var(--line);border-radius:9px;color:var(--muted);font-size:14px;display:flex;flex-direction:column;gap:10px}
 .empty strong{color:var(--ink)}
@@ -2552,8 +2553,8 @@ const saveDevices=()=>store.set('devices',DEVICES);
 /* sustain direction is now learned from use (see pedal()); an older guess made from the first pedal message alone is dropped,
    a Flip the player pressed is kept */
 for(const k in DEVICES){ const d=DEVICES[k]; if(!d||typeof d!=='object'||!('pedalAuto' in d)) continue; if(d.pedalAuto) delete d.pedalRev; else if(d.pedalRev && !d.pedalHow) d.pedalHow='user'; delete d.pedalAuto; }
-/* an automatic flip is now kept for the visit only (see pedalDecide); one saved by an earlier test build is dropped,
-   and it never counted as a confirmed normal pedal either */
+/* the pedal is never flipped on its own now (see pedalDecide); an automatic flip saved by an earlier test build is
+   dropped, and it never counted as a confirmed normal pedal either */
 { let ch=false; for(const k in DEVICES){ const d=DEVICES[k]; if(!d||typeof d!=='object'||!d.pedalRev||d.pedalHow==='user') continue; if(d.pedalHow==='use') delete d.pedalHow; delete d.pedalRev; ch=true; } if(ch) saveDevices(); }
 const devKey=inp=>(inp.manufacturer||'')+'|'+inp.name;
 function settingsFor(inp){ if(!inp) return null; const k=devKey(inp); if(!DEVICES[k]) DEVICES[k]={}; const d=DEVICES[k]; d.cc=d.cc||{}; d.notes=d.notes||{}; d.rel=d.rel||{}; d.how=d.how||{}; return d; }
@@ -2765,19 +2766,20 @@ function encMode(ds,S,num,val,aux){
   }
   return m||null;
 }
-/* sustain pedal direction. Some pedals are wired the other way round (they send "off" when pressed). The first message
-   proves nothing: a pedal held down while the page connects sends "off" when it is lifted, and some keyboards send "off"
-   when they connect or change sound. So every pedal starts as a normal one and the direction is learned from use:
-   in legato pedalling the short lift between two chords (keys let go in the long hold before, a new chord struck in the
-   lift and caught by the pedal soon after) is the pedal's "up" side.
-   Learning never stops on its own: only the player's Flip, Undo or Keep (pedalHow 'user') ends it.
-   An automatic flip (3 such changes more the reversed way, 5 if this keyboard was seen working normally before) lasts for
-   this visit only and is never saved, so a wrong guess can't stick; 2 normal changes undo it again (and the next
-   automatic flip in that visit needs 5). The toast offers
-   Undo and Keep (Keep saves it as the player's choice). Two normal changes save "seen working normally" (pedalHow 'use').
-   A long hold on its own never suggests a flip (pads are held for a long time); it needs reversed-looking changes too. */
-const NOTE_EV=[], AUTO_REV=new WeakMap();
-const pedalRevOf=ds=>ds.pedalHow==='user'?!!ds.pedalRev:!!AUTO_REV.get(ds);
+/* sustain pedal direction. Some pedals are wired the other way round (they send "off" when pressed). The pedal is NEVER
+   flipped on its own: every pedal works the normal way until the player says otherwise (Flip on its row, or Flip in the
+   one suggestion below), and that is saved as the player's choice (pedalHow 'user').
+   A normal pedal tapped briefly on chords sends exactly what a reversed pedal played legato sends, so a suggestion needs
+   two separate signs:
+   1. the first pedal message from this keyboard was "off" while it caught a chord (30-600 ms after a key went down, keys
+      still held): a reversed pedal pressed from rest. A normal pedal's first message is "on" (pressed); when it was held
+      while the page connected its first message is a lift, which counts only in that same catching moment.
+   2. reversed-looking legato changes (in the short lift between two chords a new chord is struck and caught by the
+      pedal soon after): 3 more than normal ones, or 2 and none normal followed by a long ringing hold.
+   At most one suggestion per visit. "It's fine" saves the pedal as normal (the player's choice), so it never asks again.
+   Two normal changes save "seen working normally" (pedalHow 'use'), and such a keyboard is never asked about. */
+const NOTE_EV=[]; let PEDAL_ASKED=false;
+const pedalRevOf=ds=>ds.pedalHow==='user'&&!!ds.pedalRev;
 function noteEv(on){ NOTE_EV.push({t:M.ts||performance.now(),on}); if(NOTE_EV.length>128) NOTE_EV.shift(); if(!on) pedalHint(); }
 const evIn=(on,t0,t1)=>NOTE_EV.some(e=>e.on===on&&e.t>=t0&&e.t<=t1);
 const firstEv=(on,t0,t1)=>NOTE_EV.find(e=>e.on===on&&e.t>=t0&&e.t<=t1);
@@ -2792,33 +2794,34 @@ function toastAct(msg,label,fn,more){
 function pedalOn(ds,v){ return v!=null && (pedalRevOf(ds)?v<64:v>=64); }
 function pedalApply(inp,ds){ setSustain(pedalOn(ds,seenFor(inp).ccs.get(64))); scheduleSeen(); }
 function setPedalUser(inp,rev){
-  const ds=settingsFor(inp); ds.pedalRev=rev; ds.pedalHow='user'; AUTO_REV.delete(ds); saveDevices(); pedalApply(inp,ds); renderSeen();
+  const ds=settingsFor(inp); ds.pedalRev=rev; ds.pedalHow='user'; saveDevices(); pedalApply(inp,ds); renderSeen();
 }
 function flipPedal(inp){
   const ds=settingsFor(inp); setPedalUser(inp,!pedalRevOf(ds));
   toast(ds.pedalRev?`${inp.name}: sustain pedal flipped. It now holds notes when it sends “off”.`:`${inp.name}: sustain pedal set back to normal.`);
 }
-function pedalDecide(inp,ds,P){
-  const net=P.rev-P.norm, auto=!!AUTO_REV.get(ds);
-  if(P.norm-P.rev>=2 && ds.pedalHow!=='use'){ ds.pedalHow='use'; saveDevices(); }
-  if(!auto && net>=(ds.pedalHow==='use'||P.undone?5:3)){
-    AUTO_REV.set(ds,true); pedalApply(inp,ds);
-    toastAct(`The sustain pedal on ${inp.name} seems to work the other way round, so it’s flipped for now.`,'Undo',()=>flipPedal(inp),[['Keep',()=>{ setPedalUser(inp,true); toast(`${inp.name}: sustain pedal kept flipped.`); }]]);
-  } else if(auto && net<=1){
-    AUTO_REV.delete(ds); P.undone=true; pedalApply(inp,ds); toast(`The sustain pedal on ${inp.name} works the normal way after all, so it’s back to normal.`);
-  }
+const pedalMayAsk=(ds,P)=>!PEDAL_ASKED && !ds.pedalHow && P.fromUp;
+function pedalAsk(inp){
+  PEDAL_ASKED=true; const many=M.inputs.filter(i=>M.seen[i.id]&&M.seen[i.id].ccs.has(64)).length>1;
+  toastAct(`Notes ringing when your foot is up? Flip the ${many?inp.name+' ':''}pedal`,'Flip',()=>flipPedal(inp),
+    [['It’s fine',()=>{ setPedalUser(inp,false); toast(`OK, the ${inp.name} pedal stays as it is.`); }]]);
 }
+function pedalDecide(inp,ds,P){
+  if(P.norm-P.rev>=2 && ds.pedalHow!=='use'){ ds.pedalHow='use'; saveDevices(); }
+  if(pedalMayAsk(ds,P) && P.rev-P.norm>=3) pedalAsk(inp);
+}
+/* a long ringing hold (10 s or more, 8 or more keys let go) only adds to legato evidence; a long hold on its own never asks */
 function pedalHint(){
   const s=M.pedalSrc; if(!s||!SUS.pedal) return; const {inp,ds,S}=s, P=S.ped;
-  if(!P||P.hinted||ds.pedalHow||AUTO_REV.get(ds)||P.rev<2||P.norm) return; const ph=P.ph[P.ph.length-1], now=M.ts||performance.now();
+  if(!P||!pedalMayAsk(ds,P)||P.rev<2||P.norm) return; const ph=P.ph[P.ph.length-1], now=M.ts||performance.now();
   if(now-ph.t<10000 || NOTE_EV.filter(e=>!e.on&&e.t>=ph.t).length<8) return;
-  P.hinted=true; toastAct(`Notes keep ringing after you lift the pedal? The ${inp.name} pedal may be wired the other way round.`,'Flip it',()=>flipPedal(inp));
+  pedalAsk(inp);
 }
+/* the first pedal message is "off" while it catches a chord: keys held, one struck 30-600 ms before */
+const pedalCatch=t=>pressed.size>0 && NOTE_EV.some(e=>e.on&&e.t>=t-600&&e.t<=t-30);
 function pedal(inp,ds,S,val){
-  const t=M.ts||performance.now(), hi=val>=64, P=S.ped||(S.ped={ph:[],rev:0,norm:0,hinted:false});
-  if(val!==0 && val!==127 && ds.pedalHow!=='user'){ // a half-damper pedal, not a reversed one
-    if(ds.pedalHow!=='use'){ ds.pedalHow='use'; saveDevices(); }
-    if(AUTO_REV.get(ds)){ AUTO_REV.delete(ds); scheduleSeen(); } }
+  const t=M.ts||performance.now(), hi=val>=64, P=S.ped||(S.ped={ph:[],rev:0,norm:0,fromUp:!hi&&pedalCatch(t)});
+  if(val!==0 && val!==127 && ds.pedalHow!=='user' && ds.pedalHow!=='use'){ ds.pedalHow='use'; saveDevices(); } // a half-damper pedal, not a reversed one
   const last=P.ph[P.ph.length-1];
   if(!last || last.hi!==hi){
     P.ph.push({hi,t}); if(P.ph.length>3) P.ph.shift();
@@ -2954,7 +2957,7 @@ function scheduleSeen(){ if(seenPending) return; seenPending=true; requestAnimat
 $('#devSeen').addEventListener('click',e=>{ const b=e.target.closest('[data-pedalflip]'); if(!b) return; const inp=M.inputs.find(i=>i.id===b.dataset.pedalflip); if(inp) flipPedal(inp); });
 function renderSeen(){
   const box=$('#devSeen'), p=primaryInput(), S=p?seenFor(p):null;
-  const row=(label,on,val)=>`<div class="seen-row${on?' yes':''}"><span class="led${on?' sig':''}"></span><span>${label}</span><span class="v">${val}</span></div>`;
+  const row=(label,on,val,cls)=>`<div class="seen-row${on?' yes':''}${cls?' '+cls:''}"><span class="led${on?' sig':''}"></span><span>${label}</span><span class="v">${val}</span></div>`;
   if(!S){ box.innerHTML=['Keys','Pads','Knobs','Pitch bend','Mod wheel','Sustain pedal'].map(l=>row(l,false,'—')).join(''); return; }
   const span=S.low!=null?S.high-S.low+1:0, sizes=[25,32,37,49,61,73,76,88], est=sizes.find(s=>s>=span)||88;
   const ds=settingsFor(p), prof=profileFor(p), ccs=[...S.ccs.keys()].filter(n=>!STD_CC[n]).sort((a,b)=>a-b);
@@ -2964,8 +2967,8 @@ function renderSeen(){
   const btnName=n=>{ const t=ds.cc[n]||prof.buttons[n]; return 'CC '+n+(t&&LEARN_LABEL[t]?' '+LEARN_LABEL[t]:''); };
   const list=(a,f)=>a.slice(0,6).map(f).join(', ')+(a.length>6?` +${a.length-6}`:'');
   const pedals=(M.selected==='all'?M.inputs:[p]).filter(i=>M.seen[i.id]&&M.seen[i.id].ccs.has(64));
-  const pedalRow=i=>{ const d=settingsFor(i), many=pedals.length>1||i!==p;
-    return row('Sustain pedal'+(many?` <span class="muted">· ${esc(i.name)}</span>`:''),true,`${pedalRevOf(d)?(d.pedalHow==='user'?'Reversed':'<span title="Flipped for this visit only, from how you play">Reversed?</span>'):'CC 64'} <button class="btn small ghost" type="button" data-pedalflip="${esc(i.id)}" aria-label="Flip the sustain pedal of ${esc(i.name)}" title="Use this if notes hold when you let go of the pedal">Flip</button>`); };
+  const pedalRow=i=>{ const d=settingsFor(i), rev=pedalRevOf(d), many=pedals.length>1||i!==p;
+    return row('Sustain pedal'+(many?` <span class="muted" title="${esc(i.name)}">· ${esc(i.name)}</span>`:''),true,`${rev?'Reversed':'CC 64'} <button class="btn small ghost" type="button" data-pedalflip="${esc(i.id)}" aria-label="Flip the sustain pedal of ${esc(i.name)} (now ${rev?'reversed':'normal'})" title="${rev?'Set this pedal back to normal':'Use this if notes ring when your foot is up'}">Flip</button>`,'ped'); };
   box.innerHTML=
     row('Keys',S.low!=null,S.low!=null?`${noteName(S.low)}–${noteName(S.high)}`:'Play a few notes')+
     row('Velocity',S.count>0,S.count?`${S.vmin}–${S.vmax}`:'—')+

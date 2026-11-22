@@ -112,6 +112,7 @@ input[type=checkbox]{accent-color:var(--accent)}
 .seen-row:last-child{border-bottom:0}
 .seen-row .v{font:500 12px var(--mono);color:var(--muted);text-align:right}
 .seen-row>span:nth-child(2){white-space:nowrap}
+.seen-row.ped{grid-template-columns:auto minmax(0,1fr) auto}.seen-row.ped>span:nth-child(2){overflow:hidden;text-overflow:ellipsis}.seen-row.ped .v{white-space:nowrap}
 .seen-row.yes .v{color:var(--ink)}
 .empty{padding:14px;border:1px dashed var(--line);border-radius:9px;color:var(--muted);font-size:14px;display:flex;flex-direction:column;gap:10px}
 .empty strong{color:var(--ink)}
