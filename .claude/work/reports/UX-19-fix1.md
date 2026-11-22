@@ -140,3 +140,37 @@ Head `ebdffc1`, pushed on `preview-ux-19` (never main). `bash .claude/tools/chec
 4. Remove the bass and chords, then play or draw your own C major tune on a new track. Pick "D major": your tune moves up 2 and fits D major.
 5. On a new song, sing a bassline, then tell Keys "add house drums in F minor". Your sung notes stay exactly as you sang them; only the key label changes.
 6. Make it a full song and zoom out in Song view. In short drum parts, the "no clap…" label shows its start and ends in "…", disappears when a part gets very narrow, and the full text is always in the hover tooltip.
+
+## Fix 1e (22 Nov 2026, lead: a key inside "add a melody in F minor" left the old parts behind)
+Head `2a9e73a`, pushed on `preview-ux-19` (never main). `bash .claude/tools/check.sh`: CHECK OK, SMOKE OK 94 checks.
+
+- **Change:**
+  - **Key inside a part request.** When a key comes inside a request for a part, `ACT.key` now calls `setKey(k,{move:'gen'})`: only Keys' generated parts move (`t.gen`, with their patterns), using the same rules as a menu pick (from `noteKey`, tonic rule, relative key relabels).
+    - The user's own parts never move: sung, played, drawn, or a generated part they edited in the note editor (editing clears `gen`).
+    - If every pitched part is the user's own, only the label changes, as before.
+    - `noteKey` updates only when nothing of the user's was left behind.
+  - **Reply.** When user parts stayed, it now says so: "Key F minor, Keys’ parts moved down 4 semitones, your sung bassline stays as you sang it". With several parts it says "your own parts stay as you made them".
+  - **Files:** `src/studio.js` (`keyedLists(genOnly)`, `keyUserParts`, `keyUserNote`, `setKey`) and `src/actions.js` line 160 only (the `ACT.key` line, still one line).
+- **Numbers:**
+  - **Owner flow, then "add a melody in F minor"** (offline parses to key + add_melody), 6 runs: 3 with A minor set first, 3 on auto.
+    - Bass and chords moved -4 every time, and every note of the song is 100% in F minor.
+    - The new melody against the other parts: **0 clashes** (0/20, 0/19, 0/20, 0/20, 0/18, 0/18; tester's semitone-against-a-sounding-note count).
+    - Reply: "Key F minor, notes moved down 4 semitones | Melody (new track)…".
+  - **Mixed song** (sung bass, generated chords, key A minor set, "add a melody in F minor"): the chords moved to F minor, the sung bass is unchanged, and the reply includes "your sung bassline stays as you sang it".
+  - **Sung bass and "add house drums in F minor":** 0 on auto, and 0 with the key set to A minor.
+  - **[key F minor, vibe Ben Böhmer] over a sung bass:** 0 in both orders. The reply for key-first adds "your sung bassline stays as you sang it".
+  - **Fix-1d sequences, all still as before:**
+    - C major → A major → D minor: 0, 0, +5, 100%. C major → auto → D minor: +5.
+    - A major → D major: 0, +5. Undo brings back the notes, the label and `noteKey`.
+    - Key alone: +2. Key plus tempo: +2.
+    - 16/16 owner flows. 12/12 fixed seeds, including bass-only. Stale-key case +2, 100%.
+- **Smoke:** the fix-1 line adds the sung bass with a key set ("add house drums in F minor" moves 0). It also adds a prog-0656 owner loop with A minor set, then "add a melody in F minor": bass and chords -4, 100% in F minor, 0 melody clashes, and the reply says the notes moved.
+- **Known limit (mixed songs):** when a song has both a user part and Keys' parts, a key inside a part request moves only Keys' parts, as asked. Keys' parts and the user's part can then sit in different keys. The reply says the user's part stayed, so they can pick the key in the menu to move everything.
+
+## Try it, final (test link https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-19/)
+1. Start a new song. Tell Keys "make a house beat", then "add a bassline", then "add some chords". Leave the Key menu on "Key: auto".
+2. Pick "D minor" in the Key menu. A note says the notes moved up 5 into D minor. Play it: the bass and chords sound right together in the new key, and the drums didn't change. Press Undo once and it's back as it was, on "Key: auto".
+3. Pick "C major", which uses the same notes as A minor. Nothing moves, and the note says "Key set to C major, notes unchanged". Pick "A major": nothing moves either (same root note).
+4. Now tell Keys "add a melody in F minor". The bass and chords move to F minor first, and the new melody plays along with them without clashing.
+5. On a new song, sing a bassline, then tell Keys "add house drums in F minor". Your sung notes stay exactly as you sang them, and Keys says so; only the key label changes.
+6. Make it a full song and zoom out in Song view. In short drum parts, the "no clap…" label shows its start and ends in "…", disappears when a part gets very narrow, and the full text is always in the hover tooltip.
