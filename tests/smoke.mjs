@@ -576,6 +576,9 @@ try {
     const fx0 = JSON.stringify(v.fx || {}), lo0 = v.lo, r = await A14.say('the mix is muddy'), r2 = await A14.say('still muddy'), lowHz = 440 * Math.pow(2, (48 - 69) / 12);
     return { voice: JSON.stringify(v.fx || {}) === fx0 && v.lo === lo0 && !/\bsing\b/.test(r.reply), mel: ((m.fx || {}).hp || 0) <= Math.max(220, lowHz), hp: (m.fx || {}).hp, r: r.reply.slice(0, 120) }; });
   ok('AI-14 bug 8: "the mix is muddy" (twice) leaves a muted voice note alone and keeps the melody\'s low cut under its lowest note (C3)', a14b8.voice && a14b8.mel, JSON.stringify(a14b8));
+  // AI-14 (UX-19 report): "set the key to F sharp minor", "change the key to …", "set the key to F# minor", "make it F sharp minor" set the key offline
+  const a14k = await E(() => ['set the key to F sharp minor', 'change the key to D minor', 'set the key to F# minor', 'make it F sharp minor', 'transpose to E minor'].map(x => (localBrain(x).actions || []).filter(a => a.type === 'key').map(a => keyName(parseKey(a.key))).join()));
+  ok('AI-14: "set the key to F sharp minor", "change the key to D minor", "set the key to F# minor", "make it F sharp minor" and "transpose to E minor" are key changes offline', a14k.join('|') === 'F♯ minor|D minor|F♯ minor|F♯ minor|E minor', a14k.join('|'));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

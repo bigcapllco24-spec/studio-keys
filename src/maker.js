@@ -208,7 +208,8 @@ function brainCore(raw,sws){
   if((m=t.match(/(\d{2,3}(?:\.\d)?)\s*bpm/)||t.match(/tempo (?:to |of |at )?(\d{2,3})/)||tempoAt(t,style||artist))) A.push({type:'tempo',bpm:+m[1]});
   else if(/\b(faster|speed (it )?up|quicker|slower|slow (it )?down)\b/.test(t)&&!/\bhats\b/.test(t)&&!FASTER_PART.test(t)&&PROJ.tracks.length) A.push({type:'tempo',bpm:Math.round(CTRL.bpm)+(/\b(slower|slow (it )?down)\b/.test(t)?-5:5)*(/\b(a lot|much|way)\b/.test(t)?2:1)});
   if((m=t.match(/\b(\d{1,2})\s*bars?\b/))) A.push({type:'bars',bars:+m[1]});
-  if((m=t.match(/\b(?:in|key of|key)\s+([a-g](?:\s*(?:sharp|flat|#|b))?\s*(?:major|minor|maj|min|m)?)\b/)) && /major|minor|maj|min|\bkey\b|sharp|flat|#/.test(m[0])) A.push({type:'key',key:m[1]});
+  /* "set the key to F sharp minor", "change the key to D minor", "make it F# minor", "transpose to E minor" (UX-19 report, 22 Nov) */
+  if((m=t.match(/\b(?:in|key of|key(?: to| into| as| in)?|(?:make|put|turn|switch|change|move|transpose|shift|set) (?:it|the song|the track|this|everything|the whole song)(?: to| into| in| over to)?|(?:transpose|switch|change|move|shift|modulate) (?:it )?(?:to|into))\s+([a-g](?:\s*(?:sharp|flat|#|b))?\s*(?:major|minor|maj|min|m)?)(?=[\s,.!?]|$)/)) && /major|minor|maj|min|\bkey\b|sharp|flat|#/.test(m[0])) A.push({type:'key',key:m[1]});
   if(/\b(new song|new project|start over)\b/.test(t)) return {actions:[{type:'new_project'}],reply:'Started a new song. Your last one is saved.'};
   if(/\bsave\b/.test(t)) A.push({type:'save'});
   if(/\b(stop|pause)\b/.test(t)) A.push({type:'transport',do:'stop'});
@@ -316,7 +317,7 @@ function partEditFix(t,raw){
 function focusText(raw){ const f=typeof ASSIST!=='undefined'&&ASSIST.focus, w={drums:'drums',bass:'bass',chords:'chords',melody:'melody'}[f]; if(!w) return raw;
   const t=askText(raw); if((ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0]) return raw;
   /* "make it shorter" / "make them longer" right after a part: that part's notes (QA, 22 Nov fix 2); the song or loop only when it says so */
-  if(/\b(song|track|mix|everything|whole|all|master|volume|tempo|bpm|key|loop|intro|outro|drop|break|build|section|bars?|faster|slower|swing|bounce)\b/.test(t)) return raw;
+  if(/\b(song|track|mix|everything|whole|all|master|volume|tempo|bpm|key|major|minor|loop|intro|outro|drop|break|build|section|bars?|faster|slower|swing|bounce|left|right|pan)\b/.test(t)&&!/^\s*(?:(?:and|now|ok|okay|then|maybe)\s+)*(?:a (?:bit|little|touch) |slightly |little |thoda |zara )?(?:more |further )?(?:to the |towards the |over to the )?(left|right)(?: a (?:bit|little|touch))?(?: please)?\s*$|^\s*(?:pan (?:it )?)?(?:back )?(?:to the )?(?:cent(?:re|er)|middle)(?: please)?\s*$/.test(t)) return raw;
   if(/\b(longer|shorter)\b/.test(t)&&/\bnotes?\b/.test(t)&&!/\b(it|that|this|them|those)\b/.test(t)) return raw.replace(/\b(?:the )?notes?\b/i,'the '+w+' notes');
   if(/\b(play|stop|pause|save|download|export|bounce|arrange|record|sing|hum|whistle|name|rename|undo|redo|delete|remove|again|mp3|quantize|quantise)\b/.test(t)) return raw;
   /* only a request about "it" ("make it softer", "put it on strings"); "thats it", "keep it" are not the part's name (QA, 22 Nov fix 5) */
