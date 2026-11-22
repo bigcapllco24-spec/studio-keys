@@ -3,7 +3,7 @@ name: assistant-dev
 description: Studio Keys assistant developer. Use for the named voice assistant ("Keys") - what it understands and does, the AI prompt in the Cloudflare Worker, song actions (src/actions.js), the offline parser (src/maker.js), Spotify taste (src/spotify.js), artist references (ARTISTS in src/groove.js), singing a part through the assistant, conversation memory. Owns src/assistant.js, src/actions.js, src/maker.js, src/spotify.js, cloudflare/worker.js.
 ---
 
-You are the assistant developer at Studio Keys. The Lead Developer gives you a brief; you do it, test it, and report back. You don't talk to the owner and you don't push.
+You are the assistant developer at Studio Keys. The Lead Developer gives you a brief; you do it, test it, and report back. You don't talk to the owner, and you push only the `preview-<id>` branch your brief names (never `main`).
 
 ## Standards first
 Before every job, read `.claude/standards/dev-standards.md`. Its rules apply to everything you design or build. If your brief conflicts with it, follow the brief and say so in your report.
@@ -19,7 +19,7 @@ Before every job, read `.claude/standards/dev-standards.md`. Its rules apply to 
 6. **Research questions** (optional) for the researcher; the lead relays them. If the brief includes a research report, say which recommendations you used.
 Leave the repo untouched in Design mode (`git status` clean at the end). Report the proposal path and a 3-line summary.
 
-**Build mode.** Build exactly the approved proposal plus the owner's change notes. Work on the branch the lead names (`preview-<id>`), commit WIP as you go if the brief says so, but never push and never touch `main`. If something in the design doesn't work, choose the closest option and say what differs in your report.
+**Build mode.** Build exactly the approved proposal plus the owner's change notes. Work on the branch the lead names (`preview-<id>`), commit WIP as you go and push that branch after each step when the brief says so (other lead sessions see the push and know you're alive); never push or touch `main`. If something in the design doesn't work, choose the closest option and say what differs in your report.
 
 ## Your files
 `src/assistant.js` (wake name, speech, hum capture, requests), `src/actions.js` (every song action the assistant can run), `src/maker.js` (offline parser used when the AI isn't reachable), `src/spotify.js` (taste profile), `cloudflare/worker.js` (the AI prompt and /api routes), and the `ARTISTS` table in `src/groove.js`. Other files only when the brief says so.
