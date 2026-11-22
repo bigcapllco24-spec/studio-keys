@@ -273,6 +273,11 @@ try {
   const uo = await E(async () => { const s = songSections()[0], t = PROJ.tracks[0]; songSetPart(s.id, t.id, { on: !(s.parts[t.id] && s.parts[t.id].on) }); await new Promise(r => setTimeout(r, 200)); undo(); await new Promise(r => setTimeout(r, 200)); return { name: PROJ.name, n: PROJ.tracks.length, s: songSections().length }; });
   ok('song: Undo right after opening a song stays in that song', uo.name === 'Before reload' && uo.n === before.n && uo.s === before.s, `after one change + Undo: "${uo.name}" ${uo.n} tracks, ${uo.s} sections`);
   ok('song: after opening a song the header shows when it was saved, not "New song"', /^Saved /.test(rl.label), rl.label);
+  // QA-2: the reload check above now waits for the autosave, so this one covers closing the app right after an edit (pagehide + keepLastSong save it)
+  const qc = await E(() => { PROJ.name = 'Quick close'; saveProject(); return PROJ.id; }); await p.reload({ waitUntil: 'load', timeout: 60000 });
+  const qr = await E(async id => { let r = null; for (const t0 = Date.now(); Date.now() - t0 < 30000; await new Promise(q => setTimeout(q, 200))) { try { r = await IDB.get(id, 'projects'); } catch (e) {} if (r && r.name === 'Quick close' && /New song/.test($('#saveState').textContent)) break; }
+    return { name: r && r.name, tracks: r ? r.tracks : 0, open: PROJ.tracks.length, label: $('#saveState').textContent }; }, qc);
+  ok('closing the app right after an edit keeps it: the songs list has it on the next open', qr.name === 'Quick close' && qr.tracks === before.n && qr.open === 0 && /New song/.test(qr.label), JSON.stringify(qr));
   // 9. phone width: no sideways scroll (UX-2)
   await p.setViewport({ width: 390, height: 844 }); await W(400); const sw = await E(() => document.documentElement.scrollWidth); await p.setViewport({ width: 1400, height: 1100 });
   ok('phone width has no sideways scroll', sw <= 390, `${sw} px`);
