@@ -599,7 +599,9 @@ const ACT={
       for(let i=0;i<8;i++){ if(t.role==='bass'&&i>=2){ const alt=BASS_ALT[t.bs||(STYLES[t.style||PROJ.style]||STYLES.house).bassStyle]||['sync','root8','offbeat']; t.bs=alt[(i-2)%alt.length]; }
         d=regenTrack(t); if(JSON.stringify(t.events.map(e=>[e.b,e.n,e.d]))!==old) break; }
       return d?`${t.name}: ${d}`:null; }
-    const d=regenTrack(t); return d?`${t.name}: ${d}`:null; },
+    /* a new beat is always different from the one playing (the smoke test saw the same drums about 1 in 12 times) */
+    const old=JSON.stringify(t.events.map(e=>[e.b,e.n,e.d])); let d=null; for(let i=0;i<6;i++){ d=regenTrack(t); if(JSON.stringify(t.events.map(e=>[e.b,e.n,e.d]))!==old) break; }
+    return d?`${t.name}: ${d}`:null; },
   add_bass(a){ a=Object.assign({},a,{instrument:instSaid(a)}); const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'bass')||(artist&&artist.sounds.bass)||STYLES[s].bass, I=loadI(id), seed=+a.seed||newSeed();
     const t=addPart({role:'bass',inst:id,gen:true,name:'Bassline',events:genBass(s,L_(),seed),seed,style:s,ref:artist?artist.name:undefined},Object.assign({},a,{replace:a.replace!==false&&!a.new})); freshShape(t); return `Bassline on ${I.name} in ${keyName(projectKey())}`; },
   add_chords(a){ a=Object.assign({},a,{instrument:instSaid(a)}); const {s,artist}=resolveVibe(a); adoptVibe(s,artist,a); ensureProg(); const id=resolveInst(a.instrument,'keys')||(artist&&artist.sounds.chords)||STYLES[s].chords, I=loadI(id), seed=+a.seed||newSeed();
@@ -693,7 +695,9 @@ const ACT={
     if(a.from!=null&&a.from!==''&&!/rec/.test(d)){ if(!songArranged()){ loopPlay(); return 'Playing'; } const f=String(a.from).toLowerCase(), bar=/^bar\s*(\d+)$/.exec(f);
       if(bar||/^(start|top|beginning|the start|the top|the beginning|1)$/.test(f)){ songPlay({from:bar?+bar[1]:1}); return bar?`Playing from bar ${bar[1]}`:'Playing the song from the start'; }
       const s=findSec(a.from); if(!s){ songNote(`I couldn’t find “${a.from}” in the song.`); return; } songPlay({from:s}); return `Playing from ${s.name}`; } if(/rec/.test(d)){ recordPress(); return 'Recording'; } if(PROJ.tracks.length && !TR.running){ loopPlay(); return 'Playing'; } },
-  sing(a){ const raw=String(a.part||a.role||a.track||'melody').toLowerCase(); const part=/voice|audio|note/.test(raw)&&!/melody/.test(raw)?'voice':/bass/.test(raw)?'bass':/chord|pad|harmon/.test(raw)?'chords':'melody';
+  sing(a){ /* "mute the voice note" / "turn off the recording" sent as a take (QA, 22 Nov bug 2): that track is muted, the mic stays off */
+    { const T=LAST_TEXT.text&&typeof audioMuteFix==='function'?audioMuteFix(askText(LAST_TEXT.text)):null; if(T){ if(T.actions.length) return T.actions.map(x=>ACT.mix(x)).filter(Boolean).join(', '); songNote(T.reply); BATCH.declined=true; return; } }
+    const raw=String(a.part||a.role||a.track||'melody').toLowerCase(); const part=/voice|audio|note/.test(raw)&&!/melody/.test(raw)?'voice':/bass/.test(raw)?'bass':/chord|pad|harmon/.test(raw)?'chords':'melody';
     BATCH.take=part; if(part==='melody') delete PROJ.progLocked; return part==='voice'?`Recording a voice note after the count-in: ${PROJ.bars} bars`:`Sing the ${part==='bass'?'bassline':part==='chords'?'chord roots (one note per chord)':'melody'} after the count-in: ${PROJ.bars} bars`; },
   convert(a){ const t=findTrack(a.track||'melody'); if(!t||t.kind!=='notes'||(INST.get(t.inst)||{}).percussive) return; const to=/bass/.test(a.to||'')?'bass':/chord|pad/.test(a.to||'')?'chords':'melody';
     t.events=shapePart(t.events,to,projectKey()); t.role=to; t.inst=partInst(to); loadI(t.inst); t.gen=false; t.name=(to==='bass'?'Bassline':to==='chords'?'Chords':'Melody')+' (from '+t.name.replace(/^(Sung|Hummed) /,'').toLowerCase()+')';

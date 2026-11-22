@@ -540,6 +540,12 @@ try {
   const a14b1 = await E(async () => { const R = []; for (const x of ['take the kick out of the intro and bring the bass in', 'bring the bass in at the intro', 'start the bass at the intro', 'intro se kick hata do aur bass daal do']) { await A14.song(true); const r = await A14.say(x); R.push({ x, ok: r.same && r.steps === 1 && r.added === 0 && /^Intro\[[^\]]*Bassline/.test(r.secs), r: r.secs.slice(0, 60) }); }
     await A14.song(true); const b = await A14.say('bring the bass in'); R.push({ x: 'bare', ok: b.same && b.steps === 0 && /Say which section/.test(b.reply) }); return R; });
   ok('AI-14 bug 1: "take the kick out of the intro and bring the bass in", "bring/start the bass at the intro" and "intro se kick hata do aur bass daal do" switch the bass on in the intro, same notes, one undo step; a bare "bring the bass in" asks which section', a14b1.every(x => x.ok), JSON.stringify(a14b1.filter(x => !x.ok)));
+  // AI-14 bug 2: muting a voice note mutes that audio track, never starts a take (offline and when the AI sends a sing)
+  const a14b2 = await E(async () => { const R = []; for (const x of ['mute the voice note', 'turn off the voice note', 'mute sing', 'mute the recording', 'voice note ko mute karo']) { await A14.song(false, true); const r = await A14.say(x), v = PROJ.tracks.find(t => t.name === 'sing');
+      R.push({ x, ok: v.mute && !r.take && LOOP.state !== 'counting' && r.steps === 1 && r.added === 0 }); }
+    const u = await A14.say('unmute the voice note'); R.push({ x: 'unmute', ok: !PROJ.tracks.find(t => t.name === 'sing').mute && !u.take });
+    await A14.song(false, true); LAST_TEXT.text = 'mute the voice note'; runActions([{ type: 'sing', part: 'voice' }]); LAST_TEXT.text = ''; R.push({ x: 'AI sing', ok: !BATCH.take && PROJ.tracks.find(t => t.name === 'sing').mute }); return R; });
+  ok('AI-14 bug 2: "mute the voice note", "turn off the voice note", "mute sing", "mute the recording", "voice note ko mute karo" mute the audio track (one undo step, no recording); "unmute the voice note" brings it back; an AI sing for "mute the voice note" mutes it instead', a14b2.every(x => x.ok), JSON.stringify(a14b2.filter(x => !x.ok)));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

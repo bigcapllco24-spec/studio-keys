@@ -628,8 +628,24 @@ function bringInFix(t){ const m=t.match(BRING_IN); if(!m||/\b(intro|outro|drop|b
     const ex=(off.find(s=>s.kind==='intro')||off.find(s=>s.kind==='build')||off[0]||{}).name;
     return {actions:[],reply:off.length?`The ${nm} ${are} already in the song${on.length?`, playing in ${on.length>1?on.slice(0,-1).join(', ')+' and '+on[on.length-1]:on[0]}`:''}. Say which section, like “bring the ${role==='bass'?'bass':nm} in at the ${String(ex).toLowerCase()}”, and I’ll switch it on there.`:`The ${nm} already ${role==='drums'||role==='chords'?'play':'plays'} in every section.`}; }
   return {actions:[],reply:`The ${nm} ${are} already playing. Say “another ${role==='drums'?'beat':nm}” for a new one.`}; }
+/* "mute the voice note", "turn off the recording", "mute sing" (a track's own name), "voice note ko mute karo": mute or unmute that
+   track; never a new take (QA, 22 Nov bug 2). A voice note or recording is the newest audio track; a name said picks that track. */
+const AUD_OFF=/\b(mute|silence)\b|\b(turn|switch|shut|cut)(?: [a-z0-9']+){0,4} off\b|\b(turn|switch|shut) off\b|\b(band|off|mute|bandh) (karo|kar do|kardo|kar)\b|\bband karo\b/;
+const AUD_ON=/\bunmute(d)?\b|\b(turn|switch)(?: [a-z0-9']+){0,4} (back )?on\b|\b(turn|switch) (back )?on\b|\bbring (?:back (?:the |my )?(?:[a-z0-9]+ ){0,2}|(?:the |my )?(?:[a-z0-9]+ ){1,3}back\b)|\bunmute (karo|kar do|kardo)\b|\bon (karo|kar do|kardo)\b|\b(chalu|wapas) (karo|kar do|kardo|lao|laao)\b/;
+function audioMuteFix(t){ const on=AUD_ON.test(t), off=!on&&AUD_OFF.test(t); if(!on&&!off) return null;
+  if(/\b(record|recording a|new|another|again|sing|hum|whistle)\b/.test(t.replace(/\b(?:mute|unmute) sing\b/,' ').replace(/\b(?:the|my|that|this) recording\b/,' '))&&!/\b(?:the|my|that|this) (?:voice ?notes?|recordings?)\b/.test(t)) return null;
+  const nm=v=>String(v).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), aud=PROJ.tracks.filter(x=>x.kind==='audio'), s=' '+nm(t)+' ';
+  const named=PROJ.tracks.filter(x=>x.name&&nm(x.name).length>2&&!/^(drums|bass|bassline|chords|melody|lead|keys|pads?)( \d+)?$/i.test(x.name)&&s.includes(' '+nm(x.name)+' ')).sort((a,b)=>b.name.length-a.name.length);
+  const noun=/\b(voice ?notes?|voice ?memos?|memos?|recordings?|audio( tracks?| clips?)?|clips?|samples?|vocals?|my voice)\b/.test(t);
+  let T=named[0]||null;
+  if(!T&&noun){ if(!aud.length) return /\bvocals?\b/.test(t)?null:{actions:[],reply:'There’s no voice note or recording in this song yet. Say “record a voice note” to add one.'}; T=on?([...aud].reverse().find(x=>x.mute)||aud[aud.length-1]):([...aud].reverse().find(x=>!x.mute)||aud[aud.length-1]); }
+  if(!T) return null;
+  if(on&&!T.mute) return {actions:[],reply:`${T.name} isn’t muted, so it already plays.`};
+  if(off&&T.mute) return {actions:[],reply:`${T.name} is already muted. Say “unmute ${T.name}” to bring it back.`};
+  return {actions:[{type:'mix',track:T.id,mute:!!off}],reply:off?`Muted ${T.name}. Say “unmute ${T.name}” to bring it back.`:`Unmuted ${T.name}, so it plays again.`}; }
 function muteSoloFix(t){
   { const ex=muteExceptFix(t); if(ex) return ex; }
+  { const am=audioMuteFix(t); if(am) return am; }
   /* "mute everything", "mute all the tracks": every part muted (QA, 16 Nov: not understood offline) */
   if(/^\s*(?:(?:please|ok|okay|now|can you|could you|just)\s+)*mute (?:everything|it all|all(?: the| of the)?(?: tracks| parts)?|all of it|every (?:track|part|thing)|the whole (?:song|mix|track|thing))(?: please| now| for a sec(?:ond)?)?\s*$/.test(t)){
     if(!PROJ.tracks.length) return {actions:[],reply:'There’s nothing in the song yet. Say “make a house beat” to start.'};
