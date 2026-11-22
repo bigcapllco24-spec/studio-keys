@@ -117,6 +117,8 @@ async function handleRequest(text){
   if(BATCH.sayInstead&&done.length) reply=BATCH.sayInstead;
   /* what the executor knows and the AI didn't: a clamped length, a riser played as a roll, a missing part (AI-1) */
   const notes=(BATCH.notes||[]).filter(n=>!(n.unless&&n.unless.test(reply))).map(n=>n.text);
+  /* the AI's "Turned the melody down 3 dB in the drop." next to the whole-song note: drop its untrue "in the drop" (QA, 22 Nov AI-14 fix 1) */
+  { const wn=notes.map(n=>/^That’s in the whole song, not only the ([a-z0-9 ]+):/.exec(n)).find(Boolean); if(wn&&reply) reply=reply.replace(new RegExp('\\s*\\b(?:in|during|for|on) (?:the |both |all the |each )?(?:(?:first|second|last|1st|2nd) )?'+wn[1].replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'s?(?: \\d)?\\b','gi'),'').replace(/\s+([.!?,])/g,'$1'); }
   if(BATCH.declined&&!done.length&&notes.length){ const q=(reply.match(/[^.!?]*\?\s*$/)||[''])[0].trim(); reply=notes.join(' ')+(q&&!notes.some(n=>/\?/.test(n))?' '+q:''); notes.length=0; }
   /* the AI's actions for other parts were left out (AI-9): say so, so the reply matches what changed */
   /* "make it softer" right after the bass went to the bass, not the whole song the AI said: say what really changed */
