@@ -347,6 +347,8 @@ try {
     try { ASSIST.engine = null; await full();
       R.hs = await steps('drop ke baad break daal do'); const S = songSections(), di = S.findIndex(s => s.kind === 'drop'); R.hAdd = S.length === 6 && S[di + 1].kind === 'break' && /already a 16-bar break/.test(reply()); /* AI-14 bug 6: a break is already right after the drop, so Keys says so instead of adding a second one */
       R.hs += await steps('outro mein drums mat bajao'); R.hOut = !songFind('outro').parts[dr().id].on;
+      /* AI-14 fix 1: a verb-last Hinglish request still ADDS a section where there is room: a break after Drop 2 goes before the Outro, one undo step */
+      R.hs += await steps('drop 2 ke baad break daal do'); { const S2 = songSections(), oi = S2.findIndex(s => s.kind === 'outro'); R.hB2 = S2.length === 7 && oi > 0 && S2[oi - 1].kind === 'break' && S2[oi - 2].name === 'Drop 2'; }
       await full(); R.ls = await steps('make it longer'); R.longer = songBars(); R.ls += await steps('make it shorter'); R.shorter = songBars(); R.phr = songSections().map(x => x.bars).join(',');
       await full(); await steps('make the break longer', { reply: 'The break is 8 bars longer now. Want a filter sweep into the second drop?', actions: [{ type: 'section', do: 'length', section: 'break', change: 8 }] }); R.guard = /snare roll/.test(reply()) && !/sweep/i.test(reply());
       await steps('drop the drums in the outro', { reply: 'Drums are out of the outro.', actions: [{ type: 'mix', track: 'drums', mute: true }] }); R.mute = !dr().mute && !songFind('outro').parts[dr().id].on && !!songFind('drop').parts[dr().id].on;
@@ -357,7 +359,7 @@ try {
       await full(); const bs = () => PROJ.tracks.find(t => t.role === 'bass'); await steps('take the bass out of the build', { reply: 'ok', actions: [{ type: 'mix', track: 'bass', mute: true }] }); R.outOf = !bs().mute && !songFind('build').parts[bs().id].on && !!songFind('drop').parts[bs().id].on;
       await steps('break ke baad ek aur drop daal do', { reply: 'ok', actions: [{ type: 'section', do: 'add', name: 'Drop 3', after: 'Break' }, { type: 'parts', section: 'Drop 3', in: ['all'] }, { type: 'transition', section: 'Break', to: 'snareroll' }] }); R.order = names(); R.brkEnd = JSON.stringify(songFind('break').end);
     } finally { ASSIST.engine = eng; window.fetch = of; } return R; });
-  ok('AI-1: offline Hinglish with the verb last ("drop ke baad break daal do" is understood and, with a break already there, says so (AI-14); "outro mein drums mat bajao" one undo step)', ai1c.hAdd && ai1c.hOut && ai1c.hs === 1, JSON.stringify({ add: ai1c.hAdd, outro: ai1c.hOut, steps: ai1c.hs }));
+  ok('AI-1: offline Hinglish with the verb last ("drop ke baad break daal do" is understood and, with a break already there, says so (AI-14); "outro mein drums mat bajao" one undo step; "drop 2 ke baad break daal do" adds Break 2 before the Outro, one undo step)', ai1c.hAdd && ai1c.hOut && ai1c.hB2 && ai1c.hs === 2, JSON.stringify({ add: ai1c.hAdd, outro: ai1c.hOut, break2: ai1c.hB2, steps: ai1c.hs }));
   ok('AI-1: "make it longer" on a 96-bar song is about 4 minutes, "make it shorter" goes back under 3', ai1c.longer >= 120 && ai1c.longer <= 136 && ai1c.shorter < 96 && ai1c.ls === 2, JSON.stringify({ longer: ai1c.longer, shorter: ai1c.shorter }));
   ok('AI-1: the AI\'s "filter sweep" offer becomes a snare roll; its "mute the drums" said about the outro only takes them out of the outro', ai1c.guard && ai1c.mute, JSON.stringify({ guard: ai1c.guard, mute: ai1c.mute }));
   ok('AI-1: when the AI adds its own snare roll to a new layout, the Build still ends in a beat of silence', /"gap":true/.test(ai1c.llmGap) || /kickdrop/.test(ai1c.llmGap), ai1c.llmGap);
@@ -579,6 +581,32 @@ try {
   // AI-14 (UX-19 report): "set the key to F sharp minor", "change the key to …", "set the key to F# minor", "make it F sharp minor" set the key offline
   const a14k = await E(() => ['set the key to F sharp minor', 'change the key to D minor', 'set the key to F# minor', 'make it F sharp minor', 'transpose to E minor'].map(x => (localBrain(x).actions || []).filter(a => a.type === 'key').map(a => keyName(parseKey(a.key))).join()));
   ok('AI-14: "set the key to F sharp minor", "change the key to D minor", "set the key to F# minor", "make it F sharp minor" and "transpose to E minor" are key changes offline', a14k.join('|') === 'F♯ minor|D minor|F♯ minor|F♯ minor|E minor', a14k.join('|'));
+  // AI-14 fix 1 (QA branch check, 22 Nov): the fixes after the tester's branch check. A14.ai says a phrase with the AI's actions mocked
+  await E(() => { A14.ai = async (text, actions, reply) => { const eng = ASSIST.engine, of = window.fetch; ASSIST.engine = 'llama'; window.fetch = async () => new Response(JSON.stringify({ reply: reply || 'Done.', actions }), { status: 200 }); try { return await A14.say(text); } finally { window.fetch = of; ASSIST.engine = eng; } }; });
+  const a14f1 = await E(async () => { const R = {}; for (const x of ['make the second drop bigger', 'give the second drop more energy', 'can the second drop go harder']) { await A14.song(true); const r = await A14.say(x); R[x] = r.same && r.steps === 0 && /Drop 2 already has every part/.test(r.reply) && !/the drop 2/i.test(r.reply); }
+    await A14.song(true); let r = await A14.ai('give the second drop more energy', [{ type: 'groove', track: 'drums', energy: 5 }], 'Made the second drop bigger.'); R.ai = r.same && r.steps === 0 && !/Made the second drop bigger/.test(r.reply);
+    await A14.song(true); runActions(localBrain('take the chords out of the second drop').actions); r = await A14.say('make the second drop bigger'); R.back = r.same && r.steps === 1 && /Drop 2\[[^\]]*Chords/.test(r.secs); return R; });
+  ok('AI-14 fix 1: "make the second drop bigger", "give the second drop more energy", "can the second drop go harder" answer for Drop 2 like "drop 2" does (no drum rewrite); an AI groove for it gets the same answer; with the chords out of Drop 2 they come back in', Object.values(a14f1).every(Boolean), JSON.stringify(a14f1));
+  const a14f2 = await E(async () => { const R = {}, v = () => PROJ.tracks.find(t => t.name === 'sing');
+    await A14.song(false, true); let r = await A14.ai('mute the voice note and sing the bassline', [{ type: 'mix', track: 'sing', mute: true }, { type: 'sing', part: 'bass' }]); R.ai = v().mute && r.take === 'bass';
+    await A14.song(false, true); r = await A14.ai('mute the voice note and record a new one', [{ type: 'sing', part: 'voice' }]); R.aiOne = v().mute && r.take === 'voice';
+    await A14.song(false, true); r = await A14.say('mute the voice note and sing the bassline'); R.off = v().mute && r.take === 'bass' && r.steps === 1;
+    await A14.song(false, true); r = await A14.say('mute the voice note and record a new one'); R.offNew = v().mute && r.take === 'voice';
+    await A14.song(false, true); r = await A14.ai('mute the voice note', [{ type: 'mix', track: 'sing', mute: true }, { type: 'sing', part: 'voice' }]); R.guard = v().mute && !r.take; return R; });
+  ok('AI-14 fix 2: "mute the voice note and sing the bassline" / "… and record a new one" mute the voice note AND start the take (AI actions or Basic mode); an AI sing riding along a plain "mute the voice note" still starts nothing', Object.values(a14f2).every(Boolean), JSON.stringify(a14f2));
+  const a14f3 = await E(async () => { const R = {}, P = () => Math.round(((PROJ.tracks.find(t => t.name === 'Melody').fx || {}).pan || 0) * 100);
+    await A14.song(false); await A14.say('make the melody brighter'); let r = await A14.say('right'); R.yes = P() === 0 && r.steps === 0;
+    await A14.say('pan the melody left'); r = await A14.say('right'); R.after = P() === 40 && r.steps === 1; return R; });
+  ok('AI-14 fix 3: a bare "right" after "make the melody brighter" is agreement (no pan); right after "pan the melody left" it pans the melody right', Object.values(a14f3).every(Boolean), JSON.stringify(a14f3));
+  const a14f4 = await E(async () => { const P = n => Math.round(((PROJ.tracks.find(t => t.name === n).fx || {}).pan || 0) * 100); await A14.song(false); const r = await A14.say('pan the melody left and the chords right');
+    return { ok: P('Melody') === -40 && P('Chords') === 40 && r.steps === 1 && r.added === 0 && r.same, mel: P('Melody'), ch: P('Chords'), steps: r.steps }; });
+  ok('AI-14 fix 4: "pan the melody left and the chords right" pans the melody L 40 and the chords R 40 in one undo step, no new part', a14f4.ok, JSON.stringify(a14f4));
+  const a14f5 = await E(async () => { const R = {}; await A14.song(true); const S = songSections(), br = S.find(s => s.kind === 'break'), dr = PROJ.tracks.find(t => t.role === 'drums'), drumsIn = !!(br.parts[dr.id] && br.parts[dr.id].on);
+    let r = await A14.say('make the break bigger'); R.brk = r.same && r.steps === 0 && (drumsIn || (!/already has its drums/.test(r.reply) && /not the drums/.test(r.reply)));
+    r = await A14.say('make drop 2 bigger'); R.d2 = /Drop 2 already has/.test(r.reply) && !/The drop 2/.test(r.reply);
+    await A14.song(false); const m = PROJ.tracks.find(t => t.name === 'Melody'); m.events.push({ b: 0, d: 0.5, n: 48, v: 0.8 }); saveProject(); const lowHz = 440 * Math.pow(2, (48 - 69) / 12);
+    r = await A14.say('the mix is muddy'); R.mud = ((m.fx || {}).hp || 0) <= lowHz && /Melody \(low cut down to \d+ Hz, under its lowest note\)/.test(r.reply); R.hp = (m.fx || {}).hp; return R; });
+  ok('AI-14 fix 5: "make the break bigger" says what the break really has (never "already has its drums" when it has none); "Drop 2 already has" (not "The drop 2"); "the mix is muddy" brings a melody low cut above its lowest note (C3) down under it, as the reply says', a14f5.brk && a14f5.d2 && a14f5.mud, JSON.stringify(a14f5));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
