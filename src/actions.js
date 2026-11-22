@@ -161,6 +161,26 @@ function exceptNorm(t){ const P='(?:the |my )?(?:'+KEEP_PW+')(?:(?:\\s*,\\s*|\\s
   return m?m[1]+' '+m[3]+' '+m[2]+m[4]:t; }
 /* a phrase of praise that runs straight into the request ("great chords make the melody simpler", "the drums slap change the chords"):
    a comma after the praise, so it is its own clause */
+/* spoken requests have no punctuation (Chrome speech): "ok cool the drums are sick try new chords", "the melody is perfect give me a new
+   bassline", "dont touch the drums make the melody simpler", "leave the drums and bass alone change the melody". A comma goes after the
+   filler ("ok cool"), after the praise ("…are sick") and after the protected list ("…drums alone") when a request or another part follows,
+   so each is its own clause (QA, 22 Nov fix 3) */
+const KEEP_REQ='(?:try|trying|change|give|make|new|swap|switch|replace|redo|rework|rewrite|regenerate|add|put|turn|let\'?s|lets|let|can|could|would|maybe|how about|what about|what if|i want|i need|i wanna|i\'?d like|we need|need|needs|do|get|bring|fix|tweak|vary|another|different|fresh|play|use|mute|remove|take|drop|lower|raise|boost|cut|simplify|thin|go|bring|shorten|lengthen|transpose|move|show|tell)';
+const KEEP_FILL='(?:(?:now|then|so|but|just|only|please|ok|okay|maybe|and|yeah)\\s+)*';
+const KEEP_ADJS='fine|great|good|perfect|ok|okay|cool|nice|sick|fire|dope|solid|alright|all right|amazing|awesome|lovely|spot on|on point|banging|bangin|sweet|tight|beautiful|gorgeous|excellent|brilliant|killer|sorted|right|bomb|hard|clean|super|incredible|insane|wicked|lit';
+const KEEP_LIST='(?:(?:the|my|that|this|those|these)\\s+)?(?:'+KEEP_PW+')(?:(?:\\s*,\\s*|\\s+and\\s+|\\s+or\\s+|\\s*&\\s*|\\s+)(?:(?:the|my)\\s+)?(?:'+KEEP_PW+')\\b)*';
+const KEEP_NEXT='(?=\\s+'+KEEP_FILL+KEEP_REQ+'\\b|\\s+(?:and\\s+|but\\s+|now\\s+)?(?:the|my|that|this|those|these)\\s+(?:'+KEEP_PW+')\\b)';
+function speechComma(t){
+  /* "ok cool the drums are sick", "nice nice the chords are perfect", "yeah nice the drums are fire": the filler is not praise of a part */
+  t=t.replace(new RegExp('(^|[,.!?;]\\s*)((?:(?:ok|okay|yeah|yes|yep|yo|alright|all right|cool|nice|great|sweet|right|man|wow|oh|hmm|um|so|and|perfect|awesome|dope|sick|lovely|damn|bro|dude)\\b\\s*)+?)(?=(?:the|that|this|those|these|my|your)\\s+(?:'+KEEP_PW+')\\s+(?:(?:really|just|so|totally|actually|already|pretty|still)\\s+)*(?:is|are|was|were|\'s|’s|sounds?|sounding|feels?|looks?|seems?|slaps?|bangs?|knocks?|hits?|goes|go|rocks?)\\b)','gi'),(m,a,b)=>a+b.replace(/\s+$/,'')+', ');
+  /* "<part> is/are <praise>" + a request or another part: "the drums are fine try new chords", "the drums are fine the bass is too loud" */
+  t=t.replace(new RegExp('(\\b(?:is|are|was|were|\'s|’s|sounds?|sounding|feels?|looks?|seems?)\\s+(?:(?:really|pretty|so|very|totally|just|actually|already|perfectly|quite|super|bloody|honestly|still)\\s+)*(?:'+KEEP_ADJS+')\\b(?:\\s+(?:as (?:it|they) (?:is|are)|already|to me|man|bro|dude|honestly|for real|for now|right now|though|too|as well|the way (?:it|they) (?:is|are)))*)'+KEEP_NEXT,'gi'),'$1,');
+  /* Hinglish praise + more words that name a part or ask: "drums theek hai chords badlo" */
+  t=t.replace(new RegExp('(\\b(?:theek|thik|badhiya|badiya|mast|accha|acha|achha|sahi|perfect|zabardast)\\s+(?:hai|he|h|hain|lag (?:raha|rahi|rahe) hai))(?=\\s+[^,.!?;]*\\b(?:'+KEEP_PW+'|badlo|badal\\w*|karo|kar do|banao|lagao|daalo|hatao|chahiye)\\b)','gi'),'$1,');
+  /* "dont touch the drums make the melody simpler", "leave the drums and bass alone change the melody",
+     "don't touch the drums the bass or the chords change the melody" */
+  t=t.replace(new RegExp('(\\b(?:(?:don\'?t|dont|do not|never)\\s+(?:touch|change|mess with|mess up|alter|edit|redo|tweak|move|modify|replace|vary|regenerate)|leave|keep)\\s+'+KEEP_LIST+'(?:\\s+(?:alone|as (?:it|they) (?:is|are)|intact|untouched|the same|too|as well|like (?:that|this|it is|they are)))?)(?=\\s+'+KEEP_FILL+KEEP_REQ+'\\b)','gi'),'$1,');
+  return t; }
 function praiseComma(t){ return t.replace(new RegExp('((?:^|[,.!?;]\\s*|\\b(?:and|but|so|now|then)\\s+)'+KEEP_ADJ.source.replace(/^\^\\s\*/,'')+')(?!\\s*[,.!?;]|\\s*$)','gi'),'$1,')
     .replace(new RegExp('('+KEEP_SLAP.source+')(?!\\s*[,.!?;]|\\s*$)','gi'),'$1,'); }
 const KEEP_NOT=/\b(previous|other one|old|older|last|first|original|before|earlier|better than)\b/;
@@ -168,14 +188,14 @@ const KEEP_SHAPE=/\b(louder|quieter|softer|simpler|busier|shorter|longer|brighte
 const KEEP_SEP=/(\s*(?:[,;.!?]|\s-\s|\b(?:but|and|just|though|although|however|so|only|while|whereas)\b)\s*)/;
 const KEEP_MEMO=new Map();
 function protectSaid(text){ text=String(text||''); if(KEEP_MEMO.has(text)) return KEEP_MEMO.get(text); const key=text;
-  text=praiseComma(exceptNorm(text));
+  text=praiseComma(speechComma(exceptNorm(text)));
   const orig=text.split(KEEP_SEP), kept=new Set(), drop=new Set(), cut=new Map(), praised=new Set(); let pending=[], after=false;
   const low=c=>String(c||'').toLowerCase().replace(/hi[\s-]?hats?/g,'hats'), roles=c=>PART_SAID.filter(([k,re])=>re.test(' '+low(c)+' ')).map(x=>x[0]);
   for(let i=0;i<orig.length;i+=2){ const c=low(orig[i]), R=roles(c);
     if(!c.trim()) continue; /* ", just": nothing between two separators */
     /* "the drums and the bass are fine": a half with only a part in it goes with the clause after it;
        "keep the drums and bass, …", "leave the drums, bass and chords alone": a list after keep/leave/don't touch keeps every part in it */
-    if(R.length&&!c.replace(/\b(the|my|your|that|this|those|these|and|both|all|alone|too|as well|intact|untouched|the same|as (?:it|they) (?:is|are)|kick|drums?|beat|hats|snares?|claps?|bass ?lines?|bass|808s?|chords?|pads?|melod(?:y|ies)|lead|hook)\b|&/g,'').trim()){
+    if(R.length&&!c.replace(/\b(the|my|your|that|this|those|these|and|or|both|all|alone|too|as well|intact|untouched|the same|as (?:it|they) (?:is|are)|kick|drums?|beat|hats|snares?|claps?|bass ?lines?|bass|808s?|chords?|pads?|melod(?:y|ies)|lead|hook)\b|&/g,'').trim()){
       if(after&&/^\s*(?:,|and|&|or)?\s*$/i.test(orig[i-1]||'')){ drop.add(i); R.forEach(r=>kept.add(r)); continue; }
       pending.push(i); continue; }
     /* "change everything except the drums": the drums stay, the rest of the clause is the request */
@@ -189,7 +209,7 @@ function protectSaid(text){ text=String(text||''); if(KEEP_MEMO.has(text)) retur
   /* rest: the words without the praised clauses; "except the drums" stays in it (the parser knows "mute everything except the drums"),
      but its part doesn't count as one the rest is about */
   const join=useCut=>{ const out=[]; for(let i=0;i<orig.length;i+=2){ if(drop.has(i)) continue; if(out.length) out.push(orig[i-1]||' '); out.push(useCut&&cut.has(i)?cut.get(i):orig[i]||''); }
-    return out.join('').replace(/^[\s,;.!?-]*(?:(?:but|and|just|though|so|only|however)\b[\s,]*)*/i,'').replace(/[\s,;-]+$/,'').trim(); };
+    return out.join('').replace(/^\s*(?:(?:ok|okay|yeah|yes|yep|yo|alright|cool|nice|great|sweet|man|wow|oh|hmm|um|so|perfect|awesome|dope|sick|lovely|damn|bro|dude)\b\s*)+,\s*/i,'').replace(/^[\s,;.!?-]*(?:(?:but|and|just|though|so|only|however)\b[\s,]*)*/i,'').replace(/[\s,;-]+$/,'').trim(); };
   const rest=drop.size||cut.size?join(false):text, restCut=cut.size?join(true):rest;
   const restRoles=new Set(roles(restCut)), song=SONG_SAID.test(low(restCut));
   /* the rest is about that same part ("the kick is great but the snare is too loud"), or about no part at all after praise: it is the target */
