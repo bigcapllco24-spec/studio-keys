@@ -1,0 +1,6 @@
+[
+  {
+    "text": "Mix one section on its own: \"the melody is too loud in the drop\", \"filter the chords in the intro\" or \"bring the bass up in the second drop\" change that part only in that section. It works like Ableton clip gain or a short automation lane: a per-section level and low-pass on each part, shown on the part block in Song view and undoable in one step.",
+    "why": "Producers balance and filter sections differently all the time (a filtered intro, a quieter melody in the break, a louder drop). Today every section comment moves the whole song (bug 3), so there's no way to do it by voice or by hand. It's also the missing piece behind \"make the drop bigger\"."
+  }
+]

@@ -1,0 +1,13 @@
+# QA-1 · Daily session · qa-tester · 22 Nov 2026 (09:13 IST check-in)
+Read `.claude/standards/dev-standards.md` first (quality bar; "Owner rules from 19 Nov 2026" says what the owner is unhappy about this week: Keys redoing the whole project when he comments on one part, sung notes not kept as sung, controller sustain/knobs, the studio should feel like Ableton).
+
+Repo: clone your own copy: `git clone -q https://github.com/bigcapllco24-spec/studio-keys /home/claude/sk-qa && cd /home/claude/sk-qa` on `main` (product head d18ef74, released last night: AI-1 song sections by voice: "make it a full track", "make the drop bigger", "add a breakdown", "make the intro longer", plus the 21 Nov releases AI-4/6/7/8, UX-7/12/13). The machine is fresh (restarted at 09:13 IST); `uptime` before timing anything.
+
+## Job
+Daily session as in your role file: `bash .claude/tools/check.sh`, then about 20 minutes of real use like a producer: beat by artist reference + "another one" twice; build a full track by voice (the new AI-1 song sections: make it a song, change one section, add a breakdown, longer intro, move/rename a section in Song view, undo each); sing a bassline and chords with the fake mic; edit notes (draw, drag-select, copy/paste, velocity, undo); import a voice note and turn it into notes; mix by asking; save, new song, reopen; export (MP3 and the Ableton zip).
+Spend extra time on: (1) AI-1 song sections, released last night (offline parser; the live AI can't run headless); (2) comments about ONE part ("make the bass softer", "the hats are too loud") in Song mode: does anything else change?; (3) anything that got worse since your 21 Nov session.
+Known and already on the board (don't file again): Keys changes more than the named part, praise protection, questions about chords, "stop listening" (AI-9 fix rounds); sung notes not kept (UX-14); controller sustain/knobs (UX-15); header jumps on autosave (UX-18); Ableton stems don't add up (SE-11); drag-select/duplicate (UX-17); setKey on an 'auto' key doesn't move notes (UX-19, being fixed now); everything in "Follow-ups noted" in `.claude/board.md`; branches waiting for the owner (SE-4, SE-7, SE-8, SE-9, SE-10, UX-4, UX-6, UX-8, UX-9, UX-10, UX-14, UX-15, UX-18, SE-11). Your 21 Nov ideas (named chords, sung pitch line) are already in requests.
+Write `/home/claude/qa/2026-11-22/report.md`, `bugs.json` and `ideas.json` (at most 3 ideas, only new ones) as your role says, saving as you go. Commit nothing to main.
+
+## Report back
+Verdict on main (healthy / not), numbered bugs with steps, severity and which file/area you think it's in, what you checked with numbers, screenshot paths. Reply with the full report text.
