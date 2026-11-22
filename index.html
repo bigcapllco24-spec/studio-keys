@@ -647,7 +647,8 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 .part.on:hover{border-color:var(--c)}
 .part:focus-visible{outline:2px solid var(--signal);outline-offset:-2px}
 .pbadge{position:absolute;left:4px;top:3px;font:700 10px/1.4 var(--mono);font-style:normal;padding:0 4px;border-radius:4px;background:var(--ink);color:var(--t2)}
-.pwo{position:absolute;right:4px;bottom:3px;font:600 9.5px/1.4 var(--body);font-style:normal;color:var(--ink2);background:var(--t2);padding:0 4px;border-radius:4px;white-space:nowrap}
+/* a long "no clap, snare, kick" clips on the right with … (start stays readable); the full text is in the tooltip (UX-19, QA bug 9) */
+.pwo{position:absolute;right:4px;bottom:3px;font:600 9.5px/1.4 var(--body);font-style:normal;color:var(--ink2);background:var(--t2);padding:0 4px;border-radius:4px;white-space:nowrap;box-sizing:border-box;max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis}
 .part.tiny .pwo{display:none}
 .sec.flash,.part.flash,.smb.flash{animation:sflash 1.25s ease-out}
 @keyframes sflash{0%,45%{outline:2px solid var(--signal);outline-offset:1px}100%{outline:2px solid transparent;outline-offset:1px}}
@@ -4208,7 +4209,7 @@ function songPvURL(t,v){ const L=PROJ.bars*4, audio=t.kind==='audio', ev=audio?n
   const url=cv.toDataURL(); SONG.pv.set(key,url); if(SONG.pv.size>240) SONG.pv.delete(SONG.pv.keys().next().value); return url; }
 function songLaneHTML(t){ const S=songSections(), px=songPx(); let x=0;
   const parts=S.map(s=>{ const p=s.parts[t.id]||{}, on=!!p.on, v=p.variant||'A', w=s.bars*px, wo=on&&p.without&&p.without.length?p.without:null;
-    const h=`<button type="button" class="part${on?' on':''}${w<26?' tiny':''}" data-sid="${s.id}" data-tid="${t.id}" aria-pressed="${on}" style="left:${x}px;width:${Math.max(2,w-2)}px;--pv:var(--pv${v});--pw:${PROJ.bars*px}px;--po:${-(s.off||0)/4*px}px" aria-label="${esc(t.name)} in ${esc(s.name)}${v!=='A'?', pattern '+v:''}" title="${esc(t.name)} in ${esc(s.name)}: click to switch ${on?'off':'on'} · double-click to edit the notes">${on&&v!=='A'?`<i class="pbadge">${v}</i>`:''}${wo?`<i class="pwo">no ${esc(wo.join(', '))}</i>`:''}</button>`;
+    const h=`<button type="button" class="part${on?' on':''}${w<26?' tiny':''}" data-sid="${s.id}" data-tid="${t.id}" aria-pressed="${on}" style="left:${x}px;width:${Math.max(2,w-2)}px;--pv:var(--pv${v});--pw:${PROJ.bars*px}px;--po:${-(s.off||0)/4*px}px" aria-label="${esc(t.name)} in ${esc(s.name)}${v!=='A'?', pattern '+v:''}${wo?', no '+esc(wo.join(', ')):''}" title="${esc(t.name)} in ${esc(s.name)}${wo?' (no '+esc(wo.join(', '))+')':''}: click to switch ${on?'off':'on'} · double-click to edit the notes">${on&&v!=='A'?`<i class="pbadge">${v}</i>`:''}${wo?`<i class="pwo" title="no ${esc(wo.join(', '))}">no ${esc(wo.join(', '))}</i>`:''}</button>`;
     x+=w; return h; }).join('');
   return `<div class="slane" data-lane="${t.id}"><div class="sl-in" style="width:${x+84}px">${parts}</div></div>`; }
 function songRender(){ songUI(); if(!songOn()||!$('#songStrip')) return; const fk=songFocusKey();

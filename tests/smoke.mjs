@@ -442,6 +442,14 @@ try {
       return R; } finally { ASSIST.engine = eng; } });
   ok('Key menu on an auto-key C minor loop picks D minor: notes up 2, drums stay, one undo step back to auto; "put it in the key of F sharp minor" moves them too; patterns move; a vibe key leaves a sung bass as sung',
     ux19.menu === '2|D minor|true|1' && ux19.undo === 'true||' && ux19.say === '6|F♯ minor|true' && ux19.undo2 === 'true|' && ux19.pat && ux19.vibe === 'F minor|true', JSON.stringify(ux19));
+  // UX-19 (QA bug 9): a long "no clap, snare, kick" label in a narrow Song-view part clips on the right (start visible), full text in the tooltip
+  const pwo = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); await newSong('Smoke UX-19 label'); runActions([{ type: 'add_drums', style: 'house', seed: 5400 }, { type: 'add_bass', seed: 5401 }]); await W(150);
+    runActions([{ type: 'arrange', length: 'full' }]); loopStop(); await W(200); const S = songSections(), dr = PROJ.tracks.find(t => t.role === 'drums');
+    songSetPart(S[0].id, dr.id, { on: true, without: ['clap', 'snare', 'kick'] }); songRender(); songZoom(0.4); songRender(); await W(200);
+    const e = document.querySelector('.pwo'); if (!e) return null; const pr = e.parentElement.getBoundingClientRect(), r = e.getBoundingClientRect();
+    const out = { left: r.left >= pr.left - 0.5, right: r.right <= pr.right + 0.5, clipped: e.scrollWidth > e.clientWidth, ell: getComputedStyle(e).textOverflow, title: e.title };
+    songMode('loop'); return out; });
+  ok('Song view: a long part label clips on the right with an ellipsis and keeps its full text as a tooltip', !!pwo && pwo.left && pwo.right && pwo.clipped && pwo.ell === 'ellipsis' && pwo.title === 'no clap, snare, kick', JSON.stringify(pwo));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
