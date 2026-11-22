@@ -157,7 +157,7 @@ const ACT={
     const t=addPart({role:'melody',inst:id,gen:true,name:a.instrument?I.name:'Melody',events:genMelody(L_(),seed,s),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name}`; },
   tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
   bars(a){ setBars(+a.bars||+a.value||4); return `${PROJ.bars} bars`; },
-  key(a){ const k=parseKey(a.key||a.value); if(!k) return; const d=setKey(k,{move:true}); BATCH.key=true; return `Key ${keyName(k)}${d?`, notes moved ${d>0?'up':'down'} ${Math.abs(d)} semitone${Math.abs(d)>1?'s':''}`:''}`; },
+  key(a){ const k=parseKey(a.key||a.value); if(!k) return; const mv=![...(BATCH.types||[])].some(t=>/^(vibe|style|add_|vary|again|notes|sing|drum_pattern|convert|arrange|section|new_project)/.test(t)), d=setKey(k,{move:mv}); BATCH.key=true; return `Key ${keyName(k)}${d?`, notes moved ${keyMoved(d)}`:''}${mv?keyAudioNote():''}`; }, /* the notes move only when the key is the whole request (UX-19) */
   style(a){ const s=pickStyle(a.style||a.value)||(findArtist(a.style||a.value)||{}).style; if(!s) return; PROJ.style=s; if(a.keepTempo!==true && !a.bpm) setTempo(STYLES[s].bpm); return `${STYLES[s].name} style`; },
   drum_pattern(a){ const rows=a.rows||a.pattern||{}; const spec={};
     for(const [name,str] of Object.entries(rows)){ const n=DRUM_WORD[String(name).toLowerCase()]||parsePitch(name)||(+name||null); if(n&&typeof str==='string') spec[n]=str.replace(/[^xo.|X-]/g,'').replace(/X/g,'x').replace(/-/g,'.'); }
@@ -522,6 +522,7 @@ function runActions(list){
   /* done.segs[i]: which half of a two-part sentence each result came from (offline "mute the drums and solo the bass") */
   done.segs=[]; const u0=typeof UNDO!=='undefined'?(UNDO.pushes||0):-1;
   const acts=orderActions((list||[]).map(normAction).filter(a=>a&&ACT[a.type])), before=songSnapshot();
+  BATCH.types=new Set(acts.map(a=>a.type)); /* UX-19: ACT.key moves the notes only when the key is the whole request */
   SONG.batch=true; SONG.batchChip=null; BATCH.acting=true;
   try{ for(const a of acts){ try{ const r=ACT[a.type](a); if(r){ done.push(r); done.segs.push(a.seg); kinds.push([a.type,r]); changed=true; if(SONG_ACTS.has(a.type)||(a.type==='transport'&&a.from!=null)) songDone.push(r); } }catch(e){ console.warn('action failed',a,e); } } }
   finally{ BATCH.acting=false; }

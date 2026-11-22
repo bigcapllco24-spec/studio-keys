@@ -649,7 +649,7 @@ input[type=range],input[type=checkbox]{accent-color:var(--accent)}
 .pbadge{position:absolute;left:4px;top:3px;font:700 10px/1.4 var(--mono);font-style:normal;padding:0 4px;border-radius:4px;background:var(--ink);color:var(--t2)}
 /* a long "no clap, snare, kick" clips on the right with … (start stays readable); the full text is in the tooltip (UX-19, QA bug 9) */
 .pwo{position:absolute;right:4px;bottom:3px;font:600 9.5px/1.4 var(--body);font-style:normal;color:var(--ink2);background:var(--t2);padding:0 4px;border-radius:4px;white-space:nowrap;box-sizing:border-box;max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis}
-.part.tiny .pwo{display:none}
+.part.tiny .pwo,.part.pslim .pwo{display:none} /* a part under ~50 px has no room for "no clap…"; the tooltip says it (UX-19) */
 .sec.flash,.part.flash,.smb.flash{animation:sflash 1.25s ease-out}
 @keyframes sflash{0%,45%{outline:2px solid var(--signal);outline-offset:1px}100%{outline:2px solid transparent;outline-offset:1px}}
 .playlist.song:focus{outline:none}
