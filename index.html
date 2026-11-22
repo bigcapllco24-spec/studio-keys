@@ -3442,13 +3442,25 @@ function setBars(n){
   PROJ.tracks.forEach(t=>{ if(t.kind!=='notes') return; t.events=fit(t.events); Object.values(t.patterns||{}).forEach(p=>{ p.events=fit(p.events||[]); }); });
   PROJ.bars=n; $('#barsSel').value=String(n); saveProject(); renderTracks(); uiLoop();
 }
-function setKey(k){
-  const old=PROJ.key; PROJ.key=k;
-  if(old && k && old.tonic!==k.tonic){ let d=mod(k.tonic-old.tonic,12); if(d>6) d-=12; PROJ.tracks.forEach(t=>{ if(t.kind==='notes' && !(INST.get(t.inst)||{}).percussive) [t.events,...Object.values(t.patterns||{}).map(p=>p.events||[])].forEach(ev=>ev.forEach(e=>e.n+=d)); }); }
-  $('#keySel').value=k?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks();
+/* the note lists that follow the key: every pitched track (never drums or percussive kits), its main loop and every pattern */
+const keyedTrack=t=>t.kind==='notes'&&t.role!=='drums'&&!(INST.get(t.inst)||{}).percussive;
+const keyedLists=()=>{ const out=new Set(); PROJ.tracks.filter(keyedTrack).forEach(t=>{ out.add(t.events||[]); Object.values(t.patterns||{}).forEach(p=>out.add(p.events||[])); }); return [...out]; };
+/* UX-19: the key the loop's notes are in while the key is still auto, said in the mode asked for (a C minor loop read as
+   E♭ major is the same notes), or null with fewer than 4 pitched notes */
+function loopKeyFor(mode){ const ev=[].concat(...keyedLists()); if(ev.length<4) return null; const d=detectKey(ev); if(!d) return null;
+  return d.mode===mode?d:{tonic:mod(d.tonic+(d.mode==='minor'?3:-3),12),mode}; }
+/* setKey(k): the key the notes are already in, or one for parts not made yet; the notes only move from a key set before.
+   setKey(k,{move:true}) (the user picks a key: the Key menu, Keys' "key" action): from auto, the notes move from the key
+   they are in now, by the shortest way, like a key change from a known key. Returns how far they moved (semitones). */
+function setKey(k,o={}){
+  const old=PROJ.key, from=old||(k&&o.move?loopKeyFor(k.mode):null); PROJ.key=k; let d=0;
+  if(from && k && from.tonic!==k.tonic){ d=mod(k.tonic-from.tonic,12); if(d>6) d-=12; keyedLists().forEach(ev=>ev.forEach(e=>e.n+=d)); }
+  $('#keySel').value=k?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks(); return d;
 }
 $('#keySel').innerHTML='<option value="">Key: auto</option>'+['major','minor'].map(m=>PC_NAMES.map((n,i)=>`<option value="${i}:${m}">${n} ${m}</option>`).join('')).join('');
-$('#keySel').addEventListener('change',e=>{ const v=e.target.value; setKey(v?{tonic:+v.split(':')[0],mode:v.split(':')[1]}:null); });
+$('#keySel').addEventListener('change',e=>{ const v=e.target.value, k=v?{tonic:+v.split(':')[0],mode:v.split(':')[1]}:null;
+  if(typeof undoBoundary==='function') undoBoundary(); const d=setKey(k,{move:true}); if(typeof undoBoundary==='function') undoBoundary();
+  if(d) toast(`Moved the notes ${d>0?'up':'down'} ${Math.abs(d)} semitone${Math.abs(d)>1?'s':''} into ${keyName(k)}`); });
 $('#barsSel').addEventListener('change',e=>setBars(+e.target.value));
 $('#projName').addEventListener('input',e=>{ PROJ.name=e.target.value.slice(0,60)||'Untitled song'; saveProject(); });
 $('#addBars').onclick=()=>setBars(PROJ.bars*2);
@@ -5427,7 +5439,7 @@ const ACT={
     const t=addPart({role:'melody',inst:id,gen:true,name:a.instrument?I.name:'Melody',events:genMelody(L_(),seed,s),seed,style:s,ref:artist?artist.name:undefined},a); return `${t.name} (${t.isNew?'new track':'replaced'}) on ${I.name}`; },
   tempo(a){ const b=+a.bpm||+a.value; if(!b) return; setTempo(b); BATCH.tempo=true; return `Tempo ${CTRL.bpm} BPM`; },
   bars(a){ setBars(+a.bars||+a.value||4); return `${PROJ.bars} bars`; },
-  key(a){ const k=parseKey(a.key||a.value); if(!k) return; setKey(k); BATCH.key=true; return `Key ${keyName(k)}`; },
+  key(a){ const k=parseKey(a.key||a.value); if(!k) return; const d=setKey(k,{move:true}); BATCH.key=true; return `Key ${keyName(k)}${d?`, notes moved ${d>0?'up':'down'} ${Math.abs(d)} semitone${Math.abs(d)>1?'s':''}`:''}`; },
   style(a){ const s=pickStyle(a.style||a.value)||(findArtist(a.style||a.value)||{}).style; if(!s) return; PROJ.style=s; if(a.keepTempo!==true && !a.bpm) setTempo(STYLES[s].bpm); return `${STYLES[s].name} style`; },
   drum_pattern(a){ const rows=a.rows||a.pattern||{}; const spec={};
     for(const [name,str] of Object.entries(rows)){ const n=DRUM_WORD[String(name).toLowerCase()]||parsePitch(name)||(+name||null); if(n&&typeof str==='string') spec[n]=str.replace(/[^xo.|X-]/g,'').replace(/X/g,'x').replace(/-/g,'.'); }
