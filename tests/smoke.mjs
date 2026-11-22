@@ -423,6 +423,25 @@ try {
     await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
     await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
   ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
+  // UX-19: picking a key on a "Key: auto" loop moves the notes from the key they are in (menu and Keys), drums stay, one undo step; a vibe key never moves a sung part
+  const ux19 = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)), eng = ASSIST.engine, R = {};
+    const cm = async name => { await newSong(name); runActions([{ type: 'add_drums', style: 'house', seed: 5300 }]); await W(150);
+      addTrack({ role: 'bass', inst: 'bass', name: 'Bass', events: [36, 36, 32, 34, 31, 36, 39, 43].map((n, i) => ({ b: i * 2, d: 1.5, n, v: 0.8 })) });
+      addTrack({ role: 'chords', inst: 'piano', name: 'Chords', events: [[48, 51, 55], [44, 48, 51], [46, 50, 53], [43, 46, 50]].flatMap((c, i) => c.map(n => ({ b: i * 4, d: 4, n, v: 0.7 }))) });
+      PROJ.key = null; saveProject(); await W(200); };
+    const pit = () => PROJ.tracks.filter(t => t.role !== 'drums').flatMap(t => t.events.map(e => e.n)), dr = () => PROJ.tracks.filter(t => t.role === 'drums').flatMap(t => t.events.map(e => e.n)).join();
+    const moved = a => [...new Set(pit().map((n, i) => n - a[i]))].join();
+    try { ASSIST.engine = null;
+      await cm('Smoke UX-19 menu'); const p0 = pit(), d0 = dr(), s0 = UNDO.stack.length, el = $('#keySel'); el.value = '2:minor'; el.dispatchEvent(new Event('change'));
+      R.menu = [moved(p0), keyName(PROJ.key), dr() === d0, UNDO.stack.length - s0].join('|'); undo(); await W(100); R.undo = [pit().join() === p0.join(), PROJ.key, $('#keySel').value].join('|');
+      await handleRequest('put it in the key of F sharp minor'); await W(150); R.say = [moved(p0), keyName(PROJ.key), dr() === d0].join('|'); undo(); await W(100); R.undo2 = [pit().join() === p0.join(), PROJ.key].join('|');
+      const bt = PROJ.tracks.find(t => t.role === 'bass'); bt.patterns = { B: { events: bt.events.map(e => Object.assign({}, e, { n: e.n + 12 })) } }; saveProject(); await W(150);
+      runActions([{ type: 'key', key: 'D minor' }]); R.pat = bt.patterns.B.events.map(e => e.n).join() === bt.events.map(e => e.n + 12).join() && moved(p0) === '2';
+      await cm('Smoke UX-19 sung'); PROJ.tracks = PROJ.tracks.filter(t => t.role !== 'chords'); Object.assign(PROJ.tracks.find(t => t.role === 'bass'), { name: 'Sung bassline', take: 'bass' }); saveProject();
+      const q0 = pit().join(); runActions([{ type: 'vibe', ref: 'Ben Böhmer' }]); R.vibe = [keyName(PROJ.key), pit().join() === q0].join('|');
+      return R; } finally { ASSIST.engine = eng; } });
+  ok('Key menu on an auto-key C minor loop picks D minor: notes up 2, drums stay, one undo step back to auto; "put it in the key of F sharp minor" moves them too; patterns move; a vibe key leaves a sung bass as sung',
+    ux19.menu === '2|D minor|true|1' && ux19.undo === 'true||' && ux19.say === '6|F♯ minor|true' && ux19.undo2 === 'true|' && ux19.pat && ux19.vibe === 'F minor|true', JSON.stringify(ux19));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
