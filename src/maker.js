@@ -64,12 +64,15 @@ function sectionSayFix(t){
   if(/^\s*(?:(?:please|now|ok|okay|and|then|just)\s+)*drop\s+(?:the|my|a|an)\b/.test(T)) return null; /* "drop the drums in the outro": drop is the verb */
   const lift=SEC_LIFT.test(T)&&!/\b(less|calmer|chiller|reduce|lower|tone down|strip|kam)\b/.test(T), level=!lift&&SEC_LEVEL.test(T); if(!lift&&!level) return null;
   const partW=new RegExp(`\\b(${SB_PART.replace(/\|everything\|all$/,'')})\\b`); if(partW.test(T.replace(/\bbuild\b/g,' '))) return null; /* a part named: its own rules, and the whole-song note */
-  if(/\b(add|another|new|second|copy|duplicate|longer|shorter|extend|remove|delete|loop|play|rename|move|roll|fill|riser|crash|silence|gap|different|own)\b/.test(T)) return null;
+  if(/\b(add|another|new|copy|duplicate|longer|shorter|extend|remove|delete|loop|play|rename|move|roll|fill|riser|crash|silence|gap|different|own)\b/.test(T)) return null;
+  /* "a second drop" / "one more second drop" asks for a new section; "the second drop" is the one the song has, like "drop 2" (QA, 22 Nov AI-14 fix 1) */
+  if(/\b(?:a|one more|ek aur|aur ek|extra) (?:second|2nd)\b/.test(T)) return null;
   if(!songArranged()) return {actions:[],reply:SB_NOSONG};
   const ord={first:'first',pehla:'first',pehle:'first','1st':'first',second:'second',dusra:'second',doosra:'second','2nd':'second',third:'third','3rd':'third',last:'last',final:'last'}[sm[1]]||'';
   const ref=(ord?ord+' ':'')+sm[2]+(sm[3]?' '+sm[3]:''), s=findSec(ref); if(!s) return {actions:[],reply:`There’s no ${sm[2]} in this song. Say “add a ${sm[2]}” to make one.`};
-  const S=songSections(), i=S.indexOf(s), nm=s.name, low=nm.toLowerCase(), The=/^(intro|outro|drop|break|build|verse|chorus|bridge|hook)( \d+)?$/i.test(nm)?'The '+low:nm;
-  if(level) return {actions:[],reply:`I can’t turn one section up or down on its own yet; levels are for the whole song. I can take a part out of the ${low} (“take the chords out of the ${low}”) or bring one in, or turn one part down in the whole song.`};
+  /* "the drop", but "Drop 2" (never "the drop 2") */
+  const S=songSections(), i=S.indexOf(s), nm=s.name, low=nm.toLowerCase(), theOf=n=>/\d/.test(n)||!/^(intro|outro|drop|break|build|verse|chorus|bridge|hook)$/i.test(n)?n:'the '+n.toLowerCase(), the=theOf(nm), The=the[0].toUpperCase()+the.slice(1);
+  if(level) return {actions:[],reply:`I can’t turn one section up or down on its own yet; levels are for the whole song. I can take a part out of ${the} (“take the chords out of ${the}”) or bring one in, or turn one part down in the whole song.`};
   const big=/^(drop|chorus|hook)$/.test(s.kind), A=[], inP=[];
   PROJ.tracks.forEach(x=>{ if(x.kind!=='notes'||x.mute) return; const p=s.parts[x.id]; const drum=(INST.get(x.inst)||{}).drums||x.role==='drums';
     if(p&&p.on&&p.without&&p.without.length&&drum) inP.push(x.name); else if((!p||!p.on)&&big) inP.push(x.name); });
@@ -77,27 +80,54 @@ function sectionSayFix(t){
   const prev=S[i-1], into=big?prev:s.kind==='build'?s:null;
   if(into&&!into.end&&(big?i>0:true)) A.push(big?{type:'transition',before:nm,to:'snareroll',gap:true}:{type:'transition',section:nm,to:'snareroll'});
   if(!A.length){ const bIn=prev&&prev.kind==='build'&&PROJ.tracks.some(x=>x.role==='bass'&&prev.parts[x.id]&&prev.parts[x.id].on);
-    return {actions:[],reply:`${The} already has ${big?'every part':'its drums'}${into&&into.end?` and a ${String((END_WORD[into.end.to]||'transition')).split(' (')[0]} ${big?'into it':'at the end'}`:''}. I can’t make one section louder on its own yet. ${big&&bIn?`Want me to take the bass out of the ${prev.name.toLowerCase()} so the ${low} lands harder?`:big&&prev?`Want a longer snare roll into the ${low}?`:`Want a snare roll at the end of the ${low}?`}`}; }
-  return {actions:A,reply:done=>done.length?`Made the ${low} bigger: ${done.join(', ')}. Levels stay the same, because one section can’t be turned up on its own yet.`:''}; }
+    /* what the section really has (QA, 22 Nov AI-14 fix 5: a break with only chords was "already has its drums") */
+    const heard=PROJ.tracks.filter(x=>!x.mute&&(x.kind==='notes'||x.kind==='audio')), on=heard.filter(x=>s.parts[x.id]&&s.parts[x.id].on), off=heard.filter(x=>x.kind==='notes'&&!(s.parts[x.id]&&s.parts[x.id].on));
+    const say=L=>{ const w=L.map(x=>x.role==='drums'?'the drums':/^(bass|chords|melody)$/.test(x.role)&&L.filter(y=>y.role===x.role).length===1?'the '+({bass:'bass',chords:'chords',melody:'melody'})[x.role]:x.name); return w.length>1?w.slice(0,-1).join(', ')+' and '+w[w.length-1]:w[0]; };
+    const endTxt=into&&into.end?` and a ${String((END_WORD[into.end.to]||'transition')).split(' (')[0]} ${big?'into it':'at the end'}`:'';
+    const has=!off.length?`${The} already has every part${endTxt}`:!on.length?`${The} has nothing playing yet`:`${The} has ${say(on)}, but not ${say(off)}`;
+    const order=['drums','bass','melody','chords'], pick=off.slice().sort((a,b)=>(order.indexOf(a.role)+1||9)-(order.indexOf(b.role)+1||9))[0];
+    const pw=pick&&(pick.role==='drums'?'drums':/^(bass|chords|melody)$/.test(pick.role)?pick.role:pick.name.toLowerCase());
+    const ask=pick?`Want me to bring the ${pw} in at ${the}?`:big&&bIn?`Want me to take the bass out of ${theOf(prev.name)} so ${the} lands harder?`:big&&prev?`Want a longer snare roll into ${the}?`:`Want a snare roll at the end of ${the}?`;
+    return {actions:[],reply:`${has}. I can’t make one section louder on its own yet. ${ask}`}; }
+  return {actions:A,reply:done=>done.length?`Made ${the} bigger: ${done.join(', ')}. Levels stay the same, because one section can’t be turned up on its own yet.`:''}; }
 /* ---- pan: "pan the melody left", "put the chords a bit to the left", "move the bass hard right", "centre the bass", "chords thoda left mein daalo".
    The existing track moves (track_fx pan, -100 left to 100 right: about 40 plain, 20 a bit, 100 hard); never a new or remade part (QA, 22 Nov bug 4). ---- */
 const PAN_DIR=/\b(left|right|cent(?:re|er)(?:ed)?|middle|mono)\b/;
 const PAN_SAID=/\bpan(?:s|ned|ning)?\b|\b(?:to|towards|on|in) the (?:left|right)\b|\b(?:hard|fully|all the way|slightly|a bit|a little|little|bit|thoda|thodi|zara|more|further) (?:to the )?(?:left|right)\b|\b(?:left|right) (?:side|channel|ear|speaker)\b|\b(?:left|right) (?:mein|me|main|pe|par|taraf|side)\b|\b(?:move|put|send|place|shift|keep|push|nudge|bring) (?:the |my )?[a-z0-9 ]{2,24}? (?:to the |more |a bit |slightly |hard |a little |back to the |back )?(?:left|right|cent(?:re|er)|middle)\b|\bcent(?:re|er) (?:the |my )\w+|\b(?:in|to|into) the (?:middle|cent(?:re|er))\b/;
 function panFix(t){ if(!PAN_SAID.test(t)||/\b(notes?|beats?|bars?|octaves?|semitones?|earlier|later|grid|timeline|track list|order|above|below)\b/.test(t)) return null;
-  const dv=DRUM_VOICE.find(([k,re])=>re.test(t)), role=(ROLE_WORDS.find(([k,re])=>re.test(t.replace(/\bhats\b/,' ')))||[])[0], nm=v=>String(v).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), s=' '+nm(t)+' ';
-  const named=PROJ.tracks.filter(x=>x.name&&nm(x.name).length>2&&s.includes(' '+nm(x.name)+' ')).sort((a,b)=>b.name.length-a.name.length)[0];
+  { const M=panMany(t); if(M) return M; }
+  const dv=DRUM_VOICE.find(([k,re])=>re.test(t)), role=(ROLE_WORDS.map(([k,re])=>[k,t.replace(/\bhats\b/g,'    ').search(re)]).filter(x=>x[1]>=0).sort((a,b)=>a[1]-b[1])[0]||[])[0], nm=v=>String(v).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), s=' '+nm(t)+' ';
+  /* the part said first is the one panned ("pan the melody left so it sits away from the chords": the melody) */
+  const at=x=>s.indexOf(' '+nm(x.name)+' '), named=PROJ.tracks.filter(x=>x.name&&nm(x.name).length>2&&at(x)>=0).sort((a,b)=>at(a)-at(b)||b.name.length-a.name.length)[0];
   let T=named||null;
   if(!T&&dv&&!role){ const own=PROJ.tracks.find(x=>songRole(x)===(dv[0]==='hats'?'hats':'x')); if(own) T=own; else if(PROJ.tracks.some(x=>x.role==='drums')) return {actions:[],reply:`${dv[3][0].toUpperCase()+dv[3].slice(1)} ${dv[0]==='hats'?'are':'is'} part of the drums track, so I can’t pan ${dv[0]==='hats'?'them':'it'} on ${dv[0]==='hats'?'their':'its'} own. Say “pan the drums ${(t.match(/\b(left|right)\b/)||[])[1]||'left'}” to move the whole kit.`}; }
   if(!T&&role) T=[...PROJ.tracks].reverse().find(x=>x.role===role)||null;
   if(!T){ if(role||dv) return {actions:[],reply:`There’s no ${(TONE_PART[role||'drums']||'that part').replace(/^the /,'')} in the song yet to pan.`}; return null; }
   const d=(t.match(PAN_DIR)||[])[1]; if(!d) return {actions:[],reply:`Left or right? Say “pan ${T.name.toLowerCase()} a bit left” or “pan ${T.name.toLowerCase()} hard right”.`};
-  const cur=Math.round(((T.fx||{}).pan||0)*100);
-  if(/^(cent|middle|mono)/.test(d)){ if(!cur) return {actions:[],reply:`${T.name} is already in the centre.`}; return {actions:[{type:'track_fx',track:T.id,effect:'pan',amount:0}],reply:`${T.name} is back in the centre, same notes.`}; }
+  const P=panOne(T,t,d); ASSIST.lastPan={id:T.id,text:String(LAST_TEXT.text||'')}; return P.act?{actions:[P.act],reply:P.say+', same notes.'}:{actions:[],reply:P.say+'.'}; }
+/* one part to one side: plain 40, "a bit" 20, "hard" 100, a number as said, "more"/"further" a step on from where it is */
+function panOne(T,t,d){ const cur=Math.round(((T.fx||{}).pan||0)*100);
+  if(/^(cent|middle|mono)/.test(d)) return cur?{act:{type:'track_fx',track:T.id,effect:'pan',amount:0},say:`${T.name} is back in the centre`}:{say:`${T.name} is already in the centre`};
   const num=t.match(/\b(\d{1,3})\s*(?:%|percent)?\s*(?:to the )?(?:left|right)\b|\b(?:left|right)\s*(?:by |to )?(\d{1,3})\b/), hard=/\b(hard|fully|all the way|completely|100)\b/.test(t), bit=/\b(a (?:little|bit|touch|tad)( bit)?|slightly|bit|little|thoda|thodi|zara|a hair)\b/.test(t), more=/\b(more|further)\b/.test(t);
   let n=num?Math.min(100,+(num[1]||num[2])):hard?100:bit?20:40; const sign=d==='left'?-1:1;
   if(more&&!num&&Math.sign(cur)===sign) n=Math.min(100,Math.abs(cur)+(bit?10:20));
-  const want=sign*n; if(want===cur) return {actions:[],reply:`${T.name} is already panned ${n===100?'hard ':''}${d} (${d==='left'?'L':'R'} ${n}).`};
-  return {actions:[{type:'track_fx',track:T.id,effect:'pan',amount:want}],reply:`Panned ${T.name} ${n>=100?'hard ':n<=25?'a bit ':''}${d} (${d==='left'?'L':'R'} ${n}), same notes.`}; }
+  const want=sign*n, side=`${d} (${d==='left'?'L':'R'} ${n})`; if(want===cur) return {say:`${T.name} is already panned ${n===100?'hard ':''}${side}`};
+  return {act:{type:'track_fx',track:T.id,effect:'pan',amount:want},say:`Panned ${T.name} ${n>=100?'hard ':n<=25?'a bit ':''}${side}`}; }
+/* two or more parts in one pan request: "pan the melody left and the chords right" (each its own side, in the order said),
+   "pan the melody and the chords left" (both that side). One request, so one undo step; never a part to the other part's side (QA, 22 Nov AI-14 fix 4) */
+function panMany(t){ const RS=ROLE_WORDS.filter(([k])=>k!=='voice').map(([k,re])=>({k,i:t.replace(/\bhats\b/g,'    ').search(re)})).filter(x=>x.i>=0).sort((a,b)=>a.i-b.i); if(RS.length<2) return null;
+  if(RS.some((x,j)=>j&&!/(?:,|&|\band|\baur|\bplus|\bthen)\s*(?:(?:also|and) )?(?:the |my )?$/.test(t.slice(RS[j-1].i,x.i)))) return null; /* "the melody on the left, away from the chords": one part */
+  const D=[...t.matchAll(/\b(left|right|cent(?:re|er)(?:ed)?|middle)\b/g)].map(m=>({d:m[1],i:m.index})); if(!D.length) return null;
+  const nm=k=>(TONE_PART[k]||'the '+k).replace(/^the /,''), list=w=>w.length>1?w.slice(0,-1).join(', ')+' and '+w[w.length-1]:w[0];
+  const miss=RS.filter(x=>!PROJ.tracks.some(y=>y.role===x.k)); if(miss.length) return {actions:[],reply:`There’s no ${list(miss.map(x=>nm(x.k)))} in the song yet to pan.`};
+  let pairs;
+  if(D.length===1) pairs=RS.map(x=>({k:x.k,d:D[0].d,seg:t}));
+  else { pairs=RS.map((x,j)=>{ const end=j+1<RS.length?RS[j+1].i:t.length, own=D.filter(y=>y.i>x.i&&y.i<end); return {k:x.k,d:own.length===1?own[0].d:null,seg:t.slice(x.i,end)}; });
+    /* "pan the melody and the chords left and right": sides listed after the parts, in the same order */
+    if(pairs.some(p=>!p.d)&&D.length===RS.length&&D[0].i>RS[RS.length-1].i) pairs=RS.map((x,j)=>({k:x.k,d:D[j].d,seg:t}));
+    if(pairs.some(p=>!p.d)) return {actions:[],reply:`Which side for each part? Say “pan the ${nm(RS[0].k)} left and the ${nm(RS[1].k)} right”.`}; }
+  const A=[], said=[]; pairs.forEach(p=>{ const T=[...PROJ.tracks].reverse().find(x=>x.role===p.k), d=/^cent|middle/.test(p.d)?'centre':p.d, P=panOne(T,p.seg,d); if(P.act) A.push(P.act); said.push(P.say); });
+  ASSIST.lastPan={id:null,text:String(LAST_TEXT.text||'')}; return {actions:A,reply:list(said.map((x,j)=>j?x.replace(/^Panned /,''):x))+(A.length?', same notes.':'.')}; }
 /* ---- space: "it sounds too dry", "the chords are too dry", "give it more space"; "it's too wet" the other way. Reverb on the parts that
    carry it (chords, melody, vocals), a step at a time; bass and drums stay dry unless they are named (QA, 22 Nov bug 4). ---- */
 function spaceFix(t){ const dry=/\b(too dry|so dry|very dry|sounds? dry|bit dry|kinda dry|dry sounding|needs? (?:more )?(?:space|room|air|depth|ambience)|more (?:space|room|ambience|depth)|more spacious|feels? (?:flat|small)|sounds? (?:flat|small|boxed in))\b/.test(t)&&!/\b(drier|less|reduce|too wet|too much)\b/.test(t);
@@ -153,6 +183,8 @@ function brainCore(raw,sws){
   const singAsk=/\b(sing|hum|whistle|record (my )?voice|let me (do|try)|with my voice|record (my|the) (bass ?line|bass|chords?|melody|lead|hook|tune))\b/.test(t)&&!AUD_NOUN.test(t.replace(/\bmy voice\b/,''));
   if(singAsk&&/\bi ?(?:'|’)?ll (sing|hum|whistle)\b|\b(let me|i want to|i wanna|can i) (sing|hum|whistle) (it|that|this|one)\b/.test(t)&&!/\b(bass|chords?|pads?|melody|lead|hook|tune|riff)\b/.test(t)) return {actions:[{type:'sing',part:ASSIST.focus==='bass'?'bass':'melody'}]};
   const singRole=singAsk?(/\bbass/.test(t)?'bass':/\bchord|\bpad/.test(t)?'chords':/\b(melody|lead|hook|tune|riff|top ?line|voice)\b/.test(t)?'melody':null):null;
+  /* "sing a new bassline" (the half after "mute the bass and"): a sung take, never a new bassline made for you (QA, 22 Nov AI-14 fix 2) */
+  if(singRole&&/^\s*(?:(?:and|then|now|ok|okay|please|let me|i ?(?:'|’)?ll|i want to|i wanna)\s+)*(?:sing|hum|whistle)\b/.test(t)) return {actions:[{type:'sing',part:singRole}]};
   /* "save the song" / "save my track" is a save; a file only when export, download, bounce, render, mp3 or wav is said (QA, 16 Nov) */
   if(/\b(download|export|bounce|render|give me)\b.*\b(mp3|audio file|song file|the song|the track|my song|my track)\b|\bmp3\b|\bsave\b.*\b(as|to) (an? )?(audio|wav)\b/.test(t)&&!/\b(zip|stems?|ableton|midi)\b/.test(t)){ const mm=t.match(/(\d+)\s*(min|minute)/), loops=t.match(/(\d+)\s*loops?/); return {actions:[{type:'export',format:'mp3',minutes:mm?+mm[1]:undefined,loops:loops?+loops[1]:undefined}]}; }
   if(/\b(download|export)\b.*\b(zip|stems?|ableton)\b/.test(t)) return {actions:[{type:'export',format:'zip'}]};
@@ -185,6 +217,9 @@ function brainCore(raw,sws){
   { const lv=levelFix(t); if(lv) return lv; }
   if(/^\s*(undo|undo that|go back|revert( that)?|take that back)\b/.test(t)) return {actions:[{type:'undo'}]};
   if(/^\s*(redo|redo that|redo it)\s*$/.test(t)) return {actions:[{type:'redo'}]};
+  /* "… and record a new one" (after muting a voice note): a new take, a voice note unless the last take was a sung part (QA, 22 Nov AI-14 fix 2) */
+  if(/\b(?:re-?record|record)\b/.test(t)&&/\b(?:new|fresh|another|second) (?:one|take|voice ?note|recording|vocal)\b|\brecord another\b/.test(t)&&!/\b(bass ?line|bass|chords?|pads?|melody|lead|hook|tune|riff|beat|drums?|song|track|project)\b/.test(t))
+    return {actions:[{type:'sing',part:/\b(vocal|voice)\b/.test(t)||!LAST_TAKE.part?'voice':LAST_TAKE.part}]};
   { const sb=songBrain(raw,t); if(sb) return sb; }
   if(/\b(voice note|record (my )?voice|just record( me)?|record (some )?audio)\b/.test(t)) return {actions:[{type:'sing',part:'voice'}]};
   if(singRole) return {actions:[{type:'sing',part:singRole}]};
@@ -313,18 +348,24 @@ function partEditFix(t,raw){
     if(inst&&!fresh) return {actions:[inst]};
     return {actions:[{type:'vary',track:role,mood:moodSaid(t)||undefined}].concat(inst?[inst]:[])}; }
   return null; }
+/* a short follow-up that only gives a side ("a bit more to the left", "to the right", "back to the middle"). A lone "right" or "left" is
+   a musician agreeing ("right", "ok right"), so it pans only right after a pan (QA, 22 Nov AI-14 fix 3) */
+const LONE_PAN=/^\s*(?:(?:and|now|ok|okay|then|maybe)\s+)*(?:a (?:bit|little|touch) |slightly |little |thoda |zara )?(?:more |further )?(?:to the |towards the |over to the )?(left|right)(?: a (?:bit|little|touch))?(?: please)?\s*$|^\s*(?:pan (?:it )?)?(?:back )?(?:to the )?(?:cent(?:re|er)|middle)(?: please)?\s*$/;
+function panJustDone(){ const P=typeof ASSIST!=='undefined'&&ASSIST.lastPan; if(!P) return false; const h=ASSIST.history||[]; let i=h.length-1;
+  if(h[i]&&h[i].role==='user'&&h[i].content===LAST_TEXT.text) i--; while(i>=0&&h[i].role!=='user') i--; return i>=0&&h[i].content===P.text; }
+function lonePan(t){ if(!LONE_PAN.test(t)) return false; if(/\b(cent(?:re|er)|middle|more|further|bit|little|touch|slightly|thoda|zara|to the|towards the|over to the)\b/.test(t)) return true; return panJustDone(); }
 /* "make it softer" right after the bass: the bass (the focus). Song-wide words, transport and arrangement keep their meaning. */
 function focusText(raw){ const f=typeof ASSIST!=='undefined'&&ASSIST.focus, w={drums:'drums',bass:'bass',chords:'chords',melody:'melody'}[f]; if(!w) return raw;
   const t=askText(raw); if((ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0]) return raw;
   /* "make it shorter" / "make them longer" right after a part: that part's notes (QA, 22 Nov fix 2); the song or loop only when it says so */
-  if(/\b(song|track|mix|everything|whole|all|master|volume|tempo|bpm|key|major|minor|loop|intro|outro|drop|break|build|section|bars?|faster|slower|swing|bounce|left|right|pan)\b/.test(t)&&!/^\s*(?:(?:and|now|ok|okay|then|maybe)\s+)*(?:a (?:bit|little|touch) |slightly |little |thoda |zara )?(?:more |further )?(?:to the |towards the |over to the )?(left|right)(?: a (?:bit|little|touch))?(?: please)?\s*$|^\s*(?:pan (?:it )?)?(?:back )?(?:to the )?(?:cent(?:re|er)|middle)(?: please)?\s*$/.test(t)) return raw;
+  if(/\b(song|track|mix|everything|whole|all|master|volume|tempo|bpm|key|major|minor|loop|intro|outro|drop|break|build|section|bars?|faster|slower|swing|bounce|left|right|pan)\b/.test(t)&&!lonePan(t)) return raw;
   if(/\b(longer|shorter)\b/.test(t)&&/\bnotes?\b/.test(t)&&!/\b(it|that|this|them|those)\b/.test(t)) return raw.replace(/\b(?:the )?notes?\b/i,'the '+w+' notes');
   if(/\b(play|stop|pause|save|download|export|bounce|arrange|record|sing|hum|whistle|name|rename|undo|redo|delete|remove|again|mp3|quantize|quantise)\b/.test(t)) return raw;
   /* only a request about "it" ("make it softer", "put it on strings"); "thats it", "keep it" are not the part's name (QA, 22 Nov fix 5) */
   if(/\b(?:it all|all of it|them all|all of them|the whole thing)\b/.test(t)) return raw; /* the whole song, never the focus part (QA, 22 Nov fix 8) */
   if(/\b(it|that|this|them|those)\b/.test(t)&&/\b(make|turn|put|give|change|try|set|move|bring|take|add|swap|switch|play|mute|solo|unmute|remove|delete|quantize|transpose|double|copy|boost|cut|lower|raise|shorten|lengthen|simplify|vary|redo|fix|tweak|louder|softer|quieter|brighter|darker|warmer|simpler|busier|shorter|longer|higher|up|down|more|less|another|again|new|different|replace|karo|kar do|badlo|banao|lagao|daalo|hatao|thoda|thodi)\b/.test(t)&&!(typeof closingSaid==='function'&&closingSaid(raw))) return raw.replace(/\b(it|that|this|them|those)\b/i,'the '+w);
   /* "a bit more to the left" right after panning a part: that part (QA, 22 Nov bug 4) */
-  if(/^\s*(?:(?:and|now|ok|okay|then|maybe)\s+)*(?:a (?:bit|little|touch) |slightly |little |thoda |zara )?(?:more |further )?(?:to the |towards the |over to the )?(left|right)(?: a (?:bit|little|touch))?(?: please)?\s*$|^\s*(?:pan (?:it )?)?(?:back )?(?:to the )?(?:cent(?:re|er)|middle)(?: please)?\s*$/.test(t)) return 'pan the '+w+' '+raw.trim();
+  if(lonePan(t)) return 'pan the '+w+' '+raw.trim();
   /* one word after a part ("louder", "a bit softer", "simpler"): that part */
   if(typeof BARE_LEVEL!=='undefined'&&BARE_LEVEL.test(raw)) return 'make the '+w+' '+raw.trim();
   if(/\b(another|one more|new one|different one|the other one|previous one|last one)\b/.test(t)) return raw+' '+w;
@@ -528,14 +569,19 @@ function toneFix(t){
   const eq=(T,band,d)=>{ const f={low:'lo',mid:'mid',high:'hi'}[band]; A.push({type:'mix',track:T.id,[band]:clamp(Math.round((T[f]||0)+d),-15,15)}); };
   /* a melody's low cut stays under its lowest note, so the cut never thins the tune itself (QA, 22 Nov bug 8: 308 Hz on a melody down to C3) */
   const floorHz=T=>{ if(T.role!=='melody'||T.kind!=='notes'||!(T.events||[]).length) return Infinity; const lo=Math.min(...T.events.map(e=>+e.n).filter(isFinite)); return isFinite(lo)?Math.round(440*Math.pow(2,(lo-69)/12)*0.85):Infinity; };
-  const cut=T=>{ const cur=(T.fx&&T.fx.hp)||20, [mn,st,mx]=TONE_HP[T.role]||[120,1.4,400], v=Math.min(mx,floorHz(T),Math.max(mn,st<2?Math.round(cur*st):cur+st)); if(v>cur) A.push({type:'track_fx',track:T.id,effect:'low cut',amount:v}); else if(floorHz(T)<Infinity) keptLow.add(T); return Math.max(v,cur); }, keptLow=new Set();
+  /* a melody cut that already sits above its lowest note (220 Hz on a tune down to C3 at 131 Hz) comes down under it, as the reply says (AI-14 fix 5) */
+  const cut=T=>{ const cur=(T.fx&&T.fx.hp)||20, [mn,st,mx]=TONE_HP[T.role]||[120,1.4,400], fl=floorHz(T), want=Math.min(mx,Math.max(mn,st<2?Math.round(cur*st):cur+st));
+    if(cur>fl){ A.push({type:'track_fx',track:T.id,effect:'low cut',amount:fl}); lowered.add(T); return fl; }
+    const v=Math.min(want,fl); if(v>cur){ A.push({type:'track_fx',track:T.id,effect:'low cut',amount:v}); if(fl<want) keptLow.add(T); return v; }
+    if(fl<want) keptLow.add(T); return cur; }, keptLow=new Set(), lowered=new Set();
+  const cutSay=(T,v)=>lowered.has(T)?`${T.name} (low cut down to ${hz(v)}, under its lowest note)`:keptLow.has(T)?`${T.name} (low cut ${hz(v)}, under its lowest note)`:`${T.name} (${hz(v)})`;
   const more=kind==='warm'?' Say “warmer” again to go further.':` Say “still ${{mud:'muddy',box:'boxy',harsh:'harsh',dull:'dull',thin:'thin'}[kind]}” to go further.`;
   if(role){
     const list=PROJ.tracks.filter(x=>x.role===role), part=TONE_PART[role]||role;
     if(!list.length) return {actions:[],reply:role==='drums'||role==='chords'?`There are no ${role} yet to fix. Want me to add some?`:`There's no ${part.replace(/^the /,'')} yet to fix. Want me to add one?`};
     let say='';
     list.forEach((T,i)=>{ if(kind==='mud'){ const n0=A.length, v=cut(T), fl=T.role==='bass'||T.role==='drums'?-9:-12, lo=T.lo||0, d=Math.max(-3,fl-lo); if(d<0) eq(T,'low',d);
-        if(!i) say=A.length===n0?`${part[0].toUpperCase()+part.slice(1)} is already cleaned as far as I’d go (low cut ${hz(v)}, low EQ ${lo} dB). Try a softer sound or turn it down a little.`:`Cleaned up ${part}: low cut up to ${hz(v)}${d<0?` and ${-d} dB less low boom`:''}, same notes.`; }
+        if(!i) say=A.length===n0?`${part[0].toUpperCase()+part.slice(1)} is already cleaned as far as I’d go (low cut ${hz(v)}${keptLow.has(T)?', under its lowest note':''}, low EQ ${lo} dB). Try a softer sound or turn it down a little.`:`Cleaned up ${part}: low cut ${lowered.has(T)?'down':'up'} to ${hz(v)}${lowered.has(T)||keptLow.has(T)?' (under its lowest note)':''}${d<0?` and ${-d} dB less low boom`:''}, same notes.`; }
       else if(kind==='box'){ eq(T,'mid',-3); say=`Took the boxiness out of ${part}: 3 dB less mids around 1 kHz.`; }
       else if(kind==='warm'){ const lo=clamp(Math.round((T.lo||0)+2),-15,15), hi=clamp(Math.round((T.hi||0)-3),-15,15); A.push({type:'mix',track:T.id,low:lo,high:hi}); say=`Warmer ${part.replace(/^the /,'')}: 3 dB less highs and 2 dB more low end, same notes.`; }
       else if(kind==='harsh'){ eq(T,'high',-3); say=`Softened ${part}: 3 dB less highs.`; }
@@ -550,8 +596,8 @@ function toneFix(t){
     const up=all.filter(x=>x.role!=='bass'&&x.role!=='drums'&&!x.mute); /* a muted part isn't heard, so it isn't muddying anything (QA, 22 Nov bug 8) */
     if(!up.length&&all.some(x=>x.mute&&x.role!=='bass'&&x.role!=='drums')) return {actions:[],reply:'Everything above the bass that plays is already clean, and the muted parts aren’t heard. Tell me which part sounds muddy: “the bass is muddy” or “the kick is boomy”.'};
     if(!up.length) return {actions:[],reply:!all.some(x=>x.role==='bass')?'So far it’s just the drums, and their low end is the groove. Say “the kick is boomy” if it’s the kick.':'So far it’s just drums and bass, and their low end is the groove. Tell me which one: “the bass is muddy” or “the kick is boomy”.'};
-    const done=up.map(T=>{ const v=cut(T), d=Math.max(-3,-12-(T.lo||0)); if(d<0) eq(T,'low',d); return keptLow.has(T)?`${T.name} (low cut kept at ${hz(v)}, under its lowest note)`:`${T.name} (${hz(v)})`; });
-    return {actions:A,reply:`Cleaned up the mix: higher low cuts and 3 dB less low end on ${done.length>1?done.slice(0,-1).join(', ')+' and '+done[done.length-1]:done[0]}; bass and kick untouched.`+more};
+    const done=up.map(T=>{ const v=cut(T), d=Math.max(-3,-12-(T.lo||0)); if(d<0) eq(T,'low',d); return cutSay(T,v); });
+    return {actions:A,reply:`Cleaned up the mix: ${lowered.size?"low cuts set":"higher low cuts"} and 3 dB less low end on ${done.length>1?done.slice(0,-1).join(', ')+' and '+done[done.length-1]:done[0]}; bass and kick untouched.`+more};
   }
   if(kind==='warm'){ all.forEach(T=>eq(T,'high',-2)); return {actions:A,reply:'Warmed up the mix: 2 dB less highs on every part.'+more}; }
   if(kind==='box'){ all.filter(x=>x.role!=='drums').forEach(T=>eq(T,'mid',-2)); return {actions:A,reply:'Took the boxiness out of the mix: 2 dB less mids around 1 kHz on every part but the drums.'+more}; }

@@ -703,9 +703,16 @@ const ACT={
       if(bar||/^(start|top|beginning|the start|the top|the beginning|1)$/.test(f)){ songPlay({from:bar?+bar[1]:1}); return bar?`Playing from bar ${bar[1]}`:'Playing the song from the start'; }
       const s=findSec(a.from); if(!s){ songNote(`I couldn’t find “${a.from}” in the song.`); return; } songPlay({from:s}); return `Playing from ${s.name}`; } if(/rec/.test(d)){ recordPress(); return 'Recording'; } if(PROJ.tracks.length && !TR.running){ loopPlay(); return 'Playing'; } },
   sing(a){ /* "mute the voice note" / "turn off the recording" sent as a take (QA, 22 Nov bug 2): that track is muted, the mic stays off */
-    { const T=LAST_TEXT.text&&typeof audioMuteFix==='function'?audioMuteFix(askText(LAST_TEXT.text)):null; if(T){ if(T.actions.length) return T.actions.map(x=>ACT.mix(x)).filter(Boolean).join(', '); songNote(T.reply); BATCH.declined=true; return; } }
+    /* ...unless the words also ask for a take ("mute the voice note and sing the bassline", "… and record a new one"): then the voice note
+       is muted (when nothing else in this request mutes it) and the take still starts (QA, 22 Nov AI-14 fix 2) */
+    let pre='';
+    if(LAST_TEXT.text&&typeof audioMuteFix==='function'){ const said=String(LAST_TEXT.text), segs=(typeof splitAsks==='function'&&splitAsks(said))||[{text:said}];
+      const takeW=/\b(sing|hum|whistle|record|re-?record|retake|new take|voice ?note)\b/, mc=segs.map(g=>audioMuteFix(askText(g.text))), wants=segs.length>1&&segs.some((g,i)=>!mc[i]&&takeW.test(askText(g.text)));
+      const sent=x=>{ const T0=x&&x.actions[0]&&findTrack(x.actions[0].track); return !!T0&&(BATCH.ran||[]).some(b=>b!==a&&b.type==='mix'&&b.mute!=null&&findTrack(b.track)===T0); };
+      if(wants){ const M=mc.find(x=>x&&x.actions.length); if(M&&!sent(M)) pre=M.actions.map(x=>ACT.mix(x)).filter(Boolean).join(', '); }
+      else { const T=audioMuteFix(askText(said)); if(T){ if(sent(T)) return; if(T.actions.length) return T.actions.map(x=>ACT.mix(x)).filter(Boolean).join(', '); songNote(T.reply); BATCH.declined=true; return; } } }
     const raw=String(a.part||a.role||a.track||'melody').toLowerCase(); const part=/voice|audio|note/.test(raw)&&!/melody/.test(raw)?'voice':/bass/.test(raw)?'bass':/chord|pad|harmon/.test(raw)?'chords':'melody';
-    BATCH.take=part; if(part==='melody') delete PROJ.progLocked; return part==='voice'?`Recording a voice note after the count-in: ${PROJ.bars} bars`:`Sing the ${part==='bass'?'bassline':part==='chords'?'chord roots (one note per chord)':'melody'} after the count-in: ${PROJ.bars} bars`; },
+    BATCH.take=part; if(part==='melody') delete PROJ.progLocked; return (pre?pre+'. ':'')+(part==='voice'?`Recording a voice note after the count-in: ${PROJ.bars} bars`:`Sing the ${part==='bass'?'bassline':part==='chords'?'chord roots (one note per chord)':'melody'} after the count-in: ${PROJ.bars} bars`); },
   convert(a){ const t=findTrack(a.track||'melody'); if(!t||t.kind!=='notes'||(INST.get(t.inst)||{}).percussive) return; const to=/bass/.test(a.to||'')?'bass':/chord|pad/.test(a.to||'')?'chords':'melody';
     t.events=shapePart(t.events,to,projectKey()); t.role=to; t.inst=partInst(to); loadI(t.inst); t.gen=false; t.name=(to==='bass'?'Bassline':to==='chords'?'Chords':'Melody')+' (from '+t.name.replace(/^(Sung|Hummed) /,'').toLowerCase()+')';
     return `${t.name} on ${INST.get(t.inst).name}`; },
@@ -724,7 +731,7 @@ const ACT={
       /* a high cut under 800 Hz is never what was meant (the AI sent "amount":60 for "softer hats"): read 0-100 as how much to cut, on the log scale */
       if(k==='lp'&&!num(a.hz)&&num(a.amount)&&+a.amount<=100) v=d.max*Math.pow(d.min/d.max,clamp(+a.amount,0,100)/100);
       t.fx[k]=clamp(Math.round(v),d.min,d.max); }
-    else if(k==='pan'){ t.fx.pan=clamp((num(a.amount)?+a.amount:0)/100,-1,1); }
+    else if(k==='pan'){ t.fx.pan=clamp((num(a.amount)?+a.amount:0)/100,-1,1); ASSIST.lastPan={id:t.id,text:String(LAST_TEXT.text||'')}; } /* "left" alone right after this is a pan (focusText) */
     else { const cur=t.fx[k]||0; let nv=clamp(v==null?cur+(+a.change)/100:v/100,0,1);
       /* "add some reverb" / "more delay" never lowers it, even when the AI sends an amount under what the track has (QA, 16 Nov) */
       /* only when the add/more is about THIS effect and no number, set, less or too wet was said for it (QA, 16 Nov: "set the chords reverb to 20 and add some delay" kept 20) */
