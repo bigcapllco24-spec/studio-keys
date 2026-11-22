@@ -4907,6 +4907,8 @@ function askText(raw){
     /* "why is the bass so loud?", "why does the melody sound so busy?": a comment that it is too loud / too busy (QA, 22 Nov fix 3) */
     .replace(/\bwhy (?:is|are|does|do) (the |my |this |that )?([a-z0-9 ]{2,20}?) (?:sound |sounding |get |getting )?(?:so|that|this|too) (loud|quiet|soft|busy|muddy|boomy|harsh|bright|dark|thin|low|high|fast|slow)\b/g,'$1$2 is too $3')
     .replace(/\bun[\s-]+(mute|solo)/g,'un$1').replace(/\b(basline|bassine|bassslines?|basslin)\b/g,'bassline').replace(/\b(baslines)\b/g,'basslines').replace(/\b(anothr|anotehr|antoher|anothor|anoter)\b/g,'another').replace(/\b(melodie|melodi|meoldy|mellody|melidy|mleody)\b/g,'melody').replace(/\b(chrods|cords)\b/g,'chords').replace(/\bmor\b/g,'more').replace(/\bteh\b/g,'the')
+    /* "melody bahut left hai": the melody is too far left (a step back toward the centre) */
+    .replace(/\bbahut (?:zyada |jyada )?(left|right)(?: (?:side|mein|me|pe|par))?\b/g,'too far $1')
     /* "make drop two bigger": Drop 2 (speech types the number as a word; QA, 22 Nov AI-14 fix 2) */
     .replace(/(^|\b(?:the|make|in|into|at|of|after|before|to|for|on|from|until|is|and)\s+)(intro|outro|drop|break|build|verse|chorus|bridge)\s+(one|two|three|four)\b(?!\s+(?:more|of|bars?|beats?|times?|notes?|tracks?|parts?|sections?))/g,(m,a,b,c)=>a+b+' '+{one:1,two:2,three:3,four:4}[c])
     /* "bass gaane do" / "melody main gaunga": let me sing it (a sung take) */
