@@ -251,7 +251,7 @@ function setPedalUser(inp,rev){
 }
 function flipPedal(inp){
   const ds=settingsFor(inp); setPedalUser(inp,!pedalRevOf(ds));
-  toast(ds.pedalRev?`${inp.name}: sustain pedal flipped. It now holds notes when it sends “off”.`:`${inp.name}: sustain pedal set back to normal.`);
+  toast(ds.pedalRev?`${inp.name}: sustain pedal flipped: notes now ring while your foot is down.`:`${inp.name}: sustain pedal set back to normal.`);
 }
 const pedalMayAsk=(ds,P)=>!PEDAL_ASKED && !ds.pedalHow && P.fromUp;
 function pedalAsk(inp){
