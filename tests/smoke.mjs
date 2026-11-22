@@ -423,6 +423,16 @@ try {
     await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
     await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
   ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
+  // UX-20 (QA-2, 22 Nov): Ctrl+D at the loop's end doubles the loop and pastes: ONE Undo on a slow computer too (CPU x4, then a 250 ms track redraw that used to split it)
+  const cdp = await p.target().createCDPSession(); const dd = [];
+  try { await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+    for (const lag of [0, 250]) dd.push(await E(async lag => { const W = ms => new Promise(r => setTimeout(r, ms)), rt = window.renderTracks;
+      await newSong('Smoke dup end'); ASSIST.voice = false; runActions([{ type: 'add_drums', style: 'house', seed: 5200 }, { type: 'add_chords', seed: 5201 }, { type: 'add_bass', seed: 5202 }]); loopStop(); songTemplate('club');
+      const t = PROJ.tracks.find(t => t.role === 'chords'); openEditor(t.id, { sid: songFind('drop').id }); await W(800); edFocus(); const key = k => $('#edCanvas').dispatchEvent(new KeyboardEvent('keydown', { key: k, ctrlKey: true, bubbles: true }));
+      if (lag) window.renderTracks = function () { const t0 = performance.now(); while (performance.now() - t0 < lag); return rt.apply(this, arguments); };
+      try { const n0 = edTrack().events.length, b0 = PROJ.bars; key('a'); key('d'); const n1 = edTrack().events.length, b1 = PROJ.bars; undo(); const r = { lag, b: [b0, b1, PROJ.bars], n: [n0, n1, edTrack() ? edTrack().events.length : -1] }; closeEditor(); return r; } finally { window.renderTracks = rt; } }, lag));
+  } finally { await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 }); }
+  ok('Ctrl+D at the loop end doubles it and one Undo brings back 4 bars and the old notes (CPU x4)', dd.every(r => r.b.join() === '4,8,4' && r.n[1] === 2 * r.n[0] && r.n[2] === r.n[0]), JSON.stringify(dd));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
