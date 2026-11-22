@@ -455,9 +455,19 @@ function songStartRename(id){ const el=document.querySelector(`#songStrip .sec[d
     UNDO.busy=true; try{ songSetPart(sid,tid,{on:L.was}); } finally{ UNDO.busy=false; }
     if(UNDO.stack.length&&UNDO.stack[UNDO.stack.length-1]===L.last) UNDO.stack.pop(); UNDO.redo=L.redo; UNDO.last=snapState(); undoButtons(); songChipHide();
     if(L.chip&&L.chip.tok===UNDO.last) songChip(L.chip.text); };
-  box.addEventListener('click',e=>{ const el=e.target.closest('.part'); if(!el) return; clearTimeout(pT); if(e.detail===0){ togglePart(el); return; } if(e.detail>1) return; pLast=null; pT=setTimeout(()=>togglePart(el),230); });
-  box.addEventListener('dblclick',e=>{ const el=e.target.closest('.part'); if(!el) return; clearTimeout(pT); untogglePart(el.dataset.sid,el.dataset.tid); const t=PROJ.tracks.find(x=>x.id===el.dataset.tid); if(!t) return;
-    songSelect(el.dataset.sid,{cursor:!TR.running}); if(t.kind==='notes'){ openEditor(t.id,{sid:el.dataset.sid}); edFocus(); } else toast('That’s a recording: switch it on or off here. Use “Turn into notes” to edit it as notes.'); });
+  /* UX-21: the second press of a double-click (mouse, or a double-tap) cancels the waiting switch right away, so a slow double-click
+     never switches the part and redraws it under the pointer (that sent the second click and the dblclick to the track lane, QA-2).
+     The part under the press is remembered so a redraw between press and release can't lose the double-click either. */
+  let pPend=null, pDown=null;
+  const pSame=(a,sid,tid)=>a&&a.sid===sid&&a.tid===tid;
+  box.addEventListener('mousedown',e=>{ const el=e.target.closest('.part'); if(!el||e.button!==0){ pDown=null; return; } const sid=el.dataset.sid, tid=el.dataset.tid; pDown={sid,tid,at:performance.now()};
+    if(e.detail>1&&pT&&pSame(pPend,sid,tid)){ clearTimeout(pT); pT=0; pPend=null; } });
+  box.addEventListener('click',e=>{ const el=e.target.closest('.part'); if(!el) return; clearTimeout(pT); pT=0; pPend=null; if(e.detail===0){ togglePart(el); return; } if(e.detail>1) return; pLast=null;
+    pPend={sid:el.dataset.sid,tid:el.dataset.tid}; pT=setTimeout(()=>{ pT=0; pPend=null; togglePart(el); },230); });
+  box.addEventListener('dblclick',e=>{ const el=e.target.closest('.part'), D=pDown; let sid, tid;
+    if(el){ sid=el.dataset.sid; tid=el.dataset.tid; } else if(D&&performance.now()-D.at<700){ sid=D.sid; tid=D.tid; } else return;
+    clearTimeout(pT); pT=0; pPend=null; untogglePart(sid,tid); const t=PROJ.tracks.find(x=>x.id===tid); if(!t||!songFind(sid)) return;
+    songSelect(sid,{cursor:!TR.running}); if(t.kind==='notes'){ openEditor(t.id,{sid}); edFocus(); } else toast('That’s a recording: switch it on or off here. Use “Turn into notes” to edit it as notes.'); });
   /* the song area takes the keyboard while it has focus; clicking the piano gives the keys back */
   pl.addEventListener('pointerdown',e=>{ if(!songOn()||e.target.closest('input,select,textarea,button,.slane')) return; if(e.target.closest('.th,.tfx')) return; pl.focus({preventScroll:true}); });
   document.addEventListener('pointerdown',e=>{ const a=document.activeElement; if(a&&a!==document.body&&pl.contains(a)&&!pl.contains(e.target)&&!e.target.closest('#songMenu')) a.blur(); },true); /* e.g. the piano: its keys play notes again */
