@@ -4350,7 +4350,7 @@ function songStartRename(id){ const el=document.querySelector(`#songStrip .sec[d
     if(UNDO.stack.length&&UNDO.stack[UNDO.stack.length-1]===L.last) UNDO.stack.pop(); UNDO.redo=L.redo; UNDO.last=snapState(); undoButtons(); songChipHide();
     if(L.chip&&L.chip.tok===UNDO.last) songChip(L.chip.text); };
   /* UX-21: the second press of a double-click (mouse, or a double-tap) cancels the waiting switch right away, so a slow double-click
-     never switches the part and redraws it under the pointer (that sent the second click and the dblclick to the track lane, QA-2).
+     never switches the part and redraws it under the pointer (press and release then landed on different elements and the browser sent no double-click at all, QA-2).
      The part under the press is remembered so a redraw between press and release can't lose the double-click either. */
   let pPend=null, pDown=null;
   const pSame=(a,sid,tid)=>a&&a.sid===sid&&a.tid===tid;
