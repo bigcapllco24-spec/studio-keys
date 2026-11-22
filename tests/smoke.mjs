@@ -456,6 +456,12 @@ try {
       /* fix 1c: the relative key (C major on this A minor loop, the same scale) only changes the label, from auto and from a set key */
       el.value = '0:major'; el.dispatchEvent(new Event('change')); R.rel = [moved(p0), $('#toast').textContent].join('|'); undo(); await W(100);
       el.value = '9:minor'; el.dispatchEvent(new Event('change')); el.value = '0:major'; el.dispatchEvent(new Event('change')); R.relSet = moved(p0); undo(); await W(60); undo(); await W(100);
+      /* fix 1d: the next pick moves from the key the notes are in, never from the label: C major → A major → D minor, and C major → auto → D minor */
+      const pick = async v => { el.value = v; el.dispatchEvent(new Event('change')); await W(40); return moved(p0); };
+      R.seqA = [await pick('0:major'), await pick('9:major'), await pick('2:minor'), inKey(PROJ.key)].join('|');
+      undo(); await W(80); R.undoA = [moved(p0), keyName(PROJ.key), keyName(PROJ.noteKey)].join('|'); undo(); await W(60); undo(); await W(80);
+      R.seqB = [await pick('0:major'), await pick(''), await pick('2:minor'), inKey(PROJ.key)].join('|'); undo(); await W(60); undo(); await W(60); undo(); await W(80);
+      R.seqC = [await pick('9:major'), await pick('2:major')].join('|'); undo(); await W(60); undo(); await W(80); R.back = [moved(p0), PROJ.key].join('|');
       /* fix 1b: the remembered key goes when the generated parts go: remove bass and chords, add your own C major melody, pick D major */
       ['bass', 'chords'].forEach(r => removeTrack(PROJ.tracks.find(t => t.role === r).id));
       addTrack({ role: 'melody', inst: 'piano', name: 'My melody', events: [60, 64, 67, 72, 67, 64, 65, 62, 60, 64, 67, 72].map((n, i) => ({ b: i, d: 1, n, v: 0.8 })) }); await W(100);
@@ -467,8 +473,8 @@ try {
       addTrack({ role: 'bass', inst: 'bass', name: 'Sung bassline', take: 'bass', events: [48, 44, 36, 43, 43, 45, 48, 48, 43].map((n, i) => ({ b: i * 1.5, d: 1, n, v: 0.8 })) }); await W(100);
       const s0 = pit(); await handleRequest('add house drums in F minor'); await W(150); R.sung = [moved(s0), keyName(PROJ.key)].join('|');
       return R; } finally { ASSIST.engine = eng; } });
-  ok('Key menu on a generated i-VII-VI-VII loop moves from A minor to D minor (+5, all notes in D minor); A major picked keeps the tonic (no move); C major (same notes) only relabels, auto or set; after the generated parts go, an own C major melody to D major moves +2; a bass-only A minor line moves +5 to D minor; "add house drums in F minor" leaves a sung bass as sung',
-    kf.prog === '0656' && kf.gen === 'A minor' && kf.noMemory === 'A minor' && kf.menu === '5|100' && /^0\|A major\|Key set to A major, notes unchanged/.test(kf.mode) && /^0\|Key set to C major, notes unchanged/.test(kf.rel) && kf.relSet === '0' && kf.stale === '2|100' && kf.bassOnly === 'A minor|5|100' && kf.sung === '0|F minor', JSON.stringify(kf));
+  ok('Key menu on a generated i-VII-VI-VII loop moves from A minor to D minor (+5, all notes in D minor); A major picked keeps the tonic (no move); C major (same notes) only relabels, auto or set; later picks move from the notes’ key (C major → A major → D minor +5, C major → auto → D minor +5); after the generated parts go, an own C major melody to D major moves +2; a bass-only A minor line moves +5 to D minor; "add house drums in F minor" leaves a sung bass as sung',
+    kf.prog === '0656' && kf.gen === 'A minor' && kf.noMemory === 'A minor' && kf.menu === '5|100' && /^0\|A major\|Key set to A major, notes unchanged/.test(kf.mode) && /^0\|Key set to C major, notes unchanged/.test(kf.rel) && kf.relSet === '0' && kf.seqA === '0|0|5|100' && kf.undoA === '0|A major|A minor' && kf.seqB === '0|0|5|100' && kf.seqC === '0|5' && kf.back === '0|' && kf.stale === '2|100' && kf.bassOnly === 'A minor|5|100' && kf.sung === '0|F minor', JSON.stringify(kf));
   // UX-19 (QA bug 9): a long "no clap, snare, kick" label in a narrow Song-view part clips on the right (start visible), full text in the tooltip
   const pwo = await E(async () => { const W = ms => new Promise(r => setTimeout(r, ms)); await newSong('Smoke UX-19 label'); runActions([{ type: 'add_drums', style: 'house', seed: 5400 }, { type: 'add_bass', seed: 5401 }]); await W(150);
     runActions([{ type: 'arrange', length: 'full' }]); loopStop(); await W(200); const S = songSections(), dr = PROJ.tracks.find(t => t.role === 'drums');

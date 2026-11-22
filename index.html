@@ -3470,16 +3470,24 @@ function loopKey(){ const ev=[].concat(...keyedLists()); if(ev.length<4) return 
 const genKeyLive=()=>PROJ.genKey&&PROJ.tracks.some(t=>t.gen&&keyedTrack(t))?PROJ.genKey:null;
 function noteGenKey(o){ if(PROJ.key||!o||!o.gen||o.kind==='audio'||o.role==='drums'||(INST.get(o.inst)||{}).percussive) return;
   const g=genKeyLive(), ev=[].concat(...keyedLists()); if(g&&(ev.length<4||keyShare(ev,g)>=bestShare(ev)-0.02)) return; PROJ.genKey=projectKey(); }
-/* setKey(k): the key the notes are already in, or one for parts not made yet; the notes only move from a key set before.
-   setKey(k,{move:true}) (the user picks a key: the Key menu, Keys' "key" action on its own): from auto, the notes move from
-   the key they are in now. Either way they move by the tonic difference, the shortest way; a change of mode alone (C minor →
-   C major) keeps the tonic and moves nothing, and the relative key of the key the notes are in (C major on an A minor
-   loop: the same scale) only changes the label (lead, 22 Nov). Back to auto remembers the key the notes are in.
+/* the key the NOTES are in (never just the label: after C major is picked on an A minor loop the notes are still A minor).
+   PROJ.noteKey is kept by every key pick; it, then the label, counts while the notes still fit it, else the notes are read
+   again (loopKey); with too few notes to read, the last known key. QA, 22 Nov: moving from the label after a relabel
+   dropped the song 3 semitones */
+function notesKey(){ const ev=[].concat(...keyedLists()), fit=c=>c&&(ev.length<4||keyShare(ev,c)>=bestShare(ev)-0.02);
+  if(fit(PROJ.noteKey)) return PROJ.noteKey; if(fit(PROJ.key)) return PROJ.key; return loopKey()||PROJ.noteKey||PROJ.key||null; }
+/* setKey(k): the key the notes are already in, or one for parts not made yet (the internal fill-ins, a vibe or artist key,
+   a key named inside a request for a part): nothing moves.
+   setKey(k,{move:true}) (the user picks a key: the Key menu, Keys' "key" action on its own): the notes move from the key
+   they are in (notesKey) by the tonic difference, the shortest way. A change of mode alone (C minor → C major) keeps the
+   tonic, and the relative key (C major on A minor notes: the same scale) only changes the label (lead, 22 Nov).
    Returns how far the notes moved (semitones). */
 function setKey(k,o={}){
-  const old=PROJ.key, from=old||(k&&o.move?loopKey():null); PROJ.key=k; let d=0; if(!k&&old) PROJ.genKey=old;
-  const rel=from&&k&&from.mode!==k.mode&&mod(k.tonic-from.tonic,12)===(from.mode==='minor'?3:9);
-  if(from && k && from.tonic!==k.tonic && !rel){ d=mod(k.tonic-from.tonic,12); if(d>6) d-=12; keyedLists().forEach(ev=>ev.forEach(e=>e.n+=d)); }
+  const from=k&&o.move?notesKey():null; let d=0; PROJ.key=k;
+  if(from){ const rel=from.mode!==k.mode&&mod(k.tonic-from.tonic,12)===(from.mode==='minor'?3:9);
+    if(from.tonic!==k.tonic&&!rel){ d=mod(k.tonic-from.tonic,12); if(d>6) d-=12; keyedLists().forEach(ev=>ev.forEach(e=>e.n+=d)); }
+    PROJ.noteKey=rel?{tonic:from.tonic,mode:from.mode}:{tonic:k.tonic,mode:from.mode}; }
+  else if(k&&!keyedLists().some(l=>l.length)) PROJ.noteKey=null; /* no notes yet: the next parts are made in the label */
   $('#keySel').value=k?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks(); return d;
 }
 /* what a key pick did, in words: "up 2 semitones", and that audio parts (voice notes, imports) stay as recorded */
