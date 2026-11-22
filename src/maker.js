@@ -235,6 +235,8 @@ function partEditFix(t,raw){
   if(fresh||/\b(change|replace|swap( out)?|switch( up)?)\b/.test(t)){
     const inst=iw&&iw!==T.inst&&/\b(to|with|for|on|into|as|by)\b/.test(t)?{type:'instrument',track:role,instrument:role==='drums'&&iw==='bass808'?'kit808':iw}:null;
     if(role==='drums') return inst?{actions:[inst]}:null;
+    /* "the bass and melody need work, give me new ones": a new version of each pitched part named (QA, 22 Nov fix 4) */
+    { const RS=ROLE_WORDS.filter(([k,re])=>re.test(t)&&k!=='drums'&&k!=='voice'&&PROJ.tracks.some(x=>x.role===k&&x.kind==='notes'&&x.gen)).map(x=>x[0]); if(RS.length>1&&fresh&&!inst) return {actions:RS.map(k=>({type:'vary',track:k,mood:k==='chords'?moodSaid(t)||undefined:undefined}))}; }
     if(inst&&!fresh) return {actions:[inst]};
     return {actions:[{type:'vary',track:role,mood:moodSaid(t)||undefined}].concat(inst?[inst]:[])}; }
   return null; }
@@ -540,7 +542,7 @@ function localBrain(raw){
   /* a typed "Keys, make an 8-bar intro…": the assistant's name isn't the part "keys" (speech already strips it) */
   { const nm=String((typeof ASSIST!=='undefined'&&ASSIST.name)||'Keys').trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); if(nm) raw=String(raw||'').replace(new RegExp('^\\s*(?:(?:hey|hi|ok|okay|yo)\\s+)?'+nm+'\\s*[,:!–—-]\\s*|^\\s*(?:hey|hi|ok|okay|yo)\\s+'+nm+'\\b\\s*|^\\s*'+nm+'\\s+(?=(?:make|add|turn|arrange|give|let|put|take|drop|loop|play|remove|bring|can|could|please|stretch|move|rename|duplicate)\\b)','i'),''); }
   /* "the drums are fine, just change the chords": the praised or protected part is left out of the words (protectSaid, AI-9 fix) */
-  { const P=typeof protectSaid==='function'?protectSaid(raw):null; if(P&&P.kept.size){ if(!P.rest.trim()) return {actions:[],reply:'OK. '+keptTxt(P.kept)+' What should I change next?'}; } const r2=P&&(/\b(mute|unmute|solo|unsolo)\b/i.test(raw)?P.rest:P.restCut); if(r2&&r2!==raw) raw=r2; }
+  { const P=typeof protectSaid==='function'?protectSaid(raw):null; if(P&&P.kept.size){ if(P.song) return {actions:[],reply:'Glad you like it. I kept everything as it is. What should we do next?'}; if(!P.rest.trim()) return {actions:[],reply:'OK. '+keptTxt(P.kept)+' What should I change next?'}; } const r2=P&&(/\b(mute|unmute|solo|unsolo)\b/i.test(raw)?P.rest:P.restCut); if(r2&&r2!==raw) raw=r2; }
   raw=focusText(raw);
   const segs=splitAsks(raw); if(!segs) return brainOne(raw);
   const R=[];
