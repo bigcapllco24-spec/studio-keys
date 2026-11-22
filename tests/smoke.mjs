@@ -423,6 +423,15 @@ try {
     await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
     await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
   ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
+  // UX-21: a slow double-click on a song part (150/150 and 200/100 ms gaps) opens the editor and leaves the part on; a single click still switches it (one undo step)
+  { await E(async () => { await newSong('Smoke dblclick'); runActions([{ type: 'add_drums', style: 'house', seed: 5210 }, { type: 'add_chords', seed: 5211 }]); loopStop(); songMode('song'); songTemplate('club'); });
+    const dc = await p.createCDPSession(), pt = () => E(() => { closeEditor(); const s = songFind('drop'), t = PROJ.tracks.find(t => t.role === 'chords'), el = document.querySelector(`.part[data-sid="${s.id}"][data-tid="${t.id}"]`); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+    const st = () => E(() => ({ ed: !$('#editor').hidden, on: !!songFind('drop').parts[PROJ.tracks.find(t => t.role === 'chords').id].on, u: UNDO.stack.length })), R = {};
+    const ms = (q, type, c) => dc.send('Input.dispatchMouseEvent', { type, x: q.x, y: q.y, button: 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount: c });
+    for (const [g1, g2] of [[150, 150], [200, 100]]) { const q = await pt(); await W(300); const s0 = await st(); await ms(q, 'mousePressed', 1); await ms(q, 'mouseReleased', 1); await W(g1); await ms(q, 'mousePressed', 2); await W(g2); await ms(q, 'mouseReleased', 2); await W(600); const r = await st(); R[g1 + '/' + g2] = { ed: r.ed, on: r.on, steps: r.u - s0.u }; if (!r.on) await E(() => undo()); }
+    { const q = await pt(); await W(300); const s0 = await st(); await ms(q, 'mousePressed', 1); await ms(q, 'mouseReleased', 1); await W(700); const r = await st(); await E(() => undo()); R.single = { ed: r.ed, on: r.on, steps: r.u - s0.u, undone: (await st()).on }; }
+    await E(() => { closeEditor(); songMode('loop'); }); await dc.detach();
+    ok('A slow double-click on a song part opens the editor and keeps it on; a single click still switches it', ['150/150', '200/100'].every(k => R[k].ed && R[k].on && R[k].steps === 0) && !R.single.ed && !R.single.on && R.single.steps === 1 && R.single.undone, JSON.stringify(R)); }
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
