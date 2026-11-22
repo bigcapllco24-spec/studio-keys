@@ -108,3 +108,35 @@ Head `1204291`, pushed on `preview-ux-19` (never main). `bash .claude/tools/chec
 4. Remove the bass and chords, then play or draw your own C major tune on a new track. Pick "D major": your tune moves up 2 and fits D major.
 5. On a new song, sing a bassline, then tell Keys "add house drums in F minor". Your sung notes stay exactly as you sang them; only the key label changes.
 6. Make it a full song and zoom out in Song view. In short drum parts, the "no clap…" label shows its start and ends in "…", disappears when a part gets very narrow, and the full text is always in the hover tooltip.
+
+## Fix 1d (22 Nov 2026, tester re-check 2: later picks moved from the label)
+Head `ebdffc1`, pushed on `preview-ux-19` (never main). `bash .claude/tools/check.sh`: CHECK OK, SMOKE OK 94 checks. The first run of this round only failed on a quote typo in my new smoke label, which I fixed.
+
+- **Change** (`src/studio.js`): every key pick now moves from the key the **notes** are in, never from the label.
+  - New `PROJ.noteKey` is set on every pick: `{tonic:k.tonic, mode:from.mode}` after a move or a same-tonic mode change, and unchanged by a relative relabel. It is part of the song, so undo and redo restore it with the notes and the label.
+  - New `notesKey()` decides where a move starts:
+    1. `PROJ.noteKey`, while the notes still fit it (scale share within 2% of the best key);
+    2. then the label, if the notes fit it (songs saved before this change);
+    3. then the notes read again with `loopKey()`;
+    4. with fewer than 4 notes, the last known key.
+  - Going back to "Key: auto" keeps `noteKey`. The old "auto stores the label as genKey" line is gone.
+  - A `setKey` call without `move` (internal fill-ins, vibe/artist keys, a key named inside a part request) never moves notes, now also when a key was already set. On `main`, "add house drums in F minor" on a song with a set key transposed everything. On a song with no notes yet it clears `noteKey`, so new parts follow the label.
+- **Numbers:**
+  - Prog-0656 A minor loop on auto (smoke): C major → A major → D minor gives 0, 0, +5, with 100% in D minor. One undo goes back to A major with the notes as before and `noteKey` A minor. C major → auto → D minor gives 0, 0, +5, 100%.
+  - The tonic-rule case A major → D major still gives 0 then +5 (notes in D minor, label D major, accepted). Undo after each run returns to auto with the notes as before.
+  - Set A minor then C major: 0. C major alone: 0 with the toast. A major alone: 0.
+  - Owner flow, 16 random runs: 16/16. Fixed seeds: 12/12 move +5 to 100% D minor, including the bass-only afro 71 and house 81.
+  - Stale-key case (own C major melody, pick D major): +2, 100%.
+  - Sung bass with "add house drums in F minor": 0 on auto, and 0 after the key was set to D minor. Key alone: +2. Key plus tempo: +2.
+  - 3 notes: unchanged with the toast. Voice note: ", audio parts stay as recorded".
+  - Hand-made C minor loop: C major 0, D major +2, back to auto then D minor +2.
+  - No page errors.
+- **Smoke:** the fix-1 line now also checks both sequences, undo of the sequence (notes, label, `noteKey`), and A major → D major.
+
+## Try it, final (test link https://studio-keys.bigcapllco24.workers.dev/p/preview-ux-19/)
+1. Start a new song. Tell Keys "make a house beat", then "add a bassline", then "add some chords". Leave the Key menu on "Key: auto".
+2. Pick "D minor" in the Key menu. A note says the notes moved up 5 into D minor. Play it: the bass and chords sound right together in the new key, and the drums didn't change. Press Undo once and it's back as it was, on "Key: auto".
+3. Pick "C major", which uses the same notes as A minor. Nothing moves, and the note says "Key set to C major, notes unchanged". Pick "A major": nothing moves either (same root note).
+4. Remove the bass and chords, then play or draw your own C major tune on a new track. Pick "D major": your tune moves up 2 and fits D major.
+5. On a new song, sing a bassline, then tell Keys "add house drums in F minor". Your sung notes stay exactly as you sang them; only the key label changes.
+6. Make it a full song and zoom out in Song view. In short drum parts, the "no clap…" label shows its start and ends in "…", disappears when a part gets very narrow, and the full text is always in the hover tooltip.
