@@ -526,6 +526,20 @@ try {
     await openSongs(); for (let i = 0; i < 2; i++) { document.querySelector(`[data-pdel="${k}"]`).click(); await W(150); } $('#projModal').hidden = true;
     await saveNamed(true); const quiet = await has(); await saveNamed(false); const saved = await has(); return { quiet, saved, hdr: $('#saveState').textContent, flag: store.get('detached', null) }; });
   ok('Save after deleting the open song saves it again', !sd.quiet && sd.saved && /^Saved/.test(sd.hdr) && !sd.flag, JSON.stringify(sd));
+  // AI-14 (QA, 22 Nov): song-section words. A14 builds a Bodzin song in the page (full: arranged) and says a phrase offline (Basic mode)
+  await E(() => { window.A14 = { async song(full, voice) { const W = ms => new Promise(r => setTimeout(r, ms)); await newSong('Smoke AI-14'); ASSIST.engine = null; ASSIST.voice = false; ASSIST.focus = null;
+      runActions([{ type: 'vibe', ref: 'Stephan Bodzin' }, { type: 'add_drums', ref: 'Stephan Bodzin', seed: 5401 }]); await W(60); runActions([{ type: 'add_bass', seed: 5402 }]); await W(60); runActions([{ type: 'add_chords', seed: 5403 }]); await W(60); runActions([{ type: 'add_melody', seed: 5404 }]); await W(60);
+      if (voice) { const t = makeTrack({ kind: 'audio', role: 'voice', inst: null, name: 'sing', events: [], start: 0, trim: 0 }); PROJ.tracks.push(t); saveProject(); }
+      if (full) runActions(localBrain('make it a full track').actions); loopStop(); await W(60); },
+    sig() { return PROJ.tracks.map(t => t.name + ':' + JSON.stringify(t.events || []).length + ':' + (t.events || []).map(e => e.n + '@' + e.b).join().length).join('|'); },
+    secs() { return songSections().map(s => s.name + '[' + PROJ.tracks.filter(t => s.parts[t.id] && s.parts[t.id].on).map(t => t.name + (s.parts[t.id].without ? '-' + s.parts[t.id].without.join('+') : '')).join(',') + ']').join(' '); },
+    reply() { const b = [...document.querySelectorAll('#asChat .bub.as')]; return b.length ? b[b.length - 1].textContent : ''; },
+    async say(text) { const s0 = A14.sig(), u0 = UNDO.stack.length, n0 = PROJ.tracks.length; await handleRequest(text); const take = BATCH.take || null; if (LOOP.state === 'counting' || LOOP.state === 'take') { try { TAKE.stop(); } catch (e) { } } if (MIC.on) micStop();
+      return { same: A14.sig() === s0, steps: UNDO.stack.length - u0, added: PROJ.tracks.length - n0, take, reply: A14.reply(), secs: songArranged() ? A14.secs() : 'loop' }; } }; });
+  // AI-14 bug 1: "bring the bass in" switches the bass on in that section and never remakes it
+  const a14b1 = await E(async () => { const R = []; for (const x of ['take the kick out of the intro and bring the bass in', 'bring the bass in at the intro', 'start the bass at the intro', 'intro se kick hata do aur bass daal do']) { await A14.song(true); const r = await A14.say(x); R.push({ x, ok: r.same && r.steps === 1 && r.added === 0 && /^Intro\[[^\]]*Bassline/.test(r.secs), r: r.secs.slice(0, 60) }); }
+    await A14.song(true); const b = await A14.say('bring the bass in'); R.push({ x: 'bare', ok: b.same && b.steps === 0 && /Say which section/.test(b.reply) }); return R; });
+  ok('AI-14 bug 1: "take the kick out of the intro and bring the bass in", "bring/start the bass at the intro" and "intro se kick hata do aur bass daal do" switch the bass on in the intro, same notes, one undo step; a bare "bring the bass in" asks which section', a14b1.every(x => x.ok), JSON.stringify(a14b1.filter(x => !x.ok)));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

@@ -4999,7 +4999,7 @@ function songBrain(raw,t0){
   const secAt=re=>{ const m=t.match(re); return m?ref(m.slice(1)):null; };
   const anySec=[...t.matchAll(secRe)];
   const artist=artistIn(raw), needArr=r=>arr?r:{actions:[],reply:SB_NOSONG};
-  const PREP=`(?:in|of|from|into|to|during|for|on|inside) (?:the |my |this )?${ORD}(${SEC})s?(?: (\\d))?\\b`, HIN=`\\b${ORD}(${SEC})s?(?: (\\d))? (?:se|mein|me|main|ke|ka|ki|ko)\\b`;
+  const PREP=`(?:in|of|from|into|to|during|for|on|inside|at) (?:the |my |this )?${ORD}(${SEC})s?(?: (\\d))?\\b`, HIN=`\\b${ORD}(${SEC})s?(?: (\\d))? (?:se|mein|me|main|ke|ka|ki|ko)\\b`;
   const inSec=secAt(new RegExp('\\b'+PREP))||secAt(new RegExp(HIN));
   let m;
   /* whole song: play, loop */
@@ -5038,7 +5038,8 @@ function songBrain(raw,t0){
   if(vary&&anySec.length&&!/\b(add|insert|another)\b/.test(t)){ const sec=inSec||ref(anySec[anySec.length-1].slice(1)), ps=[...t.replace(new RegExp(`\\b(${SEC})\\b`,'g'),' ').matchAll(partRe)].map(x=>x[1]);
     const pick=ps.length?ps:[PROJ.tracks.some(x=>x.role==='melody')?'melody':PROJ.tracks.some(x=>x.role==='chords')?'chords':PROJ.tracks.some(x=>x.role==='bass')?'bass':'drums'];
     return needArr({actions:[{type:'parts',section:sec,vary:pick}]}); }
-  if(inSec){ const body=t.replace(new RegExp('\\b'+PREP,'g'),' ').replace(new RegExp(HIN,'g'),' ');
+  if(inSec){ const body=t.replace(new RegExp('\\b'+PREP,'g'),' ').replace(new RegExp(HIN,'g'),' ')
+      .replace(/(\b(?:hata do|hata|hatao|nikal do|nikalo|daal do|daalo|dalo|daal|band karo|band kar do|add karo|add kar do|bajao|chalao)) (?:aur|phir|and)\b/g,'$1 ,'); /* "intro se kick hata do aur bass daal do": two clauses (QA, 22 Nov bug 1) */
     const clauses=body.split(/,|\band (?=(?:bring|take|drop|remove|add|put|mute|kill|cut|keep|lose|pull|no|without|only|just|let)\b)|\bthen\b|\bbut\b|\bplus\b/);
     const act={in:[],out:[],only:[]};
     clauses.forEach(c=>{ const ps=[...c.matchAll(partRe)].map(x=>x[1].replace(/ /g,'')); if(!ps.length) return;
@@ -5293,6 +5294,10 @@ function localBrain(raw){
   const R=[];
   for(const g of segs){ let L; g.said=g.said||g.text;
     if(R.length){ const pr=R[R.length-1]; g.text=askInherit(g.text,askPartOf(pr.text,pr.L));
+      /* "take the kick out of the intro and bring the bass in": the second half is about the same section (QA, 22 Nov bug 1) */
+      { const ps=(pr.L.actions||[]).find(a=>a.type==='parts'&&a.section), gt=askText(g.text), r=(ROLE_WORDS.find(([k,re])=>re.test(gt))||[])[0];
+        if(ps&&!/\b(intro|outro|drop|break|build|section|verse|chorus|bridge|song|track)\b/.test(gt.replace(/^\s*(?:(?:and|then|also|please|now)\s+)*drop\b/,' '))&&!/\b(a|an|some|new|another|second)\b/.test(gt)&&/\b(bring|take|put|add|drop|remove|kill|cut|keep|lose|pull|start|let|daal|dalo|daalo|hata|hatao|nikalo)\b/.test(gt)&&/\b(in|out|back|off|drop|remove|kill|cut|lose|start|daal|dalo|daalo|hata|hatao|nikalo)\b/.test(gt)&&(DRUM_VOICE.some(([k,re])=>re.test(gt))||r&&PROJ.tracks.some(x=>x.role===r))){
+          const L2=brainOne(g.text+' in the '+String(ps.section).toLowerCase()); if((L2.actions||[]).some(a=>a.type==='parts')) g.text=g.text+' in the '+String(ps.section).toLowerCase(); } }
       const put=askShadow([].concat(...R.map(r=>r.L.actions))); try{ L=brainOne(g.text); } finally{ put(); } }
     else L=brainOne(g.text);
     /* "make a house beat and add a shaker": the shaker needs the beat first, so the two halves read as one request */
@@ -5341,13 +5346,24 @@ function bringBackFix(t){ const m=t.match(BRING_BACK); if(!m) return null; if(/\
   if(!A.length) return role?{actions:[],reply:`${(TONE_PART[role]||'the '+role).replace(/^./,c=>c.toUpperCase())} ${role==='drums'||role==='chords'?'are':'is'} already playing. Say “another ${role==='drums'?'beat':role}” for a new one.`}:{actions:[],reply:'Everything is already playing.'};
   const what2=role?(TONE_PART[role]||'the '+role):'everything', so=soloOthers.length&&!heard?`solo off on ${soloOthers.map(x=>x.name).join(', ')}`:'';
   return {actions:A,reply:`Brought back ${what2}${muted.length?` (unmuted${role?'':' '+muted.map(x=>x.name).join(', ')})`:''}${so?(muted.length?', and ':': ')+so+', so every part plays again':''}.`}; }
+/* "bring the bass in" with no section named: the bass is already a part, so it is never made again (QA, 22 Nov bug 1).
+   Muted, it is unmuted; in a song layout Keys says where it plays and asks which section; in a loop it already plays. */
+const BRING_IN=/\bbring (?:the |my )(bass ?line|bass|chords?|pads?|melody|lead|hook|drums?|beat|kick|hats|claps?|snares?|vocals?|voice ?note|voice) in\b|\bbring in (?:the |my )(bass ?line|bass|chords?|pads?|melody|lead|hook|drums?|beat|kick|hats|claps?|snares?|vocals?|voice ?note|voice)\b(?! (?:with|on|for|that|which|playing))/;
+function bringInFix(t){ const m=t.match(BRING_IN); if(!m||/\b(intro|outro|drop|break|build|section|verse|chorus|bridge|hook)\b/.test(t.replace(m[0],' '))) return null;
+  const w=' '+(m[1]||m[2])+' ', role=(ROLE_WORDS.find(([k,re])=>re.test(w))||[])[0]||(/voice|vocal/.test(w)?'voice':null), list=role?PROJ.tracks.filter(x=>x.role===role):[]; if(!list.length) return null; /* no bass yet: "bring in the bass" makes one */
+  const muted=list.filter(x=>x.mute), nm={drums:'drums',bass:'bassline',chords:'chords',melody:'melody',voice:'vocal'}[role]||role, are=role==='drums'||role==='chords'?'are':'is';
+  if(muted.length) return {actions:muted.map(x=>({type:'mix',track:x.id,mute:false})),reply:`Brought the ${nm} back in (unmuted), same notes.`};
+  if(songArranged&&songArranged()){ const S=songSections(), on=S.filter(s=>list.some(x=>s.parts[x.id]&&s.parts[x.id].on)).map(s=>s.name), off=S.filter(s=>!on.includes(s.name));
+    const ex=(off.find(s=>s.kind==='intro')||off.find(s=>s.kind==='build')||off[0]||{}).name;
+    return {actions:[],reply:off.length?`The ${nm} ${are} already in the song${on.length?`, playing in ${on.length>1?on.slice(0,-1).join(', ')+' and '+on[on.length-1]:on[0]}`:''}. Say which section, like “bring the ${role==='bass'?'bass':nm} in at the ${String(ex).toLowerCase()}”, and I’ll switch it on there.`:`The ${nm} already ${role==='drums'||role==='chords'?'play':'plays'} in every section.`}; }
+  return {actions:[],reply:`The ${nm} ${are} already playing. Say “another ${role==='drums'?'beat':nm}” for a new one.`}; }
 function muteSoloFix(t){
   { const ex=muteExceptFix(t); if(ex) return ex; }
   /* "mute everything", "mute all the tracks": every part muted (QA, 16 Nov: not understood offline) */
   if(/^\s*(?:(?:please|ok|okay|now|can you|could you|just)\s+)*mute (?:everything|it all|all(?: the| of the)?(?: tracks| parts)?|all of it|every (?:track|part|thing)|the whole (?:song|mix|track|thing))(?: please| now| for a sec(?:ond)?)?\s*$/.test(t)){
     if(!PROJ.tracks.length) return {actions:[],reply:'There’s nothing in the song yet. Say “make a house beat” to start.'};
     const on=PROJ.tracks.filter(x=>!x.mute); return {actions:on.map(x=>({type:'mix',track:x.id,mute:true})),reply:on.length?'Muted everything. Say “unmute everything” to bring it all back.':'Everything is already muted. Say “unmute everything” to bring it back.'}; }
-  const us=UNSOLO.test(t), um=UNMUTE.test(t); if(!us&&!um) return bringBackFix(t);
+  const us=UNSOLO.test(t), um=UNMUTE.test(t); if(!us&&!um) return bringBackFix(t)||bringInFix(t);
   const all=/\b(all|everything|every (track|part|thing)|whole (song|mix))\b/.test(t), t2=t.replace(/\b(un)?(solo|mute)(s|d|ed|ing)?\b/g,' ');
   const role=all?null:(ROLE_WORDS.find(([k,re])=>re.test(t2))||[])[0], named=all||role?[]:PROJ.tracks.filter(x=>x.name&&x.name.length>2&&t2.includes(' '+x.name.toLowerCase()+' '));
   const pool=role?PROJ.tracks.filter(x=>x.role===role):named.length?named:PROJ.tracks, which=role?(TONE_PART[role]||'the '+role):named.length?named.map(x=>x.name).join(' and '):null;
