@@ -5355,7 +5355,7 @@ function toneFix(t){
     if(!up.length) return {actions:[],reply:!all.some(x=>x.role==='bass')?'So far it’s just the drums, and their low end is the groove. Say “the kick is boomy” if it’s the kick.':'So far it’s just drums and bass, and their low end is the groove. Tell me which one: “the bass is muddy” or “the kick is boomy”.'};
     const res=up.map(T=>{ const v=cut(T), d=Math.max(loStep(T),-12-(T.lo||0)); if(d<0) eq(T,'low',d); return [T,v,d]; }), held=heldT.size>0;
     /* when a melody's cut is held back by its tune it gets 6 dB of low EQ, so each part says its own amount */
-    const done=res.map(([T,v,d])=>{ const s=cutSay(T,v); return held&&d<0?s.replace(/\)$/,`, ${-d} dB less low end)`):s; });
+    const done=res.map(([T,v,d])=>{ const s=cutSay(T,v); return held&&d<0?s.replace(/\)$/,`, ${-d} dB)`):s; });
     return {actions:A,reply:`Cleaned up the mix: ${[...cutSt.values()].includes('up')?"higher low cuts":"low cuts kept"} and ${held?'less low end':'3 dB less low end'} on ${done.length>1?done.slice(0,-1).join(', ')+' and '+done[done.length-1]:done[0]}; bass and kick untouched.`+more};
   }
   if(kind==='warm'){ all.forEach(T=>eq(T,'high',-2)); return {actions:A,reply:'Warmed up the mix: 2 dB less highs on every part.'+more}; }
