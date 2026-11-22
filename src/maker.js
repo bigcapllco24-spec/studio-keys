@@ -545,12 +545,21 @@ function localBrain(raw){
   /* a typed "Keys, make an 8-bar intro…": the assistant's name isn't the part "keys" (speech already strips it) */
   { const nm=String((typeof ASSIST!=='undefined'&&ASSIST.name)||'Keys').trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); if(nm) raw=String(raw||'').replace(new RegExp('^\\s*(?:(?:hey|hi|ok|okay|yo)\\s+)?'+nm+'\\s*[,:!–—-]\\s*|^\\s*(?:hey|hi|ok|okay|yo)\\s+'+nm+'\\b\\s*|^\\s*'+nm+'\\s+(?=(?:make|add|turn|arrange|give|let|put|take|drop|loop|play|remove|bring|can|could|please|stretch|move|rename|duplicate)\\b)','i'),''); }
   /* "the drums are fine, just change the chords": the praised or protected part is left out of the words (protectSaid, AI-9 fix) */
-  { const P=typeof protectSaid==='function'?protectSaid(raw):null; if(P&&P.kept.size){ if(P.song) return {actions:[],reply:'Glad you like it. I kept everything as it is. What should we do next?'}; if(!P.rest.trim()) return {actions:[],reply:'OK. '+keptTxt(P.kept)+' What should I change next?'}; } const r2=P&&(/\b(mute|unmute|solo|unsolo)\b/i.test(raw)?P.rest:P.restCut); if(r2&&r2!==raw) raw=r2; }
+  { const P=typeof protectSaid==='function'?protectSaid(raw):null; if(P&&P.kept.size){ if(P.song) return {actions:[],reply:'Glad you like it. I kept everything as it is. What should we do next?'}; if(!P.rest.trim()) return {actions:[],reply:'OK. '+keptTxt(P.kept)+' What should I change next?'}; } const r2=P&&(/\b(mute|unmute|solo|unsolo)\b/i.test(raw)?P.rest:P.restCut); if(r2&&r2!==raw) raw=r2;
+    /* Hinglish "sab kuch thoda kam karo" / "sab thoda loud karo": the whole song quieter / louder (the kept parts stay, onePart) */
+    raw=raw.replace(/^\s*(?:sab|sab kuch|sabhi|saare|sare|baaki sab|baki sab)\s+(?:ko\s+)?(?:thoda\s+|thodi\s+|bit\s+)?(?:kam|dheere|halka|soft|quiet|neeche)\s*(?:karo|kar do|kardo)?\s*$/i,'make everything quieter').replace(/^\s*(?:sab|sab kuch|sabhi|saare|sare|baaki sab|baki sab)\s+(?:ko\s+)?(?:thoda\s+|thodi\s+|bit\s+)?(?:loud|zyada|tez|upar)\s*(?:karo|kar do|kardo)?\s*$/i,'make everything louder');
+    /* "redo it all apart from the bass", "new everything except the chords": a new take of every other part (QA, 22 Nov fix 7) */
+    if(P&&P.kept.size&&/^(?:please\s+)?(?:redo|new|change|regenerate|refresh|remake|rework|switch up|swap out|give me new|make new)\s+(?:it all|everything|all of it|every part|all the parts|all|the rest|everything else)(?:\s+(?:please|else))?$/.test(String(P.restCut||'').toLowerCase().trim())){
+      const RS=[...new Set(PROJ.tracks.filter(t=>t.kind==='notes'&&t.gen&&!P.kept.has(t.role)).map(t=>t.role))]; if(RS.length) return {actions:RS.map(r=>({type:'vary',track:r}))}; } }
   raw=focusText(raw);
   /* a bare part name with no request ("thats the melody", "the bass"): no second copy of a part the song already has (QA, 22 Nov fix 5) */
   { const t=' '+askText(raw)+' ', r=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0], left=t.replace(/[,.!?;]+/g,' ').replace(/\b(thats|that'?s|that|this|is|it|its|the|my|a|an|yeah|yes|ok|okay|so|oh|wow|nice|cool|bro|yaar|now|one|hats?|drums?|beat|kick|groove|percussion|bass ?line|bass|chords?|pads?|harmony|progression|melody|lead|hook|riff|tune)\b/g,' ').trim();
     if(r&&r!=='voice'&&!left&&/\b(thats|that'?s|this is|that is|its|it'?s)\b/.test(t)&&PROJ.tracks.some(x=>x.role===r)) return {actions:[],reply:`The ${({drums:'drums',bass:'bassline',chords:'chords',melody:'melody'})[r]} ${r==='drums'||r==='chords'?'are':'is'} already in the song. Say “another ${({drums:'beat',bass:'bassline',chords:'set of chords',melody:'melody'})[r]}” to add one, or “change the ${({drums:'drums',bass:'bassline',chords:'chords',melody:'melody'})[r]}” for a new take.`}; }
-  const segs=splitAsks(raw); if(!segs) return brainOne(raw);
+  const segs=splitAsks(raw); if(!segs){ const L=brainOne(raw);
+    /* "the drums and the bass make them quieter": the same level move on each part named (QA, 22 Nov fix 7) */
+    { const t=' '+askText(raw)+' ', RS=ROLE_WORDS.filter(([k,re])=>re.test(t)&&k!=='voice').map(x=>x[0]), A=L.actions||[];
+      if(RS.length>1&&/\b(them|both|dono|all of them)\b/.test(t)&&A.length===1&&A[0].type==='mix'&&A[0].db!=null){ const T0=findTrack(A[0].track), rest=RS.filter(r=>!T0||T0.role!==r).map(r=>partTrack(r)).filter(Boolean); if(rest.length) return {actions:A.concat(rest.map(T=>Object.assign({},A[0],{track:T.id})))}; } }
+    return L; }
   const R=[];
   for(const g of segs){ let L; g.said=g.said||g.text;
     if(R.length){ const pr=R[R.length-1]; g.text=askInherit(g.text,askPartOf(pr.text,pr.L));

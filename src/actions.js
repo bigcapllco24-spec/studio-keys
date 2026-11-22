@@ -178,7 +178,7 @@ const KEEP_FILLW='ok|okay|yeah|yes|yep|yo|alright|all right|cool|nice|great|swee
 /* it / them / those / usko / unko after leave or don't touch: the part just praised or named ("the bassline is sick dont touch it") */
 const KEEP_PRON='(?:it|them|those|these|that|this|em|usko|unko|isko|inko|use|unhe|inhe|ise)';
 const KEEP_PRON_RE=new RegExp('\\b'+KEEP_PRON+'\\b');
-const KEEP_PROT='(?:(?:please\\s+)?(?:don\'?t|dont|do not|never|no need to)\\s+(?:touch|change|mess with|mess up|alter|edit|redo|tweak|move|modify|replace|vary|regenerate|lose)|leave|keep|keeping|kept)';
+const KEEP_PROT='(?:(?:you\\s+|we\\s+)?(?:don\'?t|dont|do not)\\s+need\\s+to\\s+(?:touch|change)|(?:i\\s+)?(?:wouldn\'?t|wouldnt|would not)\\s+(?:touch|change)|(?:please\\s+)?(?:don\'?t|dont|do not|never|no need to)\\s+(?:touch|change|mess with|mess up|alter|edit|redo|tweak|move|modify|replace|vary|regenerate|lose)|leave|keep|keeping|kept)';
 /* a list of kept parts ("the drums the bass or the chords", "it or the drums"); it stops at a part that has its own request after it and no
    other part ("dont touch the drums chords badlo": the drums are kept, the chords change) */
 const KEEP_LIST='(?:(?:(?:the|my|that|this|those|these)\\s+)?(?:'+KEEP_PW+')\\b|'+KEEP_PRON+'\\b)(?:(?:\\s*,\\s*|\\s+and\\s+|\\s+or\\s+|\\s*&\\s*|\\s+)(?:(?:the|my)\\s+)?(?:'+KEEP_PW+')\\b(?!\\s+(?:ko\\s+)?'+KEEP_REQ+'\\b(?![^,.!?;]*\\b(?:'+KEEP_PW+')\\b)))*';
@@ -284,7 +284,7 @@ function askedParts(orig){ const out=new Set(); let last=null; const pron=/\b(?:
       const exc=/\b(?:except(?: for)?|apart from|other than|besides|but not|siwaay|siwa)\b/.test(before);
       /* "dont make the bass louder", "the drums dont need to change": nothing is asked */
       const negB=/\b(?:don'?t|dont|do not|never|no need to|wouldn'?t|wouldnt)\b/.test(c.slice(0,m.s)), negA=/^\s*(?:[\w'’]+\s+){0,2}(?:don'?t|dont|doesn'?t|doesnt|do not|does not|never|no need)\b/.test(after);
-      const mb=ASK_BEFORE.exec(before), neg=mb&&/\b(?:don'?t|dont|do not|never|no need to|not|mat|leave|keep)\s*(?:[\w'’]+\s*)?$/.test(before.slice(0,mb.index));
+      const mb=ASK_BEFORE.exec(before), neg=mb&&/\b(?:don'?t|dont|do not|never|no need to|not|mat|leave|keep|wouldn'?t|wouldnt|would not)\s*(?:[\w'’]+\s*){0,2}$/.test(before.slice(0,mb.index));
       const asks=!exc&&(mb&&!neg||m.k&&!negB&&!negA&&!/\bmat\b/.test(after)&&(ASK_AFTER.test(after)||ASK_NEAR.test(after)));
       if(asks) out.add(k); }); }
   return out; }
@@ -306,7 +306,9 @@ function protectSaid(text){ text=String(text||''); const qp=askedLast(), key=tex
       pending.push(i); continue; }
     /* "change everything except the drums": the drums stay, the rest of the clause is the request */
     const ex=/\b(?:except(?: for)?|apart from|other than|besides|but not)\s+(?:the |my )?/.exec(c);
-    if(ex){ const RA=roles(c.slice(ex.index)); if(RA.length){ RA.forEach(r=>kept.add(r)); if(roles(c.slice(0,ex.index)).length||c.slice(0,ex.index).trim()) cut.set(i,orig[i].slice(0,ex.index)); else drop.add(i); } pending=[]; continue; }
+    if(ex){ const RA=roles(c.slice(ex.index)); if(RA.length){ RA.forEach(r=>kept.add(r)); if(roles(c.slice(0,ex.index)).length||c.slice(0,ex.index).trim()) cut.set(i,orig[i].slice(0,ex.index));
+        /* "except bass sab kuch thoda kam karo" (from "bass ko chhod ke …"): the words after the part are the request (QA, 22 Nov fix 7) */
+        else { const m2=new RegExp('^\\s*(?:except(?: for)?|apart from|other than|besides|but not)\\s+'+EXC_LIST,'i').exec(orig[i].slice(ex.index)), tail=m2?orig[i].slice(ex.index+m2[0].length).trim():''; if(tail) cut.set(i,tail); else drop.add(i); } } pending=[]; continue; }
     const praise=R.length&&!KEEP_NOT.test(c)&&(KEEP_DONE.test(c)||KEEP_PRAISE.test(c)&&!/\b(not|isn'?t|aren'?t|wasn'?t|too)\b/.test(c.replace(/\btoo good to \w+|\b(?:could(?:n'?t|nt| not)|can'?t|cannot)\s+(?:be|sound|get)\s+(?:any\s+)?better\b/g,''))||KEEP_LIKE.test(c)&&!/\b(don'?t|do not|didn'?t|would|'d)\b/.test(c)
       ||(KEEP_ADJ.test(c)||KEEP_SLAP.test(c))&&!KEEP_IMP.test(c)&&!/\b(not|too|more|less|harder|er)\b/.test(c));
     const ask=R.length&&!KEEP_NOT.test(c)&&KEEP_ASK.test(c)&&!(/\b(keep|leave)\b/.test(c)&&KEEP_SHAPE.test(c));
