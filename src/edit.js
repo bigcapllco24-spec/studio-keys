@@ -68,7 +68,9 @@ function audioToNotes(buf){
   const pk=Math.max(1e-6,...notes.map(n=>n.pk));
   return notes.filter(n=>n.t1-n.t0>=0.08).map(n=>({t0:n.t0,t1:n.t1,n:n.n,v:clamp(0.45+0.55*n.pk/pk,0.3,1)}));
 }
-function transcribeTrack(t,part){
+/* "Turn into notes" can save up to three times (the key, the new part, muting the recording): one Undo step (UX-20) */
+function transcribeTrack(t,part){ return undoGroup(()=>transcribeInto(t,part)); }
+function transcribeInto(t,part){
   const buf=AUD.get(t.id); if(!buf) return null; const s=spb(), L=PROJ.bars*4, q=0.25, st=t.start||0, trim=t.trim||0;
   let ev=audioToNotes(buf).map(n=>({b:Math.round((st+(n.t0-trim)/s)/q)*q,d:Math.max(q,Math.round((n.t1-n.t0)/s/q)*q),n:n.n,v:n.v})).filter(e=>e.b>=0&&e.b<L);
   if(!ev.length) return {count:0};
@@ -131,9 +133,10 @@ async function importFile(f){
   }
   let buf; try{ buf=await c.decodeAudioData(ab.slice(0)); }catch(e){ toast(`Couldn’t open ${f.name}. Try WAV, MP3, M4A, OGG or a voice-memo file.`); return; }
   const sr=buf.sampleRate, mono=new Float32Array(buf.length); for(let ch=0;ch<buf.numberOfChannels;ch++){ const d=buf.getChannelData(ch); for(let i=0;i<d.length;i++) mono[i]+=d[i]/buf.numberOfChannels; }
-  if(!PROJ.tracks.length) setBars(fitBars(buf.duration/spb()));
+  /* sizing the empty loop to the file and adding the clip are one Undo step (UX-20) */
+  undoGroup(()=>{ if(!PROJ.tracks.length) setBars(fitBars(buf.duration/spb()));
   const t=makeTrack({kind:'audio',role:'voice',inst:null,name:base,events:[],start:0,trim:0}); PROJ.tracks.push(t); AUD.set(t.id,makeBuf(mono,sr)); IDB.put('aud:'+t.id,{sr,data:mono},'audio').catch(()=>{});
-  if(LOOP.state==='empty') LOOP.state='stopped'; saveProject(); renderTracks(); uiLoop();
+  if(LOOP.state==='empty') LOOP.state='stopped'; saveProject(); renderTracks(); uiLoop(); });
   const over=buf.duration>PROJ.bars*4*spb()+0.05;
   toast(`Added “${base}” (${buf.duration.toFixed(1)} s)${over?`. ${PROJ.bars===1?'Only the first bar plays':`Only the first ${PROJ.bars} bars play`}; add bars to hear more`:''}. Use “Turn into notes” to play it on an instrument.`);
   ASSIST.say(`Added “${base}”. Drag it left or right to line it up, or say “${ASSIST.name}, turn ${base.length<20?base:'it'} into a bassline” to play it on an instrument.`,{speak:false});

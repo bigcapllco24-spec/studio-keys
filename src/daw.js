@@ -94,8 +94,8 @@ function selAction(a,btn){
   if(a==='play'){ setPreview(new Set(ids)); return; }
   if(a==='mute'||a==='solo'){ const v=!PROJ.tracks.find(t=>t.id===ids[0])[a]; PROJ.tracks.forEach(t=>{ if(SEL.has(t.id)) t[a]=v; }); refreshTrackGains(); saveProject(); renderTracks(); return; }
   if(a==='fx'){ const all=ids.every(id=>FXOPEN.has(id)); ids.forEach(id=>all?FXOPEN.delete(id):FXOPEN.add(id)); renderTracks(); return; }
-  if(a==='dup'){ ids.forEach(id=>duplicateTrack(id)); return; }
-  if(a==='del'){ if(!btn.dataset.armed){ btn.dataset.armed='1'; btn.textContent=`Confirm: delete ${ids.length}`; setTimeout(()=>{ if(btn.isConnected){ delete btn.dataset.armed; btn.textContent='Delete'; } },3000); return; } ids.forEach(id=>removeTrack(id)); SEL.clear(); toast(`Deleted ${ids.length} tracks`); renderTracks(); return; }
+  if(a==='dup'){ undoGroup(()=>ids.forEach(id=>duplicateTrack(id))); return; } /* several tracks at once are one Undo step (UX-20) */
+  if(a==='del'){ if(!btn.dataset.armed){ btn.dataset.armed='1'; btn.textContent=`Confirm: delete ${ids.length}`; setTimeout(()=>{ if(btn.isConnected){ delete btn.dataset.armed; btn.textContent='Delete'; } },3000); return; } undoGroup(()=>ids.forEach(id=>removeTrack(id))); SEL.clear(); toast(`Deleted ${ids.length} tracks`); renderTracks(); return; }
   if(a==='clear'){ SEL.clear(); renderTracks(); }
 }
 function duplicateTrack(id){ const t=PROJ.tracks.find(x=>x.id===id); if(!t) return; const c=makeTrack(Object.assign(serialize(t),{id:undefined,name:t.name+' copy',solo:false})); c.id='t'+Date.now().toString(36)+Math.floor(Math.random()*1e4); c.color=TRACK_COLORS[PROJ.tracks.length%TRACK_COLORS.length]; songCopyParts(t.id,c.id);
@@ -148,7 +148,7 @@ $('#edQuant').onclick=()=>{ const t=edTrack(); if(!t) return; const q=ED.grid; e
 $('#edUp').onclick=()=>edShift(1); $('#edDown').onclick=()=>edShift(-1);
 function edShift(s){ const t=edTrack(); if(!t||isDrumTrack(t)) return; edTargets(t).forEach(e=>e.n+=s); if(!ED.sel.size) ED.top+=s; edChanged(); }
 $('#edClear').onclick=()=>{ const t=edTrack(); if(!t) return; const b=$('#edClear'); if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Confirm clear'; setTimeout(()=>{ delete b.dataset.armed; b.textContent='Clear notes'; },3000); return; } delete b.dataset.armed; b.textContent='Clear notes'; t.events=[]; ED.sel=new Set(); edChanged(); };
-function edChanged(){ if(typeof undoBoundary==='function'&&!ED.oneStep) undoBoundary(); ED.oneStep=false; const t=edTrack(), real=PROJ.tracks.find(x=>x.id===ED.tid); if(real) real.gen=false; if(t){ t.events.forEach(e=>{ if(e.cyc!==undefined && !TR.running) delete e.cyc; }); } saveProject(); drawEditor(); drawRolls(); const r=document.querySelector(`.trk[data-tid="${ED.tid}"] .trole`); if(r&&t) r.textContent=`${ROLE_NAME[t.role]||'Part'} · ${t.events.length} notes`; }
+function edChanged(){ if(typeof undoBoundary==='function') undoBoundary(); const t=edTrack(), real=PROJ.tracks.find(x=>x.id===ED.tid); if(real) real.gen=false; if(t){ t.events.forEach(e=>{ if(e.cyc!==undefined && !TR.running) delete e.cyc; }); } saveProject(); drawEditor(); drawRolls(); const r=document.querySelector(`.trk[data-tid="${ED.tid}"] .trole`); if(r&&t) r.textContent=`${ROLE_NAME[t.role]||'Part'} · ${t.events.length} notes`; }
 function drumRows(t){ const rows=DRUM_ROWS.slice(); t.events.forEach(e=>{ if(!rows.some(r=>r[0]===e.n)) rows.unshift([e.n,DRUM_LABEL[drumPiece(e.n)]+' '+noteName(e.n)]); }); return rows; }
 /* height the grid may use so the velocity lane always shows inside the editor box (UX-2) */
 function edFitH(W){ const wrap=$('#edWrap'), mh=parseFloat(getComputedStyle(wrap).maxHeight)||480; return mh-2-ED.velH-8-(W>wrap.clientWidth+1?14:0); }
@@ -187,8 +187,13 @@ function drawEditor(){
 function previewNote(t,n){ const c=ensureAudio(); if(!c) return; const I=INST.get(t.inst); if(!I) return; try{ const v=I.play(c,trackStrip(t).inp,n,0.8,c.currentTime); if(v&&!v.oneShot) v.release(c.currentTime+0.25); }catch(e){} }
 function edCopy(){ const t=edTrack(); if(!t||!ED.sel.size) return false; const ev=[...ED.sel], b0=Math.min(...ev.map(e=>e.b)), end=Math.max(...ev.map(e=>e.b+e.d));
   ED.clip={tid:t.id,notes:ev.map(e=>({b:e.b-b0,d:e.d,n:e.n,v:e.v})),span:Math.max(ED.grid,Math.ceil((end-b0)/1-1e-6)*1),at:b0}; return true; }
-function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bars*4; let base=at!=null?at:ED.clip.at+ED.clip.span; if(base>=L){ if(PROJ.bars<16){ toast('No room after the end of the song, so I doubled its length first'); const oldL=L; undoBoundary(); setBars(PROJ.bars*2); ED.oneStep=true; /* the longer loop and the pasted notes are one Undo step (UX-7) */ L=PROJ.bars*4; t.events=t.events.filter(e=>e.b<oldL); } else { toast('The song is already 16 bars long. Move the playhead or select less.'); return; } } ED.clip.at=base;
-  const add=ED.clip.notes.map(x=>({b:base+x.b,d:x.d,n:x.n,v:x.v})).filter(e=>e.b<L); t.events.push(...add); ED.sel=new Set(add); edChanged(); }
+/* a paste past the end doubles the loop first; the longer loop and the pasted notes are ONE Undo step (UX-7), on any computer:
+   undoGroup holds both saves together, so the time setBars spends redrawing the tracks can't split them (UX-20: 2 Undos at CPU x4) */
+function edPaste(at){ const t=edTrack(); if(!t||!ED.clip) return; let L=PROJ.bars*4; const base=at!=null?at:ED.clip.at+ED.clip.span;
+  if(base>=L&&PROJ.bars>=16){ toast('The song is already 16 bars long. Move the playhead or select less.'); return; }
+  undoGroup(()=>{
+    if(base>=L){ toast('No room after the end of the song, so I doubled its length first'); const oldL=L; setBars(PROJ.bars*2); L=PROJ.bars*4; t.events=t.events.filter(e=>e.b<oldL); }
+    ED.clip.at=base; const add=ED.clip.notes.map(x=>({b:base+x.b,d:x.d,n:x.n,v:x.v})).filter(e=>e.b<L); t.events.push(...add); ED.sel=new Set(add); edChanged(); }); }
 (function(){
   const cv=$('#edCanvas');
   const pos=e=>{ const r=cv.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; };
