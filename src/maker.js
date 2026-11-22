@@ -94,8 +94,10 @@ function sectionSayFix(t){
    The existing track moves (track_fx pan, -100 left to 100 right: about 40 plain, 20 a bit, 100 hard); never a new or remade part (QA, 22 Nov bug 4). ---- */
 const PAN_DIR=/\b(left|right|cent(?:re|er)(?:ed)?|middle|mono)\b/;
 const PAN_SAID=/\btoo far (?:to the )?(?:left|right)\b|\bpan(?:s|ned|ning)?\b|\b(?:to|towards|on|in) the (?:left|right)\b|\b(?:hard|fully|all the way|slightly|a bit|a little|little|bit|thoda|thodi|zara|more|further) (?:to the )?(?:left|right)\b|\b(?:left|right) (?:side|channel|ear|speaker)\b|\b(?:left|right) (?:mein|me|main|pe|par|taraf|side)\b|\b(?:move|put|send|place|shift|keep|push|nudge|bring) (?:the |my )?[a-z0-9 ]{2,24}? (?:to the |more |a bit |slightly |hard |a little |back to the |back )?(?:left|right|cent(?:re|er)|middle)\b|\bcent(?:re|er) (?:the |my )\w+|\b(?:in|to|into) the (?:middle|cent(?:re|er))\b/;
-function panFix(t){ if(!PAN_SAID.test(t)||/\b(notes?|beats?|bars?|octaves?|semitones?|earlier|later|grid|timeline|track list|order|above|below)\b/.test(t)) return null;
-  { const M=panMany(t); if(M) return M; }
+/* "melody left, chords right" / "melody left chords right": two parts, each with its side right after it, is a pan with no verb (QA, 22 Nov AI-14 fix 2) */
+const PAN_PAIR=/\b[a-z]+(?: ?line)? (?:on the |to the )?(?:left|right)(?: side| mein| me| pe| par)?\b/g;
+function panFix(t){ if(!(PAN_SAID.test(t)||(t.match(PAN_PAIR)||[]).length>=2)||/\b(notes?|beats?|bars?|octaves?|semitones?|earlier|later|grid|timeline|track list|order|above|below)\b/.test(t)) return null;
+  { const M=panMany(t); if(M) return M; if(!PAN_SAID.test(t)) return null; }
   const dv=DRUM_VOICE.find(([k,re])=>re.test(t)), role=(ROLE_WORDS.map(([k,re])=>[k,t.replace(/\bhats\b/g,'    ').search(re)]).filter(x=>x[1]>=0).sort((a,b)=>a[1]-b[1])[0]||[])[0], nm=v=>String(v).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), s=' '+nm(t)+' ';
   /* the part said first is the one panned ("pan the melody left so it sits away from the chords": the melody) */
   const at=x=>s.indexOf(' '+nm(x.name)+' '), named=PROJ.tracks.filter(x=>x.name&&nm(x.name).length>2&&at(x)>=0).sort((a,b)=>at(a)-at(b)||b.name.length-a.name.length)[0];
@@ -107,7 +109,8 @@ function panFix(t){ if(!PAN_SAID.test(t)||/\b(notes?|beats?|bars?|octaves?|semit
   { const tf=t.match(/\btoo far (?:to the )?(left|right)\b/); if(tf){ const cur=Math.round(((T.fx||{}).pan||0)*100), sg=tf[1]==='left'?-1:1; ASSIST.lastPan={id:T.id,text:String(LAST_TEXT.text||'')};
     if(Math.sign(cur)!==sg) return {actions:[],reply:`${T.name} isn’t panned ${tf[1]}; it’s ${cur?`${cur<0?'left':'right'} (${cur<0?'L':'R'} ${Math.abs(cur)})`:'in the centre'}.`};
     const n=Math.max(0,Math.abs(cur)-20); return {actions:[{type:'track_fx',track:T.id,effect:'pan',amount:sg*n}],reply:n?`Moved ${T.name} back toward the centre (${sg<0?'L':'R'} ${n}), same notes.`:`${T.name} is back in the centre, same notes.`}; } }
-  const d=(t.match(PAN_DIR)||[])[1]; if(!d) return {actions:[],reply:`Left or right? Say “pan ${T.name.toLowerCase()} a bit left” or “pan ${T.name.toLowerCase()} hard right”.`};
+  /* Keys asks the side; the answer ("right") pans this part, so the question counts as the pan just asked (QA, 22 Nov AI-14 fix 2) */
+  const d=(t.match(PAN_DIR)||[])[1]; if(!d){ ASSIST.lastPan={id:T.id,text:String(LAST_TEXT.text||'')}; return {actions:[],reply:`Left or right? Say “pan ${T.name.toLowerCase()} a bit left” or “pan ${T.name.toLowerCase()} hard right”.`}; }
   const P=panOne(T,t,d); ASSIST.lastPan={id:T.id,text:String(LAST_TEXT.text||'')}; return P.act?{actions:[P.act],reply:P.say+', same notes.'}:{actions:[],reply:P.say+'.'}; }
 /* one part to one side: plain 40, "a bit" 20, "hard" 100, a number as said, "more"/"further" a step on from where it is */
 function panOne(T,t,d){ const cur=Math.round(((T.fx||{}).pan||0)*100);
@@ -120,7 +123,7 @@ function panOne(T,t,d){ const cur=Math.round(((T.fx||{}).pan||0)*100);
 /* two or more parts in one pan request: "pan the melody left and the chords right" (each its own side, in the order said),
    "pan the melody and the chords left" (both that side). One request, so one undo step; never a part to the other part's side (QA, 22 Nov AI-14 fix 4) */
 function panMany(t){ const RS=ROLE_WORDS.filter(([k])=>k!=='voice').map(([k,re])=>({k,i:t.replace(/\bhats\b/g,'    ').search(re)})).filter(x=>x.i>=0).sort((a,b)=>a.i-b.i); if(RS.length<2) return null;
-  if(RS.some((x,j)=>j&&!/(?:,|&|\band|\baur|\bplus|\bthen)\s*(?:(?:also|and) )?(?:the |my )?$/.test(t.slice(RS[j-1].i,x.i)))) return null; /* "the melody on the left, away from the chords": one part */
+  if(RS.some((x,j)=>j&&!/(?:,|&|\band|\baur|\bplus|\bthen)\s*(?:(?:also|and) )?(?:the |my )?$|\b(?:left|right|cent(?:re|er)|middle)(?: side| mein| me| pe| par)?\s*(?:the |my )?$/.test(t.slice(RS[j-1].i,x.i)))) return null; /* "the melody on the left, away from the chords": one part */
   const D=[...t.matchAll(/\b(left|right|cent(?:re|er)(?:ed)?|middle)\b/g)].map(m=>({d:m[1],i:m.index})); if(!D.length) return null;
   const nm=k=>(TONE_PART[k]||'the '+k).replace(/^the /,''), list=w=>w.length>1?w.slice(0,-1).join(', ')+' and '+w[w.length-1]:w[0];
   const miss=RS.filter(x=>!PROJ.tracks.some(y=>y.role===x.k)); if(miss.length) return {actions:[],reply:`There’s no ${list(miss.map(x=>nm(x.k)))} in the song yet to pan.`};
@@ -174,7 +177,11 @@ function askText(raw){
   return ' '+String(raw||'').toLowerCase().replace(/hi[\s-]?hats?|high[\s-]?hats?|hihats?/g,'hats').replace(/drum ?(and|&|n|'n') ?bass|d ?& ?b|d n b/g,'dnb').replace(/hip[\s-]?hop/g,'hiphop').replace(/lo[\s-]?fi/g,'lofi').replace(/eighths?|8ths?|8th notes?|eight notes?|8\s*\/\s*8/g,' 8th ').replace(/sixteenths?|16ths?|16 notes?|16\s*\/\s*16/g,' 16th ').replace(/beats per minute|bpm/g,' bpm ')
     /* "why is the bass so loud?", "why does the melody sound so busy?": a comment that it is too loud / too busy (QA, 22 Nov fix 3) */
     .replace(/\bwhy (?:is|are|does|do) (the |my |this |that )?([a-z0-9 ]{2,20}?) (?:sound |sounding |get |getting )?(?:so|that|this|too) (loud|quiet|soft|busy|muddy|boomy|harsh|bright|dark|thin|low|high|fast|slow)\b/g,'$1$2 is too $3')
-    .replace(/\bun[\s-]+(mute|solo)/g,'un$1').replace(/\b(basline|bassine|bassslines?|basslin)\b/g,'bassline').replace(/\b(baslines)\b/g,'basslines').replace(/\b(anothr|anotehr|antoher|anothor|anoter)\b/g,'another').replace(/\b(melodie|melodi|meoldy|mellody|melidy|mleody)\b/g,'melody').replace(/\b(chrods|cords)\b/g,'chords').replace(/\bmor\b/g,'more').replace(/\bteh\b/g,'the')+' '; }
+    .replace(/\bun[\s-]+(mute|solo)/g,'un$1').replace(/\b(basline|bassine|bassslines?|basslin)\b/g,'bassline').replace(/\b(baslines)\b/g,'basslines').replace(/\b(anothr|anotehr|antoher|anothor|anoter)\b/g,'another').replace(/\b(melodie|melodi|meoldy|mellody|melidy|mleody)\b/g,'melody').replace(/\b(chrods|cords)\b/g,'chords').replace(/\bmor\b/g,'more').replace(/\bteh\b/g,'the')
+    /* "make drop two bigger": Drop 2 (speech types the number as a word; QA, 22 Nov AI-14 fix 2) */
+    .replace(/(^|\b(?:the|make|in|into|at|of|after|before|to|for|on|from|until|is|and)\s+)(intro|outro|drop|break|build|verse|chorus|bridge)\s+(one|two|three|four)\b(?!\s+(?:more|of|bars?|beats?|times?|notes?|tracks?|parts?|sections?))/g,(m,a,b,c)=>a+b+' '+{one:1,two:2,three:3,four:4}[c])
+    /* "bass gaane do" / "melody main gaunga": let me sing it (a sung take) */
+    .replace(/\b((?:the )?[a-z]+(?: ?line)?)\s+(?:ko\s+|main\s+|mai\s+|mein\s+)?(?:gaane|gane|gaana|gana)\s+(?:do|dijiye|de|dena)\b/g,'let me sing $1').replace(/\b((?:the )?[a-z]+(?: ?line)?)\s+(?:main\s+|mai\s+|mein\s+)?(?:gaunga|gaungi|gaaunga|gaaungi|gaata hoon|gaati hoon|gaata hun|gaati hun)\b/g,'let me sing $1')+' '; }
 function brainCore(raw,sws){
   const t=askText(raw);
   const A=[]; let m;
@@ -198,21 +205,25 @@ function brainCore(raw,sws){
   { const q=quantizeFix(t); if(q) return q; }
   { const pn=panFix(t); if(pn) return pn; }
   { const sp=spaceFix(t); if(sp) return sp; }
-  { const FXRE=/\b(reverb|delay|echo|sidechain|side chain|pump|compress(?:ion|or)?|drive|saturation|distortion|width|wider|stereo|low ?cut|high ?cut|effects|fx)\b/g, fxs=[...t.matchAll(FXRE)].map(m=>m[1]), tr=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
+  { const FXRE=/\b(reverb|delay|echo|sidechain|side chain|pump|compress(?:ion|or)?|drive|saturation|distortion|width|wider|widen|narrower|narrow|wide(?! (?:pads?|chords?|synths?|leads?|sounds?|strings|bass|melody|choir|keys|piano)\b)|stereo|low ?cut|high ?cut|effects|fx)\b/g, fxs=[...t.matchAll(FXRE)].map(m=>m[1]), tr=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0];
+    /* "spread the chords out" is the width too; "spread the notes out" is not (QA, 22 Nov AI-14 fix 2) */
+    if(!fxs.some(w=>fxKey(w)==='width')&&/\bspread\b(?:(?!\bnotes?\b)[^.]){0,30}\bout\b/.test(t)&&!/\bnotes?\b/.test(t)) fxs.push('width');
+    /* "add a wide pad", "give me a wider sound" ask for a new part, not the width of one */
+    if(/\b(add|give me|i want|make(?: me)? (?:a|an|some)|new|another)\b/.test(t)&&!/\b(width|stereo)\b/.test(t)) for(let i=fxs.length-1;i>=0;i--) if(/^(wide|narrow|narrower|widen)$/.test(fxs[i])) fxs.splice(i,1);
     /* "remove the melody, no reverb": the clause that names the melody removes it; the effect half has no part left, so it is skipped and the reply says so (QA, 16 Nov) */
     if(fxs.length&&tr&&typeof removesPart==='function'){ const T=findTrack(tr); if(removesPart(t,{role:tr,name:T&&T.name})) return {actions:[{type:'remove',track:tr}],reply:done=>done.length?`${done.join('. ')}. I skipped the ${fxs[0]} change, because that part is gone.`:''}; }
-    if(fxs.length&&tr&&/\b(add|put|more|less|on|to|give|use|some|turn|set|at|make|from|off|remove|kill|take|rid|drop|lose|no|without|spread|widen|open)\b/.test(t)){ /* "spread the chords wider" is the width, never new chords (AI-14 fix 1) */ const T=findTrack(tr), A=[], seen=new Set();
+    if(fxs.length&&tr&&/\b(add|put|more|less|on|to|give|use|some|turn|set|at|make|from|off|remove|kill|take|rid|drop|lose|no|without|spread|widen|narrow|open|should|needs?|karo|kar do|kardo)\b/.test(t)){ /* "spread the chords wider" is the width, never new chords (AI-14 fix 1) */ const T=findTrack(tr), A=[], seen=new Set();
       /* each effect reads the half of the sentence about it ("set the reverb on the chords to 20% and add some delay": reverb 20, delay a step up).
          A number sets it exactly; remove/kill/take off/no turns it off; less/more step it; "add some X" never lowers X (42% stays 42% + a step, QA 16 Nov) */
       fxs.forEach(w=>{ const k=fxKey(w); if(seen.has(k||w)) return; seen.add(k||w);
         const c=(k&&fxClause(t,k,T))||t, off=/\b(remove|no|off|kill|without|lose|drop|get rid of|take out)\b/.test(c)||!!fxOffSaid(c);
         if(w==='effects'||w==='fx'){ if(off) A.push({type:'track_fx',track:tr==='drums'?'drums':tr,effect:'all',remove:true}); return; }
         const num=c.match(/(?:\b(?:to|at|of|by|is|on|reverb|delay|echo|drive|width|sidechain|compression|compressor|saturation|distortion|cut)\s+(?:about |around |like |maybe )?)(\d{1,5})\s*(%|percent|hz|khz|k)?(?![\d/])|\b(\d{1,5})\s*(%|percent|hz|khz)/), unitHz=k&&TFX_DEF[k]&&TFX_DEF[k].unit==='Hz';
-        const less=/\b(less|reduce|lower|down|too much|too wet|drier|dry|tone down|kam)\b/.test(c), more=/\b(more|boost|increase|extra|wetter|zyada|jyada)\b/.test(c);
+        const less=/\b(less|reduce|lower|down|too much|too wet|drier|dry|tone down|kam|narrow|narrower|narrowing|tighter)\b/.test(c), more=/\b(more|boost|increase|extra|wetter|zyada|jyada)\b/.test(c);
         let change=less?-20:more?20:undefined, amount;
         if(!off&&num&&!/\b(bpm|bars?|beats?)\b/.test(c.slice(num.index,num.index+num[0].length+8))){ let v=+(num[1]||num[3]); if(unitHz&&/^k(hz)?$/.test(num[2]||num[4]||'')) v*=1000; if(unitHz||v<=100){ amount=v; change=undefined; } }
         if(amount===undefined&&change===undefined&&!off&&k&&T&&TFX_DEF[k]&&!unitHz&&((T.fx||{})[k]||0)>=TFX_DEF[k].def-1e-6) change=10;
-        A.push({type:'track_fx',track:tr==='drums'?'drums':tr,effect:w,amount,change,remove:off}); });
+        A.push({type:'track_fx',track:tr==='drums'?'drums':tr,effect:k==='width'?'width':w,amount,change,remove:off}); });
       return {actions:A}; } }
   { const q=askFix(t,raw); if(q) return q; }
   { const pe=partEditFix(t,raw); if(pe) return pe; }
@@ -475,7 +486,7 @@ function tempoAt(t,genre){ let m=t.match(/\b(?:at|@)\s*(\d{2,3}(?:\.\d)?)\b(?!\s
   m=t.match(/^\s*(?:(?:please|now|ok|okay|can you|could you)\s+)*(?:make|set|put|take|bring) (?:it|the song|the track|everything|this) (?:to |at |up to |down to )?(\d{2,3})\s*(?:please)?\s*$/);
   return m&&+m[1]>=60&&+m[1]<=200?m:null; }
 /* the track-effect key an effect word lands on (same mapping as ACT.track_fx) */
-function fxKey(w){ w=String(w||''); return /rev|room|hall|space/.test(w)?'rev':/delay|echo/.test(w)?'dly':/side|pump|duck/.test(w)?'duck':/low ?cut/.test(w)?'hp':/high ?cut/.test(w)?'lp':/drive|satur|distort/.test(w)?'drive':/comp/.test(w)?'comp':/wid|stereo/.test(w)?'width':null; }
+function fxKey(w){ w=String(w||''); return /rev|room|hall|space/.test(w)?'rev':/delay|echo/.test(w)?'dly':/side|pump|duck/.test(w)?'duck':/low ?cut/.test(w)?'hp':/high ?cut/.test(w)?'lp':/drive|satur|distort/.test(w)?'drive':/comp/.test(w)?'comp':/wid|stereo|narrow/.test(w)?'width':null; }
 /* "turn <audio track> into a bassline": a voice note, an imported recording, or one named ("turn hook idea into chords").
    Also "make the voice note a bassline", "use the recording as chords", "make a bassline from the voice note", "voice note to bassline",
    "transcribe the voice note". Checked before singing and voice notes, so asking to convert never records a new voice note. */
@@ -571,21 +582,30 @@ function toneFix(t){
   if(!role&&/\b(still|even more|further|again)\b/.test(t)&&last&&last.role!=='mix') role=last.role;
   const A=[], hz=x=>x>=1000?(x/1000).toFixed(1)+' kHz':x+' Hz';
   const eq=(T,band,d)=>{ const f={low:'lo',mid:'mid',high:'hi'}[band]; A.push({type:'mix',track:T.id,[band]:clamp(Math.round((T[f]||0)+d),-15,15)}); };
-  /* a melody's low cut stays under its lowest note, so the cut never thins the tune itself (QA, 22 Nov bug 8: 308 Hz on a melody down to C3) */
-  const floorHz=T=>{ if(T.role!=='melody'||T.kind!=='notes'||!(T.events||[]).length) return Infinity; const lo=Math.min(...T.events.map(e=>+e.n).filter(isFinite)); return isFinite(lo)?Math.round(440*Math.pow(2,(lo-69)/12)*0.85):Infinity; };
-  /* a melody cut that already sits above its lowest note (220 Hz on a tune down to C3 at 131 Hz) comes down under it, as the reply says (AI-14 fix 5) */
-  const cut=T=>{ const cur=(T.fx&&T.fx.hp)||20, [mn,st,mx]=TONE_HP[T.role]||[120,1.4,400], fl=floorHz(T), want=Math.min(mx,Math.max(mn,st<2?Math.round(cur*st):cur+st));
-    if(cur>fl){ A.push({type:'track_fx',track:T.id,effect:'low cut',amount:fl}); lowered.add(T); return fl; }
-    const v=Math.min(want,fl); if(v>cur){ A.push({type:'track_fx',track:T.id,effect:'low cut',amount:v}); if(fl<want) keptLow.add(T); return v; }
-    if(fl<want) keptLow.add(T); return cur; }, keptLow=new Set(), lowered=new Set();
-  const cutSay=(T,v)=>lowered.has(T)?`${T.name} (low cut down to ${hz(v)}, under its lowest note)`:keptLow.has(T)?`${T.name} (low cut ${hz(v)}, under its lowest note)`:`${T.name} (${hz(v)})`;
+  /* a melody's low cut stays under its lowest note, so the cut never thins the tune itself (QA, 22 Nov bug 8: 308 Hz on a melody down to C3).
+     The lowest REAL note: one stray note more than an octave under the rest and under the floor (an octave slip in a sung take) doesn't count, and the
+     floor is never under 100 Hz (QA, 22 Nov AI-14 fix 2: one C1 note pulled the cut to 28 Hz) */
+  const MEL_HP0=(typeof roleFx==='function'&&(roleFx('melody','')||{}).hp)||220, HP_FLOOR=100;
+  const floorOf=T=>{ if(T.role!=='melody'||T.kind!=='notes') return null; const ns=(T.events||[]).map(e=>+e.n).filter(isFinite).sort((a,b)=>a-b); if(!ns.length) return null;
+    const fq=n=>440*Math.pow(2,(n-69)/12), stray=ns.length>3&&ns[1]-ns[0]>12&&fq(ns[0])*0.85<HP_FLOOR, lo=stray?ns[1]:ns[0], note=fq(lo), hz=Math.max(HP_FLOOR,Math.round(note*0.85)); return {hz,note,under:hz<note&&!stray}; };
+  /* only Keys's own starting cut (220 Hz) comes down, and only when it sits above the tune's lowest real note (220 Hz on a tune down
+     to C3 → 111 Hz); a cut the user set higher stays where it is on a mud complaint (300 Hz stays 300 Hz) */
+  const cutSt=new Map(), underT=new Set();
+  const cut=T=>{ const cur=(T.fx&&T.fx.hp)||20, [mn,st,mx]=TONE_HP[T.role]||[120,1.4,400], F=floorOf(T), fl=F?F.hz:Infinity, want=Math.min(mx,Math.max(mn,st<2?Math.round(cur*st):cur+st));
+    if(F&&cur>F.note&&cur>fl&&cur<=MEL_HP0){ A.push({type:'track_fx',track:T.id,effect:'low cut',amount:fl}); cutSt.set(T,'down'); if(F.under) underT.add(T); return fl; }
+    const v=Math.min(want,fl); if(v>cur){ A.push({type:'track_fx',track:T.id,effect:'low cut',amount:v}); cutSt.set(T,'up'); if(fl<want&&F.under) underT.add(T); return v; }
+    cutSt.set(T,F?'stay':'same'); if(F&&cur<F.note) underT.add(T); return cur; };
+  const cutSay=(T,v)=>{ const st=cutSt.get(T), u=underT.has(T)?', under its lowest note':''; return st==='down'?`${T.name} (low cut down to ${hz(v)}${u})`:st==='stay'?`${T.name} (low cut stays at ${hz(v)}${u})`:u?`${T.name} (low cut ${hz(v)}${u})`:`${T.name} (${hz(v)})`; };
   const more=kind==='warm'?' Say “warmer” again to go further.':` Say “still ${{mud:'muddy',box:'boxy',harsh:'harsh',dull:'dull',thin:'thin'}[kind]}” to go further.`;
   if(role){
     const list=PROJ.tracks.filter(x=>x.role===role), part=TONE_PART[role]||role;
     if(!list.length) return {actions:[],reply:role==='drums'||role==='chords'?`There are no ${role} yet to fix. Want me to add some?`:`There's no ${part.replace(/^the /,'')} yet to fix. Want me to add one?`};
     let say='';
     list.forEach((T,i)=>{ if(kind==='mud'){ const n0=A.length, v=cut(T), fl=T.role==='bass'||T.role==='drums'?-9:-12, lo=T.lo||0, d=Math.max(-3,fl-lo); if(d<0) eq(T,'low',d);
-        if(!i) say=A.length===n0?`${part[0].toUpperCase()+part.slice(1)} is already cleaned as far as I’d go (low cut ${hz(v)}${keptLow.has(T)?', under its lowest note':''}, low EQ ${lo} dB). Try a softer sound or turn it down a little.`:`Cleaned up ${part}: low cut ${lowered.has(T)?'down':'up'} to ${hz(v)}${lowered.has(T)||keptLow.has(T)?' (under its lowest note)':''}${d<0?` and ${-d} dB less low boom`:''}, same notes.`; }
+        const cs=cutSt.get(T), u=underT.has(T);
+        if(!i) say=A.length===n0?`${part[0].toUpperCase()+part.slice(1)} is already cleaned as far as I’d go (low cut ${hz(v)}${u?', under its lowest note':''}, low EQ ${lo} dB). Try a softer sound or turn it down a little.`
+          :cs==='stay'?`Cleaned up ${part}: ${d<0?`${-d} dB less low boom`:'nothing more to take out'} (low cut stays at ${hz(v)}${u?', under its lowest note':''}), same notes.`
+          :`Cleaned up ${part}: low cut ${cs==='down'?'down':'up'} to ${hz(v)}${u?' (under its lowest note)':''}${d<0?` and ${-d} dB less low boom`:''}, same notes.`; }
       else if(kind==='box'){ eq(T,'mid',-3); say=`Took the boxiness out of ${part}: 3 dB less mids around 1 kHz.`; }
       else if(kind==='warm'){ const lo=clamp(Math.round((T.lo||0)+2),-15,15), hi=clamp(Math.round((T.hi||0)-3),-15,15); A.push({type:'mix',track:T.id,low:lo,high:hi}); say=`Warmer ${part.replace(/^the /,'')}: 3 dB less highs and 2 dB more low end, same notes.`; }
       else if(kind==='harsh'){ eq(T,'high',-3); say=`Softened ${part}: 3 dB less highs.`; }
@@ -601,7 +621,7 @@ function toneFix(t){
     if(!up.length&&all.some(x=>x.mute&&x.role!=='bass'&&x.role!=='drums')) return {actions:[],reply:'Everything above the bass that plays is already clean, and the muted parts aren’t heard. Tell me which part sounds muddy: “the bass is muddy” or “the kick is boomy”.'};
     if(!up.length) return {actions:[],reply:!all.some(x=>x.role==='bass')?'So far it’s just the drums, and their low end is the groove. Say “the kick is boomy” if it’s the kick.':'So far it’s just drums and bass, and their low end is the groove. Tell me which one: “the bass is muddy” or “the kick is boomy”.'};
     const done=up.map(T=>{ const v=cut(T), d=Math.max(-3,-12-(T.lo||0)); if(d<0) eq(T,'low',d); return cutSay(T,v); });
-    return {actions:A,reply:`Cleaned up the mix: ${lowered.size?"low cuts set":"higher low cuts"} and 3 dB less low end on ${done.length>1?done.slice(0,-1).join(', ')+' and '+done[done.length-1]:done[0]}; bass and kick untouched.`+more};
+    return {actions:A,reply:`Cleaned up the mix: ${[...cutSt.values()].includes('down')?"low cuts set":[...cutSt.values()].includes('up')?"higher low cuts":"low cuts kept"} and 3 dB less low end on ${done.length>1?done.slice(0,-1).join(', ')+' and '+done[done.length-1]:done[0]}; bass and kick untouched.`+more};
   }
   if(kind==='warm'){ all.forEach(T=>eq(T,'high',-2)); return {actions:A,reply:'Warmed up the mix: 2 dB less highs on every part.'+more}; }
   if(kind==='box'){ all.filter(x=>x.role!=='drums').forEach(T=>eq(T,'mid',-2)); return {actions:A,reply:'Took the boxiness out of the mix: 2 dB less mids around 1 kHz on every part but the drums.'+more}; }
@@ -616,8 +636,8 @@ function toneFix(t){
    its own (it starts with a verb, or it is a level line like "the bass quieter"); a half that only names another part
    ("and the bass", "and less on the melody") repeats the previous command for that part. Everything else stays one request
    ("drums with hats and claps", "drum and bass"). All halves run as ONE batch, so one Undo takes the whole sentence back. ---- */
-const ASK_SEP=/(\s*,\s*(?:and then\s+|and\s+|then\s+)?|\s*;\s*|\s+and then\s+|\s+then\s+|\s+and\s+|\s+also\s+|\s+plus\s+)/i;
-const ASK_FILL=/^(?:(?:please|pls|now|then|also|and|just|ok|okay|hey|so|can you|could you|would you|will you|lets|let's|keys)\s+)*/;
+const ASK_SEP=/(\s*,\s*(?:and then\s+|and\s+|then\s+)?|\s*;\s*|\s+and then\s+|\s+then\s+|\s+and\s+|\s+aur\s+|\s+also\s+|\s+plus\s+)/i;
+const ASK_FILL=/^(?:(?:please|pls|now|then|also|and|just|ok|okay|hey|so|can you|could you|would you|will you|lets|let's|keys|i ?(?:'|’)?ll|i will|i'?m gonna|i am going to)\s+)*/;
 const ASK_HEAD=/^(make|add|put|give|set|change|switch|swap|use|turn|bring|push|pull|mute|unmute|solo|unsolo|remove|delete|drop|take|cut|boost|raise|lower|reduce|quanti[sz]e|tighten|snap|play|stop|pause|start|record|sing|hum|whistle|let me|export|download|save|undo|redo|transpose|shift|speed|slow|double|halve|clear|reset|write|create|generate|build|layer|try|go|straighten|fix|clean|tidy|render|rename|kill|lose|pan|widen|brighten|darken|open|close|show|loop|arrange|new|start over)\b/;
 const ASK_FXW=/\b(reverb|delay|echo|sidechain|side chain|compress(?:ion|or)?|drive|saturation|distortion|width|low ?cut|high ?cut)\b/;
 const ASK_DIR=/\b(more|less|louder|quieter|softer|up|down|higher|lower)\b/;
@@ -625,6 +645,7 @@ const ASK_MIXLIKE=/\b(reverb|delay|echo|sidechain|side chain|compress\w*|drive|s
 function askRole(t){ for(const [k,re] of ROLE_WORDS){ const m=t.match(re); if(m) return {k,m:m[0]}; } return null; }
 function askAlone(seg){ const t=askText(seg), h=t.trim().replace(ASK_FILL,'');
   if(ASK_HEAD.test(h)) return true;
+  if(/\b(?:mute|unmute|solo|band|bandh|off|on|chalu|wapas|loud|soft|kam|zyada|tez|dheere)\s+(?:karo|kar do|kardo|kariye)\s*$/.test(t)) return true; /* Hinglish, the verb last: "voice note mute karo" (QA, 22 Nov AI-14 fix 2) */
   const role=askRole(t)||(DRUM_VOICE.some(([k,re])=>re.test(t))?{k:'drums'}:null);
   if(role&&(LEVEL_UP.test(t)||LEVEL_DOWN.test(t)||PUNCH.test(t))) return true; /* "the bass quieter", "the chords up a bit" */
   if(ASK_FXW.test(t)&&/\b(more|less|some|no|add)\b/.test(t)&&role) return true;    /* "more delay on the lead" */
