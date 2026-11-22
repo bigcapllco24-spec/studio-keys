@@ -5676,9 +5676,22 @@ function honestReply(reply){ reply=String(reply||''); const G=BATCH.guardActs||[
   if(types.has('arrange')) bad.push(/\b(full (?:track|song)|arrange\w*|sections?|intro|outro|drops?|structure|\d+ bars|break)\b/);
   if(types.has('vibe')||types.has('style')||types.has('new_project')) bad.push(/\b(vibe|style|genre|tempo|bpm|new song|trap|house|drill|lo-?fi|techno|afro\w*|r&b|pop)\b/);
   if(types.has('key')) bad.push(/\b(key|major|minor)\b/); if(types.has('tempo')) bad.push(/\b(tempo|bpm|faster|slower)\b/);
-  if(G.some(a=>a.type==='mix'&&a.volume!=null)||BATCH.redirected) bad.push(/\bvolume \d+\b/);
+  /* "Set the melody volume to 20." when it really went up 3 dB */
+  if(G.some(a=>a.type==='mix'&&a.volume!=null)||BATCH.redirected) bad.push(/\bvolume (?:(?:to|at|of) )?\d+\b|\b(?:to|at) \d+ ?(?:%|percent)?(?=[\s.!?,]|$)/);
   const S=reply.match(/[^.!?]+[.!?]*\s*/g)||[reply], keep=/\b(kept|keep|keeping|left|leaving|stays?|unchanged|untouched|as (?:it|they) (?:is|are))\b/i;
-  return S.filter(x=>keep.test(x)&&!/\b(whole song|everything)\b/i.test(x)||!bad.some(re=>re.test(' '+x.toLowerCase().replace(/hi[\s-]?hats?/g,'hats')+' '))).join('').trim(); }
+  const isBad=x=>bad.some(re=>re.test(' '+x.toLowerCase().replace(/hi[\s-]?hats?/g,'hats')+' '));
+  /* a sentence that says a part was kept is fine, unless another clause in it claims a change that didn't happen
+     ("Here is a new bassline and a fresh melody, drums kept as they are." when the bassline was kept, QA 22 Nov fix 3) */
+  return S.filter(x=>keep.test(x)&&!/\b(whole song|everything)\b/i.test(x)?!x.split(/[,;:]|\s(?:but|while|whereas)\s/).some(c=>!keep.test(c)&&isBad(c)):!isBad(x)).join('').trim(); }
+/* the real changes in a few spoken words, for when every sentence of the AI's reply was wrong: "New melody.", "Bassline down 3 dB." */
+function shortDone(done){ const out=(done||[]).map(d=>{ d=String(d).replace(/\s*\([^)]*\)/g,''); let m;
+    if((m=/^New (\w+):.*?(follows)?/.exec(d))) return 'New '+m[1]+(/\bfollows\b/.test(d)?', and the bassline follows them':'');
+    if((m=/^([\w ]+?): an? (?:new|fresh) ([\w ]+?)(?:[,;]|$)/.exec(d))) return 'New '+m[2];
+    if((m=/^([\w ]+?): (up|down) ([\d.]+) dB/.exec(d))) return m[1]+' '+m[2]+' '+m[3]+' dB';
+    if((m=/^([\w ]+?) (simpler|busier)\b/.exec(d))) return m[1]+' '+m[2];
+    if((m=/^([\w ]+?): (shorter|longer)\b/.exec(d))) return m[1]+' '+m[2]+' notes';
+    return d.split(/[:;,]/)[0].trim(); }).filter(Boolean);
+  return out.map(x=>x.replace(/^./,c=>c.toUpperCase())+'.').join(' '); }
 /* add_bass/add_chords/add_melody about a part that is already there, with no add word: change that part in place */
 function inPlace(a,text,named){ const m=/^add_(bass|chords|melody)$/.exec(a.type); if(!m) return a; const role=m[1], lc=String(text).toLowerCase();
   const T=partTrack(role); if(!T||!named.has(role)||ADD_SAID.test(lc)||a.new) return a;
@@ -5700,12 +5713,18 @@ const moodSaid=t=>/\b(happ(y|ier)|bright(er)?|uplifting|major|hopeful|cheer(ful|
    user's), and leans happier or darker when asked */
 function pickProg(mood){ const k=projectKey(), list=PROGS[k.mode]||PROGS.minor, cur=(PROJ.prog||[]).join(), mel=PROJ.tracks.filter(t=>t.kind==='notes'&&t.role==='melody').flatMap(t=>t.events);
   const saved={prog:PROJ.prog,locked:PROJ.progLocked}, own=PROJ.tracks.some(t=>t.kind==='notes'&&t.role==='melody'&&!t.gen), now=chordPlan().plan.map(c=>c.deg).join(), L=PROJ.bars*4, bright=k.mode==='minor'?[2,5,6]:[0,3,4], cands=[], seen=new Set(VERSIONS.map(v=>(v.prog||[]).join()));
+  /* a bassline that stays (praised, kept, or the user's own): the new chords sit on its notes, bar by bar (the first note of each bar
+     in the chord; aim 4/4, at least 3/4; QA 22 Nov fix 3) */
+  const stay=PROJ.tracks.filter(t=>t.kind==='notes'&&t.role==='bass'&&(!t.gen||BATCH.kept&&BATCH.kept.has('bass'))), bars=[];
+  stay.forEach(t=>{ for(let bar=0;bar<PROJ.bars;bar++){ const f=t.events.filter(e=>mod(e.b,L)>=bar*4&&mod(e.b,L)<bar*4+4).sort((x,y)=>mod(x.b,L)-mod(y.b,L))[0]; if(f) bars.push([bar,mod(Math.round(f.n),12)]); } });
   try{ for(const p of list){ if(p.join()===cur) continue; PROJ.prog=p.slice(); PROJ.progLocked=own||undefined; const {plan}=chordPlan(), nd=plan.map(c=>c.deg), od=now.split(','), diff=nd.filter((d,i)=>String(d)!==od[i]).length; if(!diff) continue;
       let fit=0,tot=0; mel.forEach(e=>{ const c=plan[Math.floor(mod(e.b,L)/4)%plan.length], pc=mod(Math.round(e.n),12), d=e.d||0.5; tot+=d; if(c.pcs.includes(pc)) fit+=d; else if(c.sev.includes(pc)) fit+=d/2; });
-      const br=p.filter(d=>bright.includes(d)).length; cands.push({p,fit:(tot?fit/tot:1)+(diff>=Math.ceil(nd.length/2)?0.25:0)-(seen.has(p.join())?0.3:0),m:mood==='happier'?br:mood==='darker'?-br:0}); } }
+      const bf=bars.length?bars.filter(([bar,pc])=>plan[bar%plan.length].pcs.includes(pc)).length/bars.length:1, bq=bf>0.999?2:bf>=0.75?1:0;
+      const br=p.filter(d=>bright.includes(d)).length; cands.push({p,bf,bq,fit:(tot?fit/tot:1)+(diff>=Math.ceil(nd.length/2)?0.25:0)-(seen.has(p.join())?0.3:0),m:mood==='happier'?br:mood==='darker'?-br:0}); } }
   finally{ PROJ.prog=saved.prog; PROJ.progLocked=saved.locked; }
-  if(!cands.length) return null; cands.sort((a,b)=>b.m-a.m||b.fit-a.fit); const best=cands[0], top=cands.filter(c=>c.m===best.m&&c.fit>=best.fit-0.2);
-  return top[Math.floor(Math.random()*top.length)].p.slice(); }
+  if(!cands.length) return null; cands.sort((a,b)=>b.m-a.m||b.bq-a.bq||b.fit-a.fit); const best=cands[0], top=cands.filter(c=>c.m===best.m&&c.bq===best.bq&&c.fit>=best.fit-0.2);
+  const pick=top[Math.floor(Math.random()*top.length)]; pickProg.bass=bars.length?{fit:pick.bf,bars:bars.length}:null;
+  return pick.p.slice(); }
 /* simpler / busier / shorter / longer, on the part's own notes (its sound and harmony stay); kept for later takes (t.dens, t.art) */
 const nearB=(x,y)=>Math.abs(x-y)<1e-3;
 function onsets(ev){ const m=new Map(); ev.forEach(e=>{ const k=Math.round(e.b*1000)/1000; if(!m.has(k)) m.set(k,[]); m.get(k).push(e); }); return [...m.entries()].sort((a,b)=>a[0]-b[0]); }
@@ -5769,6 +5788,7 @@ const ACT={
        With the user's own melody the chords stop following its notes bar by bar (progLocked), or they would come out the same again. */
     if(t.role==='chords'&&a.progression!==false){ const k=projectKey(), was=chordPlan().plan.slice(0,4).map(c=>c.deg), mood=a.mood||moodSaid(String(LAST_TEXT.text||'').toLowerCase()), p=pickProg(mood);
       if(!p){ songNote('Those are the only chords that fit this melody in '+keyName(k)+'. Say “change the key” or sing a new melody for others.'); BATCH.declined=true; return; }
+      { const bf=pickProg.bass; if(bf&&bf.fit<0.75){ const off=Math.round((1-bf.fit)*bf.bars); songNote(`The bassline stays as it is, so it sits outside the new chords in ${off} of ${bf.bars} bars. Say “new bassline” if that clashes.`); } }
       PROJ.prog=p; if(PROJ.tracks.some(x=>x.kind==='notes'&&x.role==='melody'&&!x.gen)) PROJ.progLocked=true;
       PROJ.tracks.filter(x=>x.gen&&x.role==='chords').forEach(x=>regenTrack(x,{seed:x.seed}));
       const bass=PROJ.tracks.filter(x=>x.gen&&x.role==='bass'&&!(BATCH.kept&&BATCH.kept.has('bass'))); bass.forEach(x=>{ regenTrack(x,{seed:x.seed}); (BATCH.follow=BATCH.follow||new Set()).add(x.id); });
@@ -6567,7 +6587,7 @@ async function handleRequest(text){
     const r=was?`OK, I’ve stopped listening and the mic is off. Tap the orb or type when you need me.`:`I wasn’t listening, and the mic is off. Tap the orb or type when you need me.`;
     ASSIST.history.push({role:'assistant',content:r}); LAST_TEXT.text=''; ASSIST.say(r); if(!ASSIST.voice) setOrb('idle',idleText()); return; }
   ASSIST.busy=true; setOrb('thinking','Working on it…');
-  let reply='', done=[];
+  let reply='', done=[], cut=false; /* cut: every sentence of the AI's reply was about something that didn't happen */
   if(ASSIST.engine){
     try{
       const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(),25000);
@@ -6575,7 +6595,7 @@ async function handleRequest(text){
       clearTimeout(to); const j=await r.json(); if(!r.ok||j.error) throw new Error(j.error||('HTTP '+r.status));
       done=runActions(j.actions||[]); reply=j.reply||'';
       /* the guard dropped or moved some of the AI's actions: never keep its claim about them (QA, 22 Nov fix 2) */
-      if(!BATCH.local&&typeof honestReply==='function') reply=honestReply(reply);
+      if(!BATCH.local&&typeof honestReply==='function'){ const h=honestReply(reply); if(reply.trim()&&!h) cut=true; reply=h; }
       /* the guard used the offline brain's one-part change instead of the AI's (AI-9 fix): its reply says what really changed */
       if(BATCH.local){ const r2=brainReply(BATCH.local,done); reply=r2||(done.length?'':reply); BATCH.guarded=null; BATCH.retold=false; }
       /* the AI's mix or effect moves changed nothing (an EQ on "all", a fader already there): never claim them (QA, 22 Nov) */
@@ -6596,10 +6616,12 @@ async function handleRequest(text){
   /* the AI's actions for other parts were left out (AI-9): say so, so the reply matches what changed */
   /* "make it softer" right after the bass went to the bass, not the whole song the AI said: say what really changed */
   if(BATCH.retold&&done.length&&ASSIST.engine) reply=done.join('. ')+'. Same notes, the rest stays as it was.';
-  if(BATCH.guarded&&BATCH.guarded.length&&done.length&&ASSIST.engine&&!notes.some(n=>/^Kept /.test(n))) notes.push('I only changed what you asked about; the rest stays as it was.');
+  if(BATCH.guarded&&BATCH.guarded.length&&done.length&&ASSIST.engine&&!cut&&!notes.some(n=>/^Kept /.test(n))) notes.push('I only changed what you asked about; the rest stays as it was.');
   if(reply&&notes.length) reply=reply.replace(/\s*$/,'')+' '+notes.join(' ');
   else if(!reply&&!done.length&&notes.length) reply=notes.join(' ');
   /* while a sung take is about to start, no next-step hint: the part doesn't exist yet, and the hint would suggest singing it again */
+  /* the AI's reply was all wrong: say the real change shortly, the way a person would, with no tip (QA, 22 Nov fix 3) */
+  if(!reply&&cut&&done.length&&typeof shortDone==='function') reply=(shortDone(done)+(notes.length?' '+notes.join(' '):'')).trim();
   if(!reply) reply=done.length?('Done: '+done.join(', ')+'.'+(notes.length?' '+notes.join(' '):'')+(BATCH.take||notes.some(n=>/\bSay “/.test(n))?'':' '+nextStep())).trim():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
   ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false; LAST_TEXT.text='';
   const map=BATCH.song?songMapHTML(BATCH.song.changed):'';

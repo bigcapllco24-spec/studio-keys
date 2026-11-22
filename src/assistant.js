@@ -87,7 +87,7 @@ async function handleRequest(text){
     const r=was?`OK, I’ve stopped listening and the mic is off. Tap the orb or type when you need me.`:`I wasn’t listening, and the mic is off. Tap the orb or type when you need me.`;
     ASSIST.history.push({role:'assistant',content:r}); LAST_TEXT.text=''; ASSIST.say(r); if(!ASSIST.voice) setOrb('idle',idleText()); return; }
   ASSIST.busy=true; setOrb('thinking','Working on it…');
-  let reply='', done=[];
+  let reply='', done=[], cut=false; /* cut: every sentence of the AI's reply was about something that didn't happen */
   if(ASSIST.engine){
     try{
       const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(),25000);
@@ -95,7 +95,7 @@ async function handleRequest(text){
       clearTimeout(to); const j=await r.json(); if(!r.ok||j.error) throw new Error(j.error||('HTTP '+r.status));
       done=runActions(j.actions||[]); reply=j.reply||'';
       /* the guard dropped or moved some of the AI's actions: never keep its claim about them (QA, 22 Nov fix 2) */
-      if(!BATCH.local&&typeof honestReply==='function') reply=honestReply(reply);
+      if(!BATCH.local&&typeof honestReply==='function'){ const h=honestReply(reply); if(reply.trim()&&!h) cut=true; reply=h; }
       /* the guard used the offline brain's one-part change instead of the AI's (AI-9 fix): its reply says what really changed */
       if(BATCH.local){ const r2=brainReply(BATCH.local,done); reply=r2||(done.length?'':reply); BATCH.guarded=null; BATCH.retold=false; }
       /* the AI's mix or effect moves changed nothing (an EQ on "all", a fader already there): never claim them (QA, 22 Nov) */
@@ -116,10 +116,12 @@ async function handleRequest(text){
   /* the AI's actions for other parts were left out (AI-9): say so, so the reply matches what changed */
   /* "make it softer" right after the bass went to the bass, not the whole song the AI said: say what really changed */
   if(BATCH.retold&&done.length&&ASSIST.engine) reply=done.join('. ')+'. Same notes, the rest stays as it was.';
-  if(BATCH.guarded&&BATCH.guarded.length&&done.length&&ASSIST.engine&&!notes.some(n=>/^Kept /.test(n))) notes.push('I only changed what you asked about; the rest stays as it was.');
+  if(BATCH.guarded&&BATCH.guarded.length&&done.length&&ASSIST.engine&&!cut&&!notes.some(n=>/^Kept /.test(n))) notes.push('I only changed what you asked about; the rest stays as it was.');
   if(reply&&notes.length) reply=reply.replace(/\s*$/,'')+' '+notes.join(' ');
   else if(!reply&&!done.length&&notes.length) reply=notes.join(' ');
   /* while a sung take is about to start, no next-step hint: the part doesn't exist yet, and the hint would suggest singing it again */
+  /* the AI's reply was all wrong: say the real change shortly, the way a person would, with no tip (QA, 22 Nov fix 3) */
+  if(!reply&&cut&&done.length&&typeof shortDone==='function') reply=(shortDone(done)+(notes.length?' '+notes.join(' '):'')).trim();
   if(!reply) reply=done.length?('Done: '+done.join(', ')+'.'+(notes.length?' '+notes.join(' '):'')+(BATCH.take||notes.some(n=>/\bSay “/.test(n))?'':' '+nextStep())).trim():`I couldn’t turn that into a change. Try “add a trap beat at 140”, “hi-hats on 16ths”, “add an 808 bassline”, “piano chords”, “record a melody”, or just hum.`;
   ASSIST.history.push({role:'assistant',content:reply}); ASSIST.busy=false; LAST_TEXT.text='';
   const map=BATCH.song?songMapHTML(BATCH.song.changed):'';
