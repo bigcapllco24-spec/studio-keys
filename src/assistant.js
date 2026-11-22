@@ -99,7 +99,8 @@ async function handleRequest(text){
       /* the guard dropped or moved some of the AI's actions: never keep its claim about them (QA, 22 Nov fix 2) */
       if(!BATCH.local&&typeof honestReply==='function'){ const h=honestReply(reply); if(reply.trim()&&!h) cut=true;
         /* the claim was dropped because nothing could change ("already at full volume"): say why, then keep Keys' question (QA, 22 Nov fix 7) */
-        const al=h&&h!==reply.trim()&&typeof shortDone==='function'?done.filter(d=>/\balready\b/i.test(d)):[]; reply=al.length?shortDone(al)+' '+h:h; }
+        /* every change was "already like that": say so instead of the AI's claim, and keep its questions (any language) */
+        if(h&&done.length&&done.every(d=>/\balready\b/i.test(d))&&!/\balready\b/i.test(h)&&typeof shortDone==='function'){ const qs=(h.match(/[^.!?]+[.!?]*\s*/g)||[]).filter(x=>REPLY_ASKS.test(x.trim())).join('').trim(); reply=(shortDone(done)+' '+qs).trim(); } else reply=h; }
       /* the guard used the offline brain's one-part change instead of the AI's (AI-9 fix): its reply says what really changed */
       if(BATCH.local){ const r2=brainReply(BATCH.local,done); reply=r2||(done.length?'':reply); BATCH.guarded=null; BATCH.retold=false; }
       /* the AI's mix or effect moves changed nothing (an EQ on "all", a fader already there): never claim them (QA, 22 Nov) */

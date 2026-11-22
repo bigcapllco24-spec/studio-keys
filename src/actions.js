@@ -241,6 +241,8 @@ function speechComma(t){
   t=t.replace(new RegExp('(\\b'+KEEP_HIN+')(?=\\s+[^,.!?;]*\\b(?:'+KEEP_PW+'|badlo|badal\\w*|karo|kar do|banao|lagao|daalo|hatao|chahiye|nayi|naya|naye|usko|unko|isko|inko)\\b)','gi'),'$1,');
   /* Hinglish keep, wherever it is: "chords ko mat chhedo melody nayi do", "melody nayi do chords ko mat chhedo" */
   t=t.replace(new RegExp('\\b'+KEEP_HSUBJ+'\\s+'+KEEP_HPROT+'\\b','gi'),(m,off,str)=>(/[a-z0-9]\s*$/i.test(str.slice(0,off))?', ':'')+m+(/^\s*[a-z]/i.test(str.slice(off+m.length))?',':''));
+  /* "the chords dont need to change make the bass quieter", "the drums can stay give me new chords": its own clause (QA, 22 Nov fix 7) */
+  t=t.replace(new RegExp('(\\b(?:'+KEEP_PW+')\\s+(?:(?:don\'?t|dont|doesn\'?t|doesnt|do not|does not)\\s+need\\s+(?:to\\s+)?(?:change|be changed|anything|touching|work)|can stay(?: as (?:it is|they are)| the same)?|stays? the same))(?=\\s+[a-z])','gi'),'$1,');
   /* "dont touch the drums make the melody simpler", "leave the drums and bass alone change the melody", "dont touch it or the drums try new chords",
      "don't touch the drums the bass or the chords change the melody", "leave those make the bass bouncier" */
   t=t.replace(new RegExp('(\\b'+KEEP_PROT+'\\s+'+KEEP_LIST+'(?:\\s+(?:alone|as (?:it|they) (?:is|are)|intact|untouched|the same|too|as well|like (?:that|this|it is|they are)))?)(?=\\s+'+KEEP_FILL+KEEP_REQ+'\\b|\\s+(?:(?:the|my)\\s+)?(?:'+KEEP_PW+')\\s+(?:ko\\s+)?'+KEEP_REQ+'\\b)','gi'),'$1,');
@@ -284,7 +286,9 @@ function askedParts(orig){ const out=new Set(); let last=null; const pron=/\b(?:
       const exc=/\b(?:except(?: for)?|apart from|other than|besides|but not|siwaay|siwa)\b/.test(before);
       /* "dont make the bass louder", "the drums dont need to change": nothing is asked */
       const negB=/\b(?:don'?t|dont|do not|never|no need to|wouldn'?t|wouldnt)\b/.test(c.slice(0,m.s)), negA=/^\s*(?:[\w'’]+\s+){0,2}(?:don'?t|dont|doesn'?t|doesnt|do not|does not|never|no need)\b/.test(after);
-      const mb=ASK_BEFORE.exec(before), neg=mb&&/\b(?:don'?t|dont|do not|never|no need to|not|mat|leave|keep|wouldn'?t|wouldnt|would not)\s*(?:[\w'’]+\s*){0,2}$/.test(before.slice(0,mb.index));
+      /* the request verb closest to the part ("…dont need to change make the bass quieter": "make", not "change") */
+      const mb=(()=>{ let x, lastM=null; const g=new RegExp(ASK_BEFORE.source.split('(?:\\s+[')[0],'g'); while((x=g.exec(before))) lastM=x; return lastM&&/^(?:\s+[\w'’]+){0,3}\s*$/.test(before.slice(lastM.index+lastM[0].length))?lastM:null; })();
+      const neg=mb&&/\b(?:don'?t|dont|do not|never|no need to|not|mat|leave|keep|wouldn'?t|wouldnt|would not)\s*(?:[\w'’]+\s*){0,2}$/.test(before.slice(0,mb.index));
       const asks=!exc&&(mb&&!neg||m.k&&!negB&&!negA&&!/\bmat\b/.test(after)&&(ASK_AFTER.test(after)||ASK_NEAR.test(after)));
       if(asks) out.add(k); }); }
   return out; }
