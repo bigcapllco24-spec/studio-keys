@@ -568,6 +568,9 @@ try {
     await A14.song(false); r = await A14.say('break daal do'); R.hin = /^Main\[.*\] Break\[/.test(r.secs);
     await A14.song(true); const n = songSections().length; r = await A14.say('add a breakdown after the first drop'); R.next = songSections().length === n && r.steps === 0 && /already a 16-bar break/.test(r.reply) && /make the break longer/.test(r.reply); R.r = r.secs.slice(0, 50); return R; });
   ok('AI-14 bug 6: "add a breakdown" and "break daal do" on a loop make Main, Break, Main (the song starts with the beat); "add a breakdown after the first drop" next to the break says it is there and offers to make it longer', a14b6.loop && a14b6.hin && a14b6.next, JSON.stringify(a14b6));
+  // AI-14 bug 7: "make it a short song" is the Short layout
+  const a14b7 = await E(async () => { const R = []; for (const x of ['make it a short song', 'make it a short track', 'chhota song bana do']) { await A14.song(false); const r = await A14.say(x); loopStop(); R.push({ x, ok: /^Intro\[.*\] Drop\[.*\] Outro\[/.test(r.secs) && songSections().length === 3 && r.steps === 1, s: r.secs.slice(0, 40) }); } return R; });
+  ok('AI-14 bug 7: "make it a short song", "make it a short track" and "chhota song bana do" make the Short layout (Intro, Drop, Outro), one undo step', a14b7.every(x => x.ok), JSON.stringify(a14b7.filter(x => !x.ok)));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();

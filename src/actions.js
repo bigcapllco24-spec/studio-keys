@@ -754,7 +754,7 @@ const SONG_FAM={
   dnb:[['Intro','intro',16],['Build','build',16],['Drop','drop',32],['Break','break',16],['Build 2','build',16],['Drop 2','drop',32],['Outro','outro',16]],
   dnbClub:[['Intro','intro',32],['Build','build',16],['Drop','drop',32],['Break','break',32],['Build 2','build',16],['Drop 2','drop',32],['Outro','outro',32]]
 };
-const CLUB_WORDS=/\b(club|extended|dj|long version|longer version|6 ?min(ute)?s?|six minutes?)\b/, SHORT_WORDS=/\b(short|reel|reels|sketch|teaser|quick|30 ?sec(ond)?s?)\b/;
+const CLUB_WORDS=/\b(club|extended|dj|long version|longer version|6 ?min(ute)?s?|six minutes?)\b/, SHORT_WORDS=/\b(short|reel|reels|sketch|teaser|quick|30 ?sec(ond)?s?|chhota|chota|chhoti|choti)\b/;
 function songFamily(style){ const s=style||PROJ.style||'house';
   return /^(dnb|liquid|dubstep)$/.test(s)?'dnb':/^(hiphop|boombap|trap|drill|lofi)$/.test(s)?'hiphop':/^(pop|rock|bollywood|punjabi|bhangra|reggaeton)$/.test(s)?'pop':'electronic'; }
 const snapBars=(b,step=4)=>clamp(Math.round((+b||0)/step)*step||step,4,64);

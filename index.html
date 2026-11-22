@@ -5089,7 +5089,7 @@ function songBrain(raw,t0){
   if((m=t.match(new RegExp(`\\b(?:play|start|go|jump|skip)(?: it)? (?:from|at|to) (?:the )?${ORD}(${SEC})s?(?: (\\d))?\\b`)))) return needArr({actions:[{type:'transport',do:'play',from:ref(m.slice(1))}]});
   /* the whole layout */
   const mins=t.match(/\b(?:make|turn|stretch|cut) (?:the (?:whole )?(?:song|track)|it|this) (?:to |into )?(?:about |around |roughly )?(\d+(?:\.\d+)?) ?(?:min|mins|minutes?)\b|\b(\d+(?:\.\d+)?) ?minutes? (?:long|song|track|version)\b/);
-  const fullW=/\b(full|whole|complete|proper|club|extended|dj|entire) (track|song|version|mix|edit|arrangement)\b|\barrange (it|this|the song|my song|the track|everything)\b|\b(make|turn) (it|this|the loop) (into )?(a |the )?(song|track|full song)\b|\b(club|extended|dj|short) (version|mix|edit)\b|\bsong (bana|banao|bana do)\b|\bpoora gaana\b/.test(t);
+  const fullW=/\b(full|whole|complete|proper|club|extended|dj|entire) (track|song|version|mix|edit|arrangement)\b|\barrange (it|this|the song|my song|the track|everything)\b|\b(make|turn|arrange) (it|this|the loop|that) (into |as )?(a |an |the )?(?:(?:short|shorter|quick|small|mini|little|tiny|reel|full|proper|whole) )?(song|track|full song|version|reel)\b|\b(short|quick|mini|reel) (song|track|arrangement|layout)\b|\b(chhota|chota|chhoti|choti) (song|gaana|gana|track)\b|\b(club|extended|dj|short) (version|mix|edit)\b|\bsong (bana|banao|bana do)\b|\bpoora gaana\b/.test(t);
   if(mins&&!/\b(mp3|download|export|bounce)\b/.test(t)) return PROJ.tracks.length?{actions:[{type:'arrange',minutes:+(mins[1]||mins[2]),template:'full'},{type:'transport',do:'play'}]}:null;
   if(fullW){ const tpl=CLUB_WORDS.test(t)?'club':SHORT_WORDS.test(t)&&!/\b(full|whole|complete)\b/.test(t)?'short':'full', ar={type:'arrange',template:tpl,ref:artist?artist.name:undefined};
     if(!PROJ.tracks.length) return artist?{actions:[{type:'vibe',ref:artist.name},{type:'add_drums',ref:artist.name},ar,{type:'transport',do:'play'}]}:{actions:[],reply:'There’s nothing to arrange yet. Start with a beat: say “make a house beat” or name an artist.'};
@@ -6253,7 +6253,7 @@ const SONG_FAM={
   dnb:[['Intro','intro',16],['Build','build',16],['Drop','drop',32],['Break','break',16],['Build 2','build',16],['Drop 2','drop',32],['Outro','outro',16]],
   dnbClub:[['Intro','intro',32],['Build','build',16],['Drop','drop',32],['Break','break',32],['Build 2','build',16],['Drop 2','drop',32],['Outro','outro',32]]
 };
-const CLUB_WORDS=/\b(club|extended|dj|long version|longer version|6 ?min(ute)?s?|six minutes?)\b/, SHORT_WORDS=/\b(short|reel|reels|sketch|teaser|quick|30 ?sec(ond)?s?)\b/;
+const CLUB_WORDS=/\b(club|extended|dj|long version|longer version|6 ?min(ute)?s?|six minutes?)\b/, SHORT_WORDS=/\b(short|reel|reels|sketch|teaser|quick|30 ?sec(ond)?s?|chhota|chota|chhoti|choti)\b/;
 function songFamily(style){ const s=style||PROJ.style||'house';
   return /^(dnb|liquid|dubstep)$/.test(s)?'dnb':/^(hiphop|boombap|trap|drill|lofi)$/.test(s)?'hiphop':/^(pop|rock|bollywood|punjabi|bhangra|reggaeton)$/.test(s)?'pop':'electronic'; }
 const snapBars=(b,step=4)=>clamp(Math.round((+b||0)/step)*step||step,4,64);
