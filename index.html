@@ -5095,11 +5095,12 @@ function partEditFix(t,raw){
     return {actions:[{type:'vary',track:role,mood:moodSaid(t)||undefined}].concat(inst?[inst]:[])}; }
   return null; }
 /* a short follow-up that only gives a side ("a bit more to the left", "to the right", "back to the middle"). A lone "right" is
-   a musician agreeing ("right", "ok right"), so it pans only right after a pan; "left" is never a yes, so it still pans (QA, 22 Nov AI-14 fix 3) */
-const LONE_PAN=/^\s*(?:(?:and|now|ok|okay|then|maybe)\s+)*(?:a (?:bit|little|touch) |slightly |little |thoda |zara )?(?:more |further )?(?:to the |towards the |over to the )?(left|right)(?: a (?:bit|little|touch))?(?: please)?\s*$|^\s*(?:pan (?:it )?)?(?:back )?(?:to the )?(?:cent(?:re|er)|middle)(?: please)?\s*$/;
+   a musician agreeing ("right", "ok right"), so it pans only right after a pan; "left" is never a yes, so it still pans (QA, 22 Nov AI-14 fix 3); "hard right", "right side",
+   "all the way left" are never a yes either (QA, 22 Nov AI-14 re-check 2) */
+const LONE_PAN=/^\s*(?:(?:and|now|ok|okay|then|maybe)\s+)*(?:a (?:bit|little|touch) |slightly |little |thoda |zara |hard |fully |all the way (?:to the )?)?(?:more |further )?(?:to the |towards the |over to the |the )?(left|right)(?: side)?(?: a (?:bit|little|touch))?(?: please)?\s*$|^\s*(?:pan (?:it )?)?(?:back )?(?:to the )?(?:cent(?:re|er)|middle)(?: please)?\s*$/;
 function panJustDone(){ const P=typeof ASSIST!=='undefined'&&ASSIST.lastPan; if(!P) return false; const h=ASSIST.history||[]; let i=h.length-1;
   if(h[i]&&h[i].role==='user'&&h[i].content===LAST_TEXT.text) i--; while(i>=0&&h[i].role!=='user') i--; return i>=0&&h[i].content===P.text; }
-function lonePan(t){ if(!LONE_PAN.test(t)) return false; if(/\b(left|cent(?:re|er)|middle|more|further|bit|little|touch|slightly|thoda|zara|to the|towards the|over to the)\b/.test(t)) return true; return panJustDone(); }
+function lonePan(t){ if(!LONE_PAN.test(t)) return false; if(/\b(left|cent(?:re|er)|middle|more|further|bit|little|touch|slightly|thoda|zara|to the|towards the|over to the|hard|fully|all the way|side)\b/.test(t)) return true; return panJustDone(); }
 /* "make it softer" right after the bass: the bass (the focus). Song-wide words, transport and arrangement keep their meaning. */
 function focusText(raw){ const f=typeof ASSIST!=='undefined'&&ASSIST.focus, w={drums:'drums',bass:'bass',chords:'chords',melody:'melody'}[f]; if(!w) return raw;
   const t=askText(raw); if((ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0]) return raw;
@@ -5313,30 +5314,31 @@ function toneFix(t){
   if(!role&&/\b(still|even more|further|again)\b/.test(t)&&last&&last.role!=='mix') role=last.role;
   const A=[], hz=x=>x>=1000?(x/1000).toFixed(1)+' kHz':x+' Hz';
   const eq=(T,band,d)=>{ const f={low:'lo',mid:'mid',high:'hi'}[band]; A.push({type:'mix',track:T.id,[band]:clamp(Math.round((T[f]||0)+d),-15,15)}); };
-  /* a melody's low cut stays under its lowest note, so the cut never thins the tune itself (QA, 22 Nov bug 8: 308 Hz on a melody down to C3).
-     The lowest REAL note: one stray note more than an octave under the rest and under the floor (an octave slip in a sung take) doesn't count, and the
-     floor is never under 100 Hz (QA, 22 Nov AI-14 fix 2: one C1 note pulled the cut to 28 Hz) */
-  const MEL_HP0=(typeof roleFx==='function'&&(roleFx('melody','')||{}).hp)||220, HP_FLOOR=100;
+  /* a mud complaint never LOWERS a low cut (QA, 22 Nov AI-14 re-check 2: 220 → 111 Hz on a melody down to C3 added 2.6 dB of 110-220 Hz).
+     It raises it as for any part (×1.4, up to the role's maximum); on a melody the raise stops at the tune's lowest REAL note, so the cut never
+     thins the tune itself (QA, 22 Nov bug 8: 308 Hz on a melody down to C3). Up to two stray notes more than an octave under the rest and under
+     about 118 Hz (octave slips in a sung take) don't count, and the cap is never under 100 Hz. When the cut can't go up it stays, and the low EQ does the work. */
+  const HP_FLOOR=100;
   const floorOf=T=>{ if(T.role!=='melody'||T.kind!=='notes') return null; const ns=(T.events||[]).map(e=>+e.n).filter(isFinite).sort((a,b)=>a-b); if(!ns.length) return null;
-    const fq=n=>440*Math.pow(2,(n-69)/12), stray=ns.length>3&&ns[1]-ns[0]>12&&fq(ns[0])*0.85<HP_FLOOR, lo=stray?ns[1]:ns[0], note=fq(lo), hz=Math.max(HP_FLOOR,Math.round(note*0.85)); return {hz,note,under:hz<note&&!stray}; };
-  /* only Keys's own starting cut (220 Hz) comes down, and only when it sits above the tune's lowest real note (220 Hz on a tune down
-     to C3 → 111 Hz); a cut the user set higher stays where it is on a mud complaint (300 Hz stays 300 Hz) */
-  const cutSt=new Map(), underT=new Set();
-  const cut=T=>{ const cur=(T.fx&&T.fx.hp)||20, [mn,st,mx]=TONE_HP[T.role]||[120,1.4,400], F=floorOf(T), fl=F?F.hz:Infinity, want=Math.min(mx,Math.max(mn,st<2?Math.round(cur*st):cur+st));
-    if(F&&cur>F.note&&cur>fl&&cur<=MEL_HP0){ A.push({type:'track_fx',track:T.id,effect:'low cut',amount:fl}); cutSt.set(T,'down'); if(F.under) underT.add(T); return fl; }
-    const v=Math.min(want,fl); if(v>cur){ A.push({type:'track_fx',track:T.id,effect:'low cut',amount:v}); cutSt.set(T,'up'); if(fl<want&&F.under) underT.add(T); return v; }
-    cutSt.set(T,F?'stay':'same'); if(F&&cur<F.note) underT.add(T); return cur; };
-  const cutSay=(T,v)=>{ const st=cutSt.get(T), u=underT.has(T)?', under its lowest note':''; return st==='down'?`${T.name} (low cut down to ${hz(v)}${u})`:st==='stay'?`${T.name} (low cut stays at ${hz(v)}${u})`:u?`${T.name} (low cut ${hz(v)}${u})`:`${T.name} (${hz(v)})`; };
+    const fq=n=>440*Math.pow(2,(n-69)/12); let k=0; for(let j=1;j<=2&&ns.length-j>=3;j++) if(ns[j]-ns[j-1]>12&&fq(ns[j-1])<HP_FLOOR/0.85) k=j;
+    const note=fq(ns[k]); return {hz:Math.max(HP_FLOOR,Math.floor(note)),note,stray:k>0}; };
+  const cutSt=new Map(), underT=new Set(), heldT=new Set(), loStep=T=>heldT.has(T)?-6:-3; /* a cut the tune holds back leans on the low EQ: 6 dB instead of 3 */
+  const cut=T=>{ const cur=(T.fx&&T.fx.hp)||20, [mn,st,mx]=TONE_HP[T.role]||[120,1.4,400], F=floorOf(T), want=Math.min(mx,Math.max(mn,st<2?Math.round(cur*st):cur+st)), v=Math.min(want,F?F.hz:Infinity);
+    const capped=F&&F.hz<want, under=capped&&!F.stray;
+    /* held back by the tune's lowest note, a raise of under 10% isn't one you'd hear (220 → 222 Hz), so the cut stays */
+    if(v>cur&&(!capped||v>=cur*1.1)){ A.push({type:'track_fx',track:T.id,effect:'low cut',amount:v}); cutSt.set(T,'up'); if(under&&v<=F.note) underT.add(T); return v; }
+    cutSt.set(T,F?'stay':'same'); if(capped) heldT.add(T); if(under&&cur<=F.note) underT.add(T); return cur; };
+  const cutSay=(T,v)=>{ const st=cutSt.get(T), u=underT.has(T)?', under its lowest note':''; return st==='stay'?`${T.name} (low cut stays at ${hz(v)}${u})`:u?`${T.name} (low cut ${hz(v)}${u})`:`${T.name} (${hz(v)})`; };
   const more=kind==='warm'?' Say “warmer” again to go further.':` Say “still ${{mud:'muddy',box:'boxy',harsh:'harsh',dull:'dull',thin:'thin'}[kind]}” to go further.`;
   if(role){
     const list=PROJ.tracks.filter(x=>x.role===role), part=TONE_PART[role]||role;
     if(!list.length) return {actions:[],reply:role==='drums'||role==='chords'?`There are no ${role} yet to fix. Want me to add some?`:`There's no ${part.replace(/^the /,'')} yet to fix. Want me to add one?`};
     let say='';
-    list.forEach((T,i)=>{ if(kind==='mud'){ const n0=A.length, v=cut(T), fl=T.role==='bass'||T.role==='drums'?-9:-12, lo=T.lo||0, d=Math.max(-3,fl-lo); if(d<0) eq(T,'low',d);
+    list.forEach((T,i)=>{ if(kind==='mud'){ const n0=A.length, v=cut(T), fl=T.role==='bass'||T.role==='drums'?-9:-12, lo=T.lo||0, d=Math.max(loStep(T),fl-lo); if(d<0) eq(T,'low',d);
         const cs=cutSt.get(T), u=underT.has(T);
         if(!i) say=A.length===n0?`${part[0].toUpperCase()+part.slice(1)} is already cleaned as far as I’d go (low cut ${hz(v)}${u?', under its lowest note':''}, low EQ ${lo} dB). Try a softer sound or turn it down a little.`
           :cs==='stay'?`Cleaned up ${part}: ${d<0?`${-d} dB less low boom`:'nothing more to take out'} (low cut stays at ${hz(v)}${u?', under its lowest note':''}), same notes.`
-          :`Cleaned up ${part}: low cut ${cs==='down'?'down':'up'} to ${hz(v)}${u?' (under its lowest note)':''}${d<0?` and ${-d} dB less low boom`:''}, same notes.`; }
+          :`Cleaned up ${part}: low cut up to ${hz(v)}${u?' (under its lowest note)':''}${d<0?` and ${-d} dB less low boom`:''}, same notes.`; }
       else if(kind==='box'){ eq(T,'mid',-3); say=`Took the boxiness out of ${part}: 3 dB less mids around 1 kHz.`; }
       else if(kind==='warm'){ const lo=clamp(Math.round((T.lo||0)+2),-15,15), hi=clamp(Math.round((T.hi||0)-3),-15,15); A.push({type:'mix',track:T.id,low:lo,high:hi}); say=`Warmer ${part.replace(/^the /,'')}: 3 dB less highs and 2 dB more low end, same notes.`; }
       else if(kind==='harsh'){ eq(T,'high',-3); say=`Softened ${part}: 3 dB less highs.`; }
@@ -5351,8 +5353,10 @@ function toneFix(t){
     const up=all.filter(x=>x.role!=='bass'&&x.role!=='drums'&&!x.mute); /* a muted part isn't heard, so it isn't muddying anything (QA, 22 Nov bug 8) */
     if(!up.length&&all.some(x=>x.mute&&x.role!=='bass'&&x.role!=='drums')) return {actions:[],reply:'Everything above the bass that plays is already clean, and the muted parts aren’t heard. Tell me which part sounds muddy: “the bass is muddy” or “the kick is boomy”.'};
     if(!up.length) return {actions:[],reply:!all.some(x=>x.role==='bass')?'So far it’s just the drums, and their low end is the groove. Say “the kick is boomy” if it’s the kick.':'So far it’s just drums and bass, and their low end is the groove. Tell me which one: “the bass is muddy” or “the kick is boomy”.'};
-    const done=up.map(T=>{ const v=cut(T), d=Math.max(-3,-12-(T.lo||0)); if(d<0) eq(T,'low',d); return cutSay(T,v); });
-    return {actions:A,reply:`Cleaned up the mix: ${[...cutSt.values()].includes('down')?"low cuts set":[...cutSt.values()].includes('up')?"higher low cuts":"low cuts kept"} and 3 dB less low end on ${done.length>1?done.slice(0,-1).join(', ')+' and '+done[done.length-1]:done[0]}; bass and kick untouched.`+more};
+    const res=up.map(T=>{ const v=cut(T), d=Math.max(loStep(T),-12-(T.lo||0)); if(d<0) eq(T,'low',d); return [T,v,d]; }), held=heldT.size>0;
+    /* when a melody's cut is held back by its tune it gets 6 dB of low EQ, so each part says its own amount */
+    const done=res.map(([T,v,d])=>{ const s=cutSay(T,v); return held&&d<0?s.replace(/\)$/,`, ${-d} dB less low end)`):s; });
+    return {actions:A,reply:`Cleaned up the mix: ${[...cutSt.values()].includes('up')?"higher low cuts":"low cuts kept"} and ${held?'less low end':'3 dB less low end'} on ${done.length>1?done.slice(0,-1).join(', ')+' and '+done[done.length-1]:done[0]}; bass and kick untouched.`+more};
   }
   if(kind==='warm'){ all.forEach(T=>eq(T,'high',-2)); return {actions:A,reply:'Warmed up the mix: 2 dB less highs on every part.'+more}; }
   if(kind==='box'){ all.filter(x=>x.role!=='drums').forEach(T=>eq(T,'mid',-2)); return {actions:A,reply:'Took the boxiness out of the mix: 2 dB less mids around 1 kHz on every part but the drums.'+more}; }

@@ -605,17 +605,31 @@ try {
     let r = await A14.say('make the break bigger'); R.brk = r.same && r.steps === 0 && (drumsIn || (!/already has its drums/.test(r.reply) && /not the drums/.test(r.reply)));
     r = await A14.say('make drop 2 bigger'); R.d2 = /Drop 2 already has/.test(r.reply) && !/The drop 2/.test(r.reply);
     await A14.song(false); const m = PROJ.tracks.find(t => t.name === 'Melody'); m.events.push({ b: 0, d: 0.5, n: 48, v: 0.8 }); saveProject(); const lowHz = 440 * Math.pow(2, (48 - 69) / 12);
-    r = await A14.say('the mix is muddy'); R.mud = ((m.fx || {}).hp || 0) <= lowHz && /Melody \(low cut down to \d+ Hz, under its lowest note\)/.test(r.reply); R.hp = (m.fx || {}).hp; return R; });
-  ok('AI-14 fix 5: "make the break bigger" says what the break really has (never "already has its drums" when it has none); "Drop 2 already has" (not "The drop 2"); "the mix is muddy" brings a melody low cut above its lowest note (C3) down under it, as the reply says', a14f5.brk && a14f5.d2 && a14f5.mud, JSON.stringify(a14f5));
+    const hp0 = (m.fx || {}).hp || 0; r = await A14.say('the mix is muddy'); R.mud = ((m.fx || {}).hp || 0) >= hp0 && hp0 > lowHz && /Melody \(low cut stays at \d+ Hz/.test(r.reply) && !/down to|under its lowest note/.test(r.reply); R.hp = (m.fx || {}).hp; return R; });
+  ok('AI-14 fix 5: "make the break bigger" says what the break really has (never "already has its drums" when it has none); "Drop 2 already has" (not "The drop 2"); "the mix is muddy" never lowers a melody low cut that sits above its lowest note (C3): it stays, as the reply says', a14f5.brk && a14f5.d2 && a14f5.mud, JSON.stringify(a14f5));
   // AI-14 fix 2 (QA re-check, 22 Nov): a "right" that answers Keys's own "Left or right?" pans; one stray low note can't pull the melody's low cut under 100 Hz
   const a14g1 = await E(async () => { const P = () => Math.round(((PROJ.tracks.find(t => t.name === 'Melody').fx || {}).pan || 0) * 100);
-    await A14.song(false); let r = await A14.say('pan the melody'); const asked = /Left or right/.test(r.reply) && r.steps === 0; r = await A14.say('right'); return { ok: asked && P() === 40 && r.steps === 1, asked, pan: P(), steps: r.steps }; });
-  ok('AI-14 re-check 1: "pan the melody" asks "Left or right?", and "right" then pans the melody R 40 (one undo step)', a14g1.ok, JSON.stringify(a14g1));
+    await A14.song(false); let r = await A14.say('pan the melody'); const asked = /Left or right/.test(r.reply) && r.steps === 0; r = await A14.say('right'); const one = P() === 40 && r.steps === 1, pan = P();
+    await A14.say('pan the melody'); r = await A14.say('hard left'); return { ok: asked && one && P() === -100 && r.steps === 1, asked, pan, hard: P(), steps: r.steps }; });
+  ok('AI-14 re-check 1: "pan the melody" asks "Left or right?", and "right" then pans the melody R 40 (one undo step); "hard left" as the answer pans it L 100', a14g1.ok, JSON.stringify(a14g1));
   const a14g2 = await E(async () => { const R = {}; await A14.song(false); const m = PROJ.tracks.find(t => t.name === 'Melody'); m.events.push({ b: 0.5, d: 0.25, n: 24, v: 0.6 }); m.fx = Object.assign({}, m.fx, { hp: 220 }); saveProject();
-    let r = await A14.say('the mix is muddy'); R.c1 = ((m.fx || {}).hp || 0) >= 100; R.hp = (m.fx || {}).hp; R.c1say = !/under its lowest note/.test((r.reply.match(/Melody \([^)]*\)/) || [''])[0]);
+    let r = await A14.say('the mix is muddy'); R.c1 = ((m.fx || {}).hp || 0) >= 220; R.hp = (m.fx || {}).hp; R.c1say = !/under its lowest note/.test((r.reply.match(/Melody \([^)]*\)/) || [''])[0]);
     await A14.song(false); const m2 = PROJ.tracks.find(t => t.name === 'Melody'); m2.events.push({ b: 0.5, d: 0.25, n: 48, v: 0.6 }); m2.fx = Object.assign({}, m2.fx, { hp: 300 }); saveProject();
-    r = await A14.say('the melody is muddy'); R.own = (m2.fx || {}).hp === 300 && /stays at 300 Hz/.test(r.reply); return R; });
-  ok('AI-14 re-check 2: a melody with one stray C1 note keeps its low cut at 100 Hz or more on "the mix is muddy" (no "under its lowest note" claim); a 300 Hz cut stays 300 Hz on "the melody is muddy"', a14g2.c1 && a14g2.c1say && a14g2.own, JSON.stringify(a14g2));
+    r = await A14.say('the melody is muddy'); R.own = (m2.fx || {}).hp === 300 && /stays at 300 Hz/.test(r.reply);
+    await A14.song(false); const m3 = PROJ.tracks.find(t => t.name === 'Melody'); m3.events.push({ b: 0.5, d: 0.25, n: 24, v: 0.6 }, { b: 1.5, d: 0.25, n: 24, v: 0.6 }); m3.fx = Object.assign({}, m3.fx, { hp: 220 }); saveProject();
+    r = await A14.say('the melody is muddy'); R.two = ((m3.fx || {}).hp || 0) >= 220; R.hp2 = (m3.fx || {}).hp; return R; });
+  ok('AI-14 re-check 2: a mud complaint never lowers a melody low cut: one or two stray C1 notes keep it at 220 Hz or more (no "under its lowest note" claim); a 300 Hz cut stays 300 Hz on "the melody is muddy"', a14g2.c1 && a14g2.c1say && a14g2.own && a14g2.two, JSON.stringify(a14g2));
+  // AI-14 fix 3 (QA re-check 2, 22 Nov): listen with numbers. A melody down to C3 under Keys's 220 Hz cut: "the melody is muddy" must take the 110-220 Hz share DOWN
+  const a14g3 = await E(async () => { await A14.song(false); const m = PROJ.tracks.find(t => t.name === 'Melody'); m.events.forEach(e => e.n = 48 + (e.n % 12)); m.fx = Object.assign({}, m.fx, { hp: 220 }); saveProject();
+    const band = async () => { const [l, r] = await renderSongSpan([m], CTRL.bpm, 0, 8), N = 4096, SR = 44100; let mud = 0, tot = 0;
+      for (let o = 0; o + N <= l.length; o += N) { const re = new Float64Array(N), im = new Float64Array(N); for (let i = 0; i < N; i++) re[i] = (l[o + i] + r[o + i]) * 0.5 * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / N));
+        for (let i = 1, j = 0; i < N; i++) { let b = N >> 1; for (; j & b; b >>= 1) j ^= b; j ^= b; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; } }
+        for (let len = 2; len <= N; len <<= 1) { const a = -2 * Math.PI / len; for (let i = 0; i < N; i += len) for (let k = 0; k < len / 2; k++) { const c = Math.cos(a * k), s = Math.sin(a * k), x = i + k, y = x + len / 2, vr = re[y] * c - im[y] * s, vi = re[y] * s + im[y] * c; re[y] = re[x] - vr; im[y] = im[x] - vi; re[x] += vr; im[x] += vi; } }
+        for (let k = 1; k < N / 2; k++) { const f = k * SR / N, p = re[k] * re[k] + im[k] * im[k]; tot += p; if (f >= 110 && f < 220) mud += p; } }
+      return 10 * Math.log10(mud / tot); };
+    const a = await band(), hp0 = m.fx.hp, r = await A14.say('the melody is muddy'), b = await band();
+    return { ok: b < a - 0.3 && (m.fx.hp || 0) >= hp0 && !/down to/.test(r.reply), before: +a.toFixed(2), after: +b.toFixed(2), hp: m.fx.hp, lo: m.lo }; });
+  ok('AI-14 fix 3: "the melody is muddy" on a melody down to C3 (Keys\'s 220 Hz cut) takes the melody\'s 110-220 Hz share down and never lowers the cut', a14g3.ok, JSON.stringify(a14g3));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
