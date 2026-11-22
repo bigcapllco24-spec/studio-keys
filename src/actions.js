@@ -155,6 +155,8 @@ const KEEP_LIKE=/\b(?:i|we)\s+(?:really\s+|totally\s+|kinda\s+|do\s+)?(?:like|lo
 /* praise with no verb at the start of a clause ("nice bassline!", "sick drums,", "love those chords") and producer praise after a part
    ("the drums slap", "the beat bangs", "this kick hits hard"): the part is kept (QA, 22 Nov fix 2) */
 const KEEP_PW='drums?|beat|kicks?|hats|snares?|claps?|groove|bass ?lines?|bass|808s?|sub|chords?|pads?|harmony|progression|melod(?:y|ies)|lead|hook|riff|top ?line|arp|vocals?|voice';
+/* "never mind the drums change the bass": the drums are left as they are (QA, 22 Nov fix 8) */
+const KEEP_NEVERMIND=new RegExp('\\bnever ?mind\\s+(?:about\\s+)?(?:the\\s+|my\\s+)?(?:'+KEEP_PW+')\\b','i');
 const KEEP_ADJ=new RegExp('^\\s*(?:(?:oh|wow|yo|man|ok|okay|ah|damn)\\b[\\s,!]*)*(?:(?:i\\s+|we\\s+)?(?:really\\s+|totally\\s+)?(?:love|loving|like|liking|dig|digging|feeling)\\s+(?:the|that|this|those|these|my|your)|(?:(?:really|so|very|super|pretty|hella|mad|real)\\s+)*(?:nice|great|good|sick|fire|dope|lovely|sweet|killer|banging|bangin|solid|awesome|amazing|beautiful|gorgeous|perfect|wicked|brilliant|excellent|epic|insane|lit|cool|tight)(?:\\s+(?:the|that|this|those|these|my|your))?)\\s+(?:(?:new|little|lil)\\s+)?(?:'+KEEP_PW+')\\b');
 const KEEP_SLAP=new RegExp('\\b(?:'+KEEP_PW+')\\s+(?:(?:really|just|totally|so|lowkey|kinda|actually|absolutely)\\s+)*(?:slaps?|slapping|bangs?|banging|knocks?|knocking|hits?\\s+(?:so\\s+|really\\s+)?hard|goes\\s+(?:so\\s+)?hard|go\\s+hard|going\\s+hard|go(?:es)?\\s+(?:so\\s+)?crazy|going\\s+crazy|rips?|ripping|rocks?|(?:is|are)\\s+(?:a\\s+)?(?:vibe|heat|hard|crazy|vibing))\\b');
 const KEEP_IMP=/^\s*(?:(?:please|now|ok|okay|can you|could you|let'?s|let it|i want(?: the)?|make|get|have)\b)/;
@@ -220,6 +222,7 @@ function excNorm(t){ t=excAny(t); const m=KEEP_EXC.exec(t); if(!m) return t; con
   return (before.trim()?before.replace(/[\s,]+$/,'')+', ':'')+(only?'change '+only[1]:tail.replace(/[.!?\s]+$/,''))+', everything else is fine'; }
 const fillNorm=t=>excNorm(String(t||'')).replace(/\s+(?:and all|n all|and stuff|and that)\b(?=\s+(?:but|though|tho|yet)\b|\s*[,.!?;]|\s*$)/gi,'');
 function speechComma(t){
+  t=t.replace(new RegExp('('+KEEP_NEVERMIND.source+')(?=\\s+[a-z])','gi'),'$1,');
   /* "drums acche hai par thode loud hai", "melody acchi hai lekin thodi loud hai": par / lekin / magar = but, bas = just (QA, 22 Nov fix 7) */
   t=t.replace(new RegExp('(\\b'+KEEP_HIN+')\\s+(par|pr|lekin|lekn|magar|bas)\\b','gi'),(m,a,w)=>a+(/^bas$/i.test(w)?', just':', but')).replace(/\s+(?:lekin|magar)\s+/gi,', but ');
   t=t.replace(new RegExp('('+KEEP_DONE.source+')(?=\\s+[a-z])','gi'),'$1,');
@@ -276,7 +279,7 @@ const ASK_HIN=/\b(?:loud|boring|bore|tez|halka|halki|kam|zyada|jyada|dull|flat|w
 function askedParts(orig){ const out=new Set(); let last=null; const pron=/\b(?:it|them|they|those|these|usko|unko|isko|inko|unhe|inhe)\b/g;
   for(let ci=0;ci<orig.length;ci+=2){ const c=String(orig[ci]||'').toLowerCase().replace(/hi[\s-]?hats?/g,'hats'), sep=String(orig[ci-1]||'').toLowerCase(); if(!c.trim()) continue; const M=[];
     PART_SAID.forEach(([k,re])=>{ const g=new RegExp(re.source,'g'); let x; while((x=g.exec(c))) M.push({k,s:x.index,e:x.index+x[0].length}); });
-    { let x; pron.lastIndex=0; while((x=pron.exec(c))) M.push({k:null,s:x.index,e:x.index+x[0].length}); }
+    { let x; pron.lastIndex=0; while((x=pron.exec(c))){ if(/^\s+all\b/.test(c.slice(x.index+x[0].length))||/\b(?:all|whole) of\s+$/.test(c.slice(0,x.index))) continue; M.push({k:null,s:x.index,e:x.index+x[0].length}); } }
     M.sort((a,b)=>a.s-b.s);
     /* "drums acche hai, but thode loud hai", "the bass is nice but its too loud": a complaint after but / par / lekin is about the part just praised */
     if(last&&!M.some(m=>m.k)&&/\b(?:but|though|however|just)\b/.test(sep)&&!/\b(?:don'?t|dont|do not|never|not)\b/.test(c)&&(ASK_AFTER.test(c)||ASK_HIN.test(c)||ASK_NEAR.test(c))) out.add(last);
@@ -300,7 +303,7 @@ function protectSaid(text){ text=String(text||''); const qp=askedLast(), key=tex
   const low=c=>String(c||'').toLowerCase().replace(/hi[\s-]?hats?/g,'hats'), roles0=c=>PART_SAID.filter(([k,re])=>re.test(' '+low(c)+' ')).map(x=>x[0]), roles=(c,j)=>j!=null&&rOf.has(j)?rOf.get(j):roles0(c);
   for(let i=0;i<orig.length;i+=2){ const c=low(orig[i]); let R=roles0(c);
     /* "dont touch it", "leave those", "usko rehne do", "keep them": the parts just praised or kept (QA, 22 Nov fix 4) */
-    if(!R.length&&lastKept.length&&KEEP_PRON_RE.test(c)&&KEEP_ASK.test(c)){ R=lastKept.slice(); rOf.set(i,R); }
+    if(!R.length&&lastKept.length&&(KEEP_PRON_RE.test(c)||/^\s*(?:(?:just|bas|so|and)\s+)*(?:mat\s+(?:chhed\w*|chhu\w*|chhoo\w*|badl\w*|badal\w*)|rehne do|waise hi rakho|aise hi rakho|chhod do|chhodo|(?:please\s+)?(?:don'?t|dont|do not)\s+(?:touch|change)|leave alone|keep as is)\s*$/.test(c))&&KEEP_ASK.test(c)){ R=lastKept.slice(); rOf.set(i,R); }
     if(!c.trim()) continue; /* ", just": nothing between two separators */
     if(KEEP_OTH_RE.test(c)){ drop.add(i); others=true; pending=[]; continue; } /* "everything else is fine": the parts not asked about, below */
     /* "the drums and the bass are fine": a half with only a part in it goes with the clause after it;
@@ -315,7 +318,7 @@ function protectSaid(text){ text=String(text||''); const qp=askedLast(), key=tex
         else { const m2=new RegExp('^\\s*(?:except(?: for)?|apart from|other than|besides|but not)\\s+'+EXC_LIST,'i').exec(orig[i].slice(ex.index)), tail=m2?orig[i].slice(ex.index+m2[0].length).trim():''; if(tail) cut.set(i,tail); else drop.add(i); } } pending=[]; continue; }
     const praise=R.length&&!KEEP_NOT.test(c)&&(KEEP_DONE.test(c)||KEEP_PRAISE.test(c)&&!/\b(not|isn'?t|aren'?t|wasn'?t|too)\b/.test(c.replace(/\btoo good to \w+|\b(?:could(?:n'?t|nt| not)|can'?t|cannot)\s+(?:be|sound|get)\s+(?:any\s+)?better\b/g,''))||KEEP_LIKE.test(c)&&!/\b(don'?t|do not|didn'?t|would|'d)\b/.test(c)
       ||(KEEP_ADJ.test(c)||KEEP_SLAP.test(c))&&!KEEP_IMP.test(c)&&!/\b(not|too|more|less|harder|er)\b/.test(c));
-    const ask=R.length&&!KEEP_NOT.test(c)&&KEEP_ASK.test(c)&&!(/\b(keep|leave)\b/.test(c)&&KEEP_SHAPE.test(c));
+    const ask=R.length&&!KEEP_NOT.test(c)&&(KEEP_ASK.test(c)||KEEP_NEVERMIND.test(c))&&!(/\b(keep|leave)\b/.test(c)&&KEEP_SHAPE.test(c));
     if(!praise&&!ask){ pending=[]; after=false; continue; }
     const P=pending.concat([i]); P.forEach(j=>{ drop.add(j); roles(orig[j],j).forEach(r=>{ kept.add(r); if(praise&&!ask) praised.add(r); }); }); lastKept=[...new Set(P.flatMap(j=>roles(orig[j],j)))]; pending=[]; after=true; }
   /* rest: the words without the praised clauses; "except the drums" stays in it (the parser knows "mute everything except the drums"),
@@ -326,13 +329,13 @@ function protectSaid(text){ text=String(text||''); const qp=askedLast(), key=tex
   const asked=askedParts(orig);
   if(asked.size) [...drop].forEach(i=>{ if(roles(orig[i],i).some(r=>asked.has(r))&&!KEEP_OTH_RE.test(low(orig[i]))) drop.delete(i); });
   /* "no", "nah leave it", "no thanks", "nahi rehne do", "actually no keep it" (after Keys asks): nothing changes, whatever the AI sends (QA, 22 Nov fix 7) */
-  { const nm=/^\s*(?:(?:actually|um|uh|hmm|oh|nah)\s+)*(?:no|nah|nope|nahi|nahin|nai|naa)\b[\s,.!]*(.*)$/i.exec(low(key.split('\u0001')[0])), rem=nm?nm[1].replace(/[,.!?]+/g,' ').replace(/\s+/g,' ').trim():null;
+  { const nm=/^\s*(?:(?:actually|um|uh|hmm|oh|nah)\s+)*(?:(?:no|nah|nope|nahi|nahin|nai|naa)\b[\s,.!]*)+(.*)$/i.exec(low(key.split('\u0001')[0]).replace(/^\s*(?:not now|not yet|maybe later|abhi nahi|baad me|baad mein)\b/,'no $&')), rem=nm?nm[1].replace(/[,.!?]+/g,' ').replace(/\s+/g,' ').trim():null;
     if(nm&&(!rem||closingSaid(rem)||KEEP_FILLONLY().test(rem)||KEEP_SONGPRAISE.test(rem)||/^(?:thanks|thank you|no thanks|leave it|keep it|its fine|it'?s fine|its good|it'?s good|its ok|it'?s ok|its okay|not now|maybe later|later|rehne do|mat karo|chhodo|chhod do|let it be|its perfect|it'?s perfect|thats fine|that'?s fine|all good|i'?m good|im good|we'?re good)\b/.test(rem))&&typeof PROJ!=='undefined'){
       PROJ.tracks.forEach(t=>{ if(t.kind==='notes'&&t.role) kept.add(t.role); }); if(kept.size){ const v={kept,rest:'',restCut:'',song:true,no:true}; KEEP_MEMO.set(key,v); return v; } } }
   if(!qp&&!kept.size&&!drop.size&&!cut.size&&(KEEP_SONGPRAISE.test(low(text).replace(/[,.!?;]+/g,' ').replace(/\s+/g,' ').trim())||closingSaid(text))&&typeof PROJ!=='undefined'){ PROJ.tracks.forEach(t=>{ if(t.kind==='notes'&&t.role) kept.add(t.role); }); if(kept.size){ const v={kept,rest:'',restCut:'',song:true}; KEEP_MEMO.set(key,v); return v; } }
   let rest=drop.size||cut.size?join(false):text, restCut=cut.size?join(true):rest;
   /* what is left is only filler ("nice", "okay okay", "yo keys", "bro"): pure praise, nothing to change */
-  if(kept.size&&KEEP_FILLONLY().test(rest)){ rest=''; restCut=''; }
+  if(kept.size&&(KEEP_FILLONLY().test(rest)||new RegExp('^[\\s,]*(?:(?:and|so|really|very|super|nice and|too|now|as well)\\s+)*(?:(?:'+KEEP_ADJS+'|warm|deep|smooth|crisp|punchy|wide|big|groovy|bouncy|bright|chunky|silky)\\b[\\s,]*(?:(?:and|too|now|as well|also)\\b[\\s,]*)*)+$','i').test(rest))){ rest=''; restCut=''; }
   /* "make the bass quieter everything else is fine": every part but the one asked about (named, or the focus for "make it quieter") is kept */
   if(others&&typeof PROJ!=='undefined'){ const T=new Set(roles(restCut).concat([...asked])), lr=low(restCut); if(!T.size&&ASSIST.focus&&(BACK_SAID.test(lr)||BARE_LEVEL.test(lr)||KEEP_SHAPE.test(lr))) T.add(ASSIST.focus);
     if(!rest.trim()) PROJ.tracks.forEach(t=>{ if(t.kind==='notes'&&t.role) kept.add(t.role); });
@@ -344,8 +347,11 @@ function protectSaid(text){ text=String(text||''); const qp=askedLast(), key=tex
   asked.forEach(r=>kept.delete(r)); /* a part the words ask to change is never protected */
   const v={kept,rest:kept.size||restRoles.size||others?rest:text,restCut:kept.size||restRoles.size||others?restCut:text,others:others&&kept.size>0,song:others&&!rest.trim()&&kept.size>0,asked}; if(KEEP_MEMO.size>40) KEEP_MEMO.clear(); KEEP_MEMO.set(key,v); return v; }
 const keptTxt=kept=>{ const L=[...kept].map(r=>'the '+(ROLE_TXT[r]||r)); return 'Kept '+(L.length>1?L.slice(0,-1).join(', ')+' and '+L[L.length-1]:L[0])+(L.length>1||[...kept][0]==='drums'||[...kept][0]==='chords'?' as they are.':' as it is.'); };
-const SONG_SAID=/\b(everything|every part|all (?:the )?parts|(?:whole|entire|full) (?:song|track|mix|thing)|the song|the mix|the rest|all of it|master)\b/;
-const BACK_SAID=/\b(it|that|this|them|those|another( one)?|one more|new one|the other one|previous one|last one)\b/;
+/* "it all", "all of it", "the whole thing", "them all" are the whole song, never the part just worked on (QA, 22 Nov fix 8) */
+const SONG_SAID=/\b(everything|every part|all (?:the )?parts|(?:whole|entire|full) (?:song|track|mix|thing)|the song|the mix|the rest|all of it|it all|them all|all of them|master)\b/;
+const BACK_SAID0=/\b(it|that|this|them|those|another( one)?|one more|new one|the other one|previous one|last one)\b/;
+const ALL_IT=/\b(?:it all|all of it|them all|all of them|the whole thing|(?:the )?whole (?:song|track|loop|mix))\b/g;
+const BACK_SAID={ test:t=>BACK_SAID0.test(String(t||'').replace(ALL_IT,' ')) };
 const ADD_SAID=/\b(add|adding|layer|another|second|extra|also|too|as well|on top|double|bring in|throw in|plus|new track|one more)\b/;
 const CHANGE_SAID=/\b(change|replace|redo|swap|switch|rework|rewrite|regenerate|new|different|other|fresh)\b/;
 /* "the bass", "the chords": the part a word means (its newest track), or the focus when nothing is named */
@@ -487,7 +493,7 @@ function inPlace(a,text,named){ const m=/^add_(bass|chords|melody)$/.exec(a.type
   if(lvl&&!CHANGE_SAID.test(lc)) return {type:'mix',track:T.id,db:lvl};
   if((CHANGE_SAID.test(lc)||role==='chords'&&moodSaid(lc))&&!inst) return {type:'vary',track:T.id,mood:moodSaid(lc)||a.mood};
   return Object.assign({},a,{replace:true}); }
-const reshapeSaid=t=>/\b(bass ?line|bass|chords?|melody|lead|pads?|arp|hook|riff)\b[^,.!?;]*\b(bouncier|bouncy|more bounce)\b/.test(t)?'busier':/\b(busy|zyada|jyada) (karo|kar do|kardo)\b|\b(aur|zyada|jyada) notes\b/.test(t)?'busier':/\bkam notes\b/.test(t)?'simpler':/\b(lamb[aie]|lamba|lambi)\b/.test(t)?'longer':/\b(chhot[aie]|chot[aie])\b/.test(t)?'shorter':/\b(simpler|simplify|simple|less busy|too busy|not so busy|fewer notes|less notes|sparser|sparse|thin (it|them|this|that) out|thin out|thin down|strip(ped)? (it |them )?back|calmer|minimal)\b/.test(t)?'simpler':/\b(busier|more busy|more notes|denser|fuller|more movement|more going on|more active|livelier|more rhythm(ic)?)\b/.test(t)?'busier':/\b(shorter|staccato|choppier|chopp?(ed|y)|short notes|plucky|punchier notes)\b/.test(t)?'shorter':/\b(longer|legato|held|sustained|smoother|long notes|hold (them|it|the [a-z]+))\b/.test(t)?'longer':null;
+const reshapeSaid=t=>/\b(bass ?line|bass|chords?|melody|lead|pads?|arp|hook|riff)\b[^,.!?;]*\b(bouncier|bouncy|more bounce)\b/.test(t)?'busier':/\b(busy|zyada|jyada) (karo|kar do|kardo)\b|\b(aur|zyada|jyada) notes\b/.test(t)?'busier':/\bkam notes\b/.test(t)?'simpler':/\b(lamb[aie]|lamba|lambi)\b/.test(t)?'longer':/\b(chhot[aie]|chot[aie])\b/.test(t)?'shorter':/\b(simpler|simplify|simple|less busy|too busy|not so busy|fewer notes|less notes|sparser|sparse|too full|way too full|too thick|too dense|too much going on|thin (it|them|this|that) out|thin out|thin down|strip(ped)? (it |them )?back|calmer|minimal)\b/.test(t)?'simpler':/\b(busier|more busy|more notes|denser|fuller|more movement|more going on|more active|livelier|more rhythm(ic)?)\b/.test(t)?'busier':/\b(shorter|staccato|choppier|chopp?(ed|y)|short notes|plucky|punchier notes)\b/.test(t)?'shorter':/\b(longer|legato|held|sustained|smoother|long notes|hold (them|it|the [a-z]+))\b/.test(t)?'longer':null;
 const moodSaid=t=>/\b(happ(y|ier)|bright(er)?|uplifting|major|hopeful|cheer(ful|ier)|positive|euphoric)\b/.test(t)?'happier':/\b(sad(der)?|dark(er)?|moody|moodier|melanchol\w*|emotional|minor|deeper)\b/.test(t)?'darker':null;
 /* a new progression for "new chords": differs from the chords playing now, fits the melody that stays (generated or the
    user's), and leans happier or darker when asked */

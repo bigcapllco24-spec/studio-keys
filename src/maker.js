@@ -250,6 +250,7 @@ function focusText(raw){ const f=typeof ASSIST!=='undefined'&&ASSIST.focus, w={d
   if(/\b(longer|shorter)\b/.test(t)&&/\bnotes?\b/.test(t)&&!/\b(it|that|this|them|those)\b/.test(t)) return raw.replace(/\b(?:the )?notes?\b/i,'the '+w+' notes');
   if(/\b(play|stop|pause|save|download|export|bounce|arrange|record|sing|hum|whistle|name|rename|undo|redo|delete|remove|again|mp3|quantize|quantise)\b/.test(t)) return raw;
   /* only a request about "it" ("make it softer", "put it on strings"); "thats it", "keep it" are not the part's name (QA, 22 Nov fix 5) */
+  if(/\b(?:it all|all of it|them all|all of them|the whole thing)\b/.test(t)) return raw; /* the whole song, never the focus part (QA, 22 Nov fix 8) */
   if(/\b(it|that|this|them|those)\b/.test(t)&&/\b(make|turn|put|give|change|try|set|move|bring|take|add|swap|switch|play|mute|solo|unmute|remove|delete|quantize|transpose|double|copy|boost|cut|lower|raise|shorten|lengthen|simplify|vary|redo|fix|tweak|louder|softer|quieter|brighter|darker|warmer|simpler|busier|shorter|longer|higher|up|down|more|less|another|again|new|different|replace|karo|kar do|badlo|banao|lagao|daalo|hatao|thoda|thodi)\b/.test(t)&&!(typeof closingSaid==='function'&&closingSaid(raw))) return raw.replace(/\b(it|that|this|them|those)\b/i,'the '+w);
   /* one word after a part ("louder", "a bit softer", "simpler"): that part */
   if(typeof BARE_LEVEL!=='undefined'&&BARE_LEVEL.test(raw)) return 'make the '+w+' '+raw.trim();
@@ -549,7 +550,7 @@ function localBrain(raw){
     /* Hinglish "sab kuch thoda kam karo" / "sab thoda loud karo": the whole song quieter / louder (the kept parts stay, onePart) */
     raw=raw.replace(/^\s*(?:sab|sab kuch|sabhi|saare|sare|baaki sab|baki sab)\s+(?:ko\s+)?(?:thoda\s+|thodi\s+|bit\s+)?(?:kam|dheere|halka|soft|quiet|neeche)\s*(?:karo|kar do|kardo)?\s*$/i,'make everything quieter').replace(/^\s*(?:sab|sab kuch|sabhi|saare|sare|baaki sab|baki sab)\s+(?:ko\s+)?(?:thoda\s+|thodi\s+|bit\s+)?(?:loud|zyada|tez|upar)\s*(?:karo|kar do|kardo)?\s*$/i,'make everything louder');
     /* "redo it all apart from the bass", "new everything except the chords": a new take of every other part (QA, 22 Nov fix 7) */
-    if(P&&P.kept.size&&/^(?:please\s+)?(?:redo|new|change|regenerate|refresh|remake|rework|switch up|swap out|give me new|make new)\s+(?:it all|everything|all of it|every part|all the parts|all|the rest|everything else)(?:\s+(?:please|else))?$/.test(String(P.restCut||'').toLowerCase().trim())){
+    if(P&&P.kept.size&&/^(?:please\s+)?(?:(?:redo|new|change|regenerate|refresh|remake|rework|switch up|swap out|give me new|make new)\s+(?:it all|everything|all of it|every part|all the parts|all|the rest|everything else)|make\s+(?:it all|everything|all of it)\s+(?:new|fresh|different))(?:\s+(?:please|else|again))?$/.test(String(P.restCut||'').toLowerCase().trim())){
       const RS=[...new Set(PROJ.tracks.filter(t=>t.kind==='notes'&&t.gen&&!P.kept.has(t.role)).map(t=>t.role))]; if(RS.length) return {actions:RS.map(r=>({type:'vary',track:r}))}; } }
   raw=focusText(raw);
   /* a bare part name with no request ("thats the melody", "the bass"): no second copy of a part the song already has (QA, 22 Nov fix 5) */
