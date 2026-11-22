@@ -184,6 +184,8 @@ function askFix(t,raw){
     return {actions:[],reply:c?`The chords are ${c}, in ${keyName(projectKey())}. Say “new chords” for others, or “happier chords”.`:'There are no chords yet. Say “add chords” and I’ll tell you what they are.'}; }
   { const pa=partAsk(t); if(pa) return pa; }
   if(q&&/\bkey\b/.test(t)&&!/\b(change|set|make|put|move)\b/.test(t)) return {actions:[],reply:PROJ.key?`It’s in ${keyName(PROJ.key)}.`:PROJ.tracks.length?`No key is set yet; it sounds like ${keyName(projectKey())}. Say “key F minor” to set one.`:'There’s nothing in the song yet, so no key. Say “key F minor” to set one.'};
+  /* "how many bars is the loop", "how long is the loop" (QA, 22 Nov) */
+  if(/\bhow (?:many bars|long)\b/.test(t)&&/\b(loop|bars?|song|track|it)\b/.test(t)&&!/\b(make|set|change)\b/.test(t)) return {actions:[],reply:songArranged&&songArranged()?`The song is ${songSections().reduce((n,x)=>n+x.bars,0)} bars long, and the loop is ${PROJ.bars} bars.`:`The loop is ${PROJ.bars} bars long. Say “make the loop 8 bars” to change it.`};
   if(q&&/\b(tempo|bpm|how fast)\b/.test(t)&&!/\b(change|set|make)\b/.test(t)) return {actions:[],reply:`It’s at ${Math.round(CTRL.bpm)} BPM.`};
   /* chords named by letter ("make the chords Am F C G", "a minor f c g"): not yet; never a random new track (QA, 21 Nov) */
   const CH='[a-g](?:#|b|♯|♭| sharp| flat)?(?:m|min|maj|dim|7|maj7|m7| minor| major)?';
@@ -247,7 +249,8 @@ function focusText(raw){ const f=typeof ASSIST!=='undefined'&&ASSIST.focus, w={d
   if(/\b(song|track|mix|everything|whole|all|master|volume|tempo|bpm|key|loop|intro|outro|drop|break|build|section|bars?|faster|slower|swing|bounce)\b/.test(t)) return raw;
   if(/\b(longer|shorter)\b/.test(t)&&/\bnotes?\b/.test(t)&&!/\b(it|that|this|them|those)\b/.test(t)) return raw.replace(/\b(?:the )?notes?\b/i,'the '+w+' notes');
   if(/\b(play|stop|pause|save|download|export|bounce|arrange|record|sing|hum|whistle|name|rename|undo|redo|delete|remove|again|mp3|quantize|quantise)\b/.test(t)) return raw;
-  if(/\b(it|that|this|them|those)\b/.test(t)) return raw.replace(/\b(it|that|this|them|those)\b/i,'the '+w);
+  /* only a request about "it" ("make it softer", "put it on strings"); "thats it", "keep it" are not the part's name (QA, 22 Nov fix 5) */
+  if(/\b(it|that|this|them|those)\b/.test(t)&&/\b(make|turn|put|give|change|try|set|move|bring|take|add|swap|switch|play|mute|solo|unmute|remove|delete|quantize|transpose|double|copy|boost|cut|lower|raise|shorten|lengthen|simplify|vary|redo|fix|tweak|louder|softer|quieter|brighter|darker|warmer|simpler|busier|shorter|longer|higher|up|down|more|less|another|again|new|different|replace|karo|kar do|badlo|banao|lagao|daalo|hatao|thoda|thodi)\b/.test(t)&&!(typeof closingSaid==='function'&&closingSaid(raw))) return raw.replace(/\b(it|that|this|them|those)\b/i,'the '+w);
   /* one word after a part ("louder", "a bit softer", "simpler"): that part */
   if(typeof BARE_LEVEL!=='undefined'&&BARE_LEVEL.test(raw)) return 'make the '+w+' '+raw.trim();
   if(/\b(another|one more|new one|different one|the other one|previous one|last one)\b/.test(t)) return raw+' '+w;
@@ -544,6 +547,9 @@ function localBrain(raw){
   /* "the drums are fine, just change the chords": the praised or protected part is left out of the words (protectSaid, AI-9 fix) */
   { const P=typeof protectSaid==='function'?protectSaid(raw):null; if(P&&P.kept.size){ if(P.song) return {actions:[],reply:'Glad you like it. I kept everything as it is. What should we do next?'}; if(!P.rest.trim()) return {actions:[],reply:'OK. '+keptTxt(P.kept)+' What should I change next?'}; } const r2=P&&(/\b(mute|unmute|solo|unsolo)\b/i.test(raw)?P.rest:P.restCut); if(r2&&r2!==raw) raw=r2; }
   raw=focusText(raw);
+  /* a bare part name with no request ("thats the melody", "the bass"): no second copy of a part the song already has (QA, 22 Nov fix 5) */
+  { const t=' '+askText(raw)+' ', r=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0], left=t.replace(/[,.!?;]+/g,' ').replace(/\b(thats|that'?s|that|this|is|it|its|the|my|a|an|yeah|yes|ok|okay|so|oh|wow|nice|cool|bro|yaar|now|one|hats?|drums?|beat|kick|groove|percussion|bass ?line|bass|chords?|pads?|harmony|progression|melody|lead|hook|riff|tune)\b/g,' ').trim();
+    if(r&&r!=='voice'&&!left&&/\b(thats|that'?s|this is|that is|its|it'?s)\b/.test(t)&&PROJ.tracks.some(x=>x.role===r)) return {actions:[],reply:`The ${({drums:'drums',bass:'bassline',chords:'chords',melody:'melody'})[r]} ${r==='drums'||r==='chords'?'are':'is'} already in the song. Say “another ${({drums:'beat',bass:'bassline',chords:'set of chords',melody:'melody'})[r]}” to add one, or “change the ${({drums:'drums',bass:'bassline',chords:'chords',melody:'melody'})[r]}” for a new take.`}; }
   const segs=splitAsks(raw); if(!segs) return brainOne(raw);
   const R=[];
   for(const g of segs){ let L; g.said=g.said||g.text;
