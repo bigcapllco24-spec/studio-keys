@@ -740,6 +740,7 @@ const ACT={
    the user says club, extended or DJ (32-bar sections, about 6 minutes); arranging never adds parts, it suggests them; transitions are drum
    transitions (a riser is a snare roll plus a crash, and Keys says so). */
 const SONG_ACTS=new Set(['arrange','section','parts','transition','loop_section']);
+const WHOLE_MIX=new Set(['mix','track_fx','fx','groove','hats','reshape','instrument']);
 const SEC_BARS={intro:8,build:8,drop:16,break:16,verse:16,chorus:16,bridge:8,hook:8,outro:8,other:8};
 const SONG_FAM={
   electronic:[['Intro','intro',16],['Build','build',16],['Drop','drop',16],['Break','break',16],['Drop 2','drop',16],['Outro','outro',16]],
@@ -755,7 +756,7 @@ const snapBars=(b,step=4)=>clamp(Math.round((+b||0)/step)*step||step,4,64);
 const said=()=>normName(LAST_TEXT.text||'');
 /* the section the user's own words name ("in the outro", "outro mein", "from the second drop"), or null */
 const SEC_RE='((?:first|second|third|last|1st|2nd|3rd) )?(intro|build ?up|build|drop|breakdown|break|outro|chorus|verse|bridge|hook)( \\d+| two| three)?';
-function secSaid(){ const t=said(); let m=t.match(new RegExp('\\b(?:in|during|for|from|throughout|out of) (?:the )?'+SEC_RE+'\\b'))||t.match(new RegExp('\\b'+SEC_RE+' (?:mein|me|main|ke liye|ke lie|se(?! (?:pehle|pahle|phele|baad)))\\b')); return m?((m[1]||'')+m[2]+(m[3]||'')).trim():null; }
+function secSaid(){ const t=said(); let m=t.match(new RegExp('\\b(?:in|during|for|from|throughout|out of|at|inside) (?:the )?'+SEC_RE+'\\b'))||t.match(new RegExp('\\b'+SEC_RE+' (?:mein|me|main|ke liye|ke lie|se(?! (?:pehle|pahle|phele|baad)))\\b')); return m?((m[1]||'')+m[2]+(m[3]||'')).trim():null; }
 /* the user's words name a transition ("roll", "fill", "silence", "riser" …): only then does an AI transition next to a new layout count (fix 2) */
 const TRANS_WORDS=/\b(rolls?|snare ?rolls?|fills?|silence|silent|gaps?|pauses?|risers?|uplifters?|sweeps?|crash|kick ?drop|transitions?|khamoshi|chup|breath)\b/;
 const noGapSaid=()=>/\b(no|without|remove|lose|skip|take out|hata\w*) (?:the |a )?(gap|silence|pause)\b|\b(gap|silence|pause) (?:hata\w*|nahi|mat)\b/.test(said());
@@ -1016,6 +1017,10 @@ function runActions(list){
   SONG.batch=true; SONG.batchChip=null; BATCH.acting=true;
   try{ for(const a of acts){ try{ const r=ACT[a.type](a); if(r){ done.push(r); done.segs.push(a.seg); kinds.push([a.type,r]); changed=true; if(SONG_ACTS.has(a.type)||(a.type==='transport'&&a.from!=null)) songDone.push(r); } }catch(e){ console.warn('action failed',a,e); } } }
   finally{ BATCH.acting=false; }
+  /* a level, EQ, effect or groove change said about one section ("the melody is too loud in the drop") is for the whole song: there is no
+     per-section mix yet, so the reply says so plainly (QA, 22 Nov bug 3) */
+  try{ const sec=LAST_TEXT.text&&songArranged()?secSaid():null;
+    if(sec&&kinds.some(([t],i)=>WHOLE_MIX.has(t)&&!(t==='mix'&&acts.some(a=>a.type==='mix'&&(a.mute!=null||a.solo!=null))))) songNote(`That’s in the whole song, not only the ${sec}: one section can’t be mixed on its own yet.`,/whole song|every section/i); }catch(e){}
   /* new sections are numbered in song order once every action has run, so the AI's later actions still find "Drop 3" by the name it gave */
   try{ if(BATCH.renum){ const ren=songRenumber(BATCH.renum); if(ren&&ren.size){ const d2=songRenamed(done,ren), s2=songRenamed(songDone,ren); done.splice(0,done.length,...d2); songDone.splice(0,songDone.length,...s2); BATCH.notes.forEach(n=>{ n.text=songRenamed([n.text],ren)[0]; }); } } }
   finally{ SONG.batch=false; }

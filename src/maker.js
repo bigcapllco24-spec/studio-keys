@@ -45,6 +45,40 @@ function swingOnly(raw,hasDrums){ let s=' '+String(raw||'').toLowerCase().replac
   if(hasDrums) s=s.replace(/\b(beat|groove|drums?|(hi|high)[ -]?hats?|hihats?|hats?|rhythm)\b/g,' ');
   return !s.replace(/[^a-z0-9]+/g,'').length; }
 const SWING_ADD_PART=/\b(add|adding|bring in|layer|put in|write|create|make|give me|want|need)( me)?( a| an| some| new| another| more)? (?!(?:the|my|it|this|that|its|your) )([a-z]+ )?(bass ?lines?|bass|chords?|pads?|harmony|progression|melody|lead|hook|riff|keys|piano|synths?|arps?)\b/;
+/* ---- one section named in a mix comment (QA, 22 Nov bug 3). Levels, EQ and effects are for the whole song (there is no per-section mix yet):
+   "the melody is too loud in the drop" turns the melody down everywhere and the reply says so (runActions adds the note).
+   "make the drop bigger", "give the drop more energy", "make the build more intense": what the song layout can really do for that section
+   (every part in for a drop, the drum pieces left out back in, a snare roll into it), or an honest reply. ---- */
+const SEC_W='intro|outro|drop|break|breakdown|build|build ?up|buildup|verse|chorus|bridge|hook';
+const SEC_PREP=new RegExp(`\\s*\\b(?:in|during|for|on|at|inside|throughout|through) (?:the |my |this |that )?(?:(?:first|second|third|last|final|1st|2nd|3rd) )?(?:${SEC_W})s?(?: \\d)?\\b|\\s*\\b(?:(?:first|second|third|last|pehle|dusre|doosre) )?(?:${SEC_W})(?: \\d)? (?:mein|me|main|ke dauran)\\b`,'gi');
+const SEC_MIXW=/\b(reverb|delay|echo|sidechain|side chain|pump|compress(?:ion|or)?|drive|saturation|distortion|width|wider|stereo|low ?cut|high ?cut|eq|muddy|mud|boomy|harsh|shrill|dull|muffled|bright|brighter|dark|darker|warm|warmer|thin|fatter|punch(?:y|ier)?|pan(?:ned)?|dry|wet|lows|mids|highs|low end|volume|louder|quieter|softer|too loud|too quiet|too soft|turn(?: [a-z]+){0,3} (?:up|down)|bring(?: [a-z]+){0,3} (?:up|down)|up a bit|down a bit|kam|zyada|loud|halka|dheema)\b/;
+function secMixStrip(raw){ const t=askText(raw); if(!SEC_MIXW.test(t)) return raw;
+  if(/\b(mute|unmute|solo|unsolo|only|just|sirf|without|in and out|take (?:[a-z]+ ){0,3}out|bring (?:the |my )?[a-z]+ in|hata\w*|nikal\w*|daal\w*)\b/.test(t)) return raw; /* parts in a section stay a parts change */
+  const role=(ROLE_WORDS.find(([k,re])=>re.test(t))||[])[0]||(DRUM_VOICE.some(([k,re])=>re.test(t))?'drums':null); if(!role) return raw; /* "the drop is too loud": sectionSayFix */
+  const out=String(raw).replace(SEC_PREP,' ').replace(/\s+/g,' ').trim(); return out&&out!==String(raw).trim()?out:raw; }
+const SEC_LIFT=/\b(bigger|huge|massive|epic|hit(?:s)? (?:harder|hard|more)|harder|more (?:energy|intense|power|impact|punch|hype|drive|excitement)|energy|energetic|intense|intensity|fuller|explode|bang|slap harder|bada|badi|bade|dhamaka|zyada energy|josh)\b/;
+const SEC_LEVEL=/\b(louder|quieter|softer|too loud|too quiet|too soft|turn(?: [a-z]+){0,3} (?:up|down)|volume|loud|kam karo)\b/;
+function sectionSayFix(t){
+  const T=' '+t.replace(/[.,!?;]+/g,' ').replace(/\bbuild[\s-]?ups?\b/g,'build').replace(/\bbreak[\s-]?downs?\b/g,'break').replace(/\s+/g,' ')+' ';
+  const sm=T.match(/\b(?:(first|second|third|last|final|1st|2nd|3rd|pehla|pehle|dusra|doosra) )?(intro|outro|drop|break|build|verse|chorus|bridge)s?(?: (\d))?\b/); if(!sm) return null;
+  if(/^\s*(?:(?:please|now|ok|okay|and|then|just)\s+)*drop\s+(?:the|my|a|an)\b/.test(T)) return null; /* "drop the drums in the outro": drop is the verb */
+  const lift=SEC_LIFT.test(T)&&!/\b(less|calmer|chiller|reduce|lower|tone down|strip|kam)\b/.test(T), level=!lift&&SEC_LEVEL.test(T); if(!lift&&!level) return null;
+  const partW=new RegExp(`\\b(${SB_PART.replace(/\|everything\|all$/,'')})\\b`); if(partW.test(T.replace(/\bbuild\b/g,' '))) return null; /* a part named: its own rules, and the whole-song note */
+  if(/\b(add|another|new|second|copy|duplicate|longer|shorter|extend|remove|delete|loop|play|rename|move|roll|fill|riser|crash|silence|gap|different|own)\b/.test(T)) return null;
+  if(!songArranged()) return {actions:[],reply:SB_NOSONG};
+  const ord={first:'first',pehla:'first',pehle:'first','1st':'first',second:'second',dusra:'second',doosra:'second','2nd':'second',third:'third','3rd':'third',last:'last',final:'last'}[sm[1]]||'';
+  const ref=(ord?ord+' ':'')+sm[2]+(sm[3]?' '+sm[3]:''), s=findSec(ref); if(!s) return {actions:[],reply:`There’s no ${sm[2]} in this song. Say “add a ${sm[2]}” to make one.`};
+  const S=songSections(), i=S.indexOf(s), nm=s.name, low=nm.toLowerCase(), The=/^(intro|outro|drop|break|build|verse|chorus|bridge|hook)( \d+)?$/i.test(nm)?'The '+low:nm;
+  if(level) return {actions:[],reply:`I can’t turn one section up or down on its own yet; levels are for the whole song. I can take a part out of the ${low} (“take the chords out of the ${low}”) or bring one in, or turn one part down in the whole song.`};
+  const big=/^(drop|chorus|hook)$/.test(s.kind), A=[], inP=[];
+  PROJ.tracks.forEach(x=>{ if(x.kind!=='notes'||x.mute) return; const p=s.parts[x.id]; const drum=(INST.get(x.inst)||{}).drums||x.role==='drums';
+    if(p&&p.on&&p.without&&p.without.length&&drum) inP.push(x.name); else if((!p||!p.on)&&big) inP.push(x.name); });
+  if(inP.length) A.push({type:'parts',section:nm,in:[...new Set(inP)]});
+  const prev=S[i-1], into=big?prev:s.kind==='build'?s:null;
+  if(into&&!into.end&&(big?i>0:true)) A.push(big?{type:'transition',before:nm,to:'snareroll',gap:true}:{type:'transition',section:nm,to:'snareroll'});
+  if(!A.length){ const bIn=prev&&prev.kind==='build'&&PROJ.tracks.some(x=>x.role==='bass'&&prev.parts[x.id]&&prev.parts[x.id].on);
+    return {actions:[],reply:`${The} already has ${big?'every part':'its drums'}${into&&into.end?` and a ${String((END_WORD[into.end.to]||'transition')).split(' (')[0]} ${big?'into it':'at the end'}`:''}. I can’t make one section louder on its own yet. ${big&&bIn?`Want me to take the bass out of the ${prev.name.toLowerCase()} so the ${low} lands harder?`:big&&prev?`Want a longer snare roll into the ${low}?`:`Want a snare roll at the end of the ${low}?`}`}; }
+  return {actions:A,reply:done=>done.length?`Made the ${low} bigger: ${done.join(', ')}. Levels stay the same, because one section can’t be turned up on its own yet.`:''}; }
 /* one request (one command); localBrain splits a sentence with two commands first */
 function brainOne(raw){
   /* "make the bass bouncier": more notes on that part; bounce alone (or on the beat) is swing (QA, 22 Nov fix 4) */
@@ -55,6 +89,7 @@ function brainOne(raw){
     if(hasDrums) return {actions:[{type:'groove',track:'drums',swing:sws}]};
     if(!anyDrums) return {actions:[],reply:"There's no beat yet. Say 'make a house beat' first."};
     return {actions:[],reply:"Your drums are your own part, so I left their swing as it is. Say 'make a house beat' for a beat I can swing."}; }
+  raw=secMixStrip(raw); /* "the melody is too loud in the drop": the melody, in the whole song (the reply says so; QA, 22 Nov bug 3) */
   const R=brainCore(raw,sws), A=R.actions||[];
   /* swing said next to something else ("add a bassline with some swing"): do both */
   if(sws!=null&&hasDrums&&!A.some(x=>x.type==='add_drums'||(x.type==='groove'&&x.swing!=null))){
@@ -111,6 +146,7 @@ function brainCore(raw,sws){
       return {actions:A}; } }
   { const q=askFix(t,raw); if(q) return q; }
   { const pe=partEditFix(t,raw); if(pe) return pe; }
+  { const sl=sectionSayFix(t); if(sl) return sl; }
   { const tone=toneFix(t); if(tone) return tone; }
   { const lv=levelFix(t); if(lv) return lv; }
   if(/^\s*(undo|undo that|go back|revert( that)?|take that back)\b/.test(t)) return {actions:[{type:'undo'}]};

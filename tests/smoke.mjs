@@ -546,6 +546,13 @@ try {
     const u = await A14.say('unmute the voice note'); R.push({ x: 'unmute', ok: !PROJ.tracks.find(t => t.name === 'sing').mute && !u.take });
     await A14.song(false, true); LAST_TEXT.text = 'mute the voice note'; runActions([{ type: 'sing', part: 'voice' }]); LAST_TEXT.text = ''; R.push({ x: 'AI sing', ok: !BATCH.take && PROJ.tracks.find(t => t.name === 'sing').mute }); return R; });
   ok('AI-14 bug 2: "mute the voice note", "turn off the voice note", "mute sing", "mute the recording", "voice note ko mute karo" mute the audio track (one undo step, no recording); "unmute the voice note" brings it back; an AI sing for "mute the voice note" mutes it instead', a14b2.every(x => x.ok), JSON.stringify(a14b2.filter(x => !x.ok)));
+  // AI-14 bug 3: a section named in a mix comment changes that part in the whole song and says so; "make the drop bigger" does what the layout can, or says honestly
+  const a14b3 = await E(async () => { const R = {}, V = n => PROJ.tracks.find(t => t.name === n);
+    await A14.song(true); let v0 = V('Melody').vol, d0 = V('Drums').vol, r = await A14.say('the melody is too loud in the drop'); R.mel = V('Melody').vol < v0 && V('Drums').vol === d0 && r.steps === 1 && /whole song/.test(r.reply);
+    const h0 = V('Drums').hi || 0; d0 = V('Drums').vol; r = await A14.say('make the hats softer in the break'); R.hats = (V('Drums').hi || 0) < h0 && V('Drums').vol === d0 && r.same && /whole song/.test(r.reply);
+    for (const x of ['make the drop bigger', 'give the drop more energy', 'drop ko aur bada karo']) { r = await A14.say(x); R[x] = r.same && r.steps === 0 && /can’t make one section louder/.test(r.reply) && !/^Keys ?Done/.test(r.reply); }
+    runActions(localBrain('take the chords out of the drop').actions); r = await A14.say('make the drop bigger'); R.back = r.same && r.steps === 1 && /^Intro\[[^\]]*\] Build\[[^\]]*\] Drop\[[^\]]*Chords/.test(r.secs); return R; });
+  ok('AI-14 bug 3: "the melody is too loud in the drop" turns the melody down and says it is the whole song; "make the hats softer in the break" softens the hats, not the drums fader; "make the drop bigger", "give the drop more energy" and "drop ko aur bada karo" say honestly what the drop already has (no change); with the chords out of the drop, "make the drop bigger" brings them back in', Object.values(a14b3).every(Boolean), JSON.stringify(a14b3));
 } catch (e) { ok('test run', false, e.message); }
 ok('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
 await b.close();
