@@ -647,6 +647,7 @@ const ASK_MIXLIKE=/\b(reverb|delay|echo|sidechain|side chain|compress\w*|drive|s
 function askRole(t){ for(const [k,re] of ROLE_WORDS){ const m=t.match(re); if(m) return {k,m:m[0]}; } return null; }
 function askAlone(seg){ const t=askText(seg), h=t.trim().replace(ASK_FILL,'');
   if(ASK_HEAD.test(h)) return true;
+  if(/^silence (?:the |my |that )?(?:old |last |previous |first )?(?:voice ?notes?|voice ?memos?|recordings?|takes?)\b/.test(h)) return true; /* "silence the old take and record another one" */
   if(/\b(?:mute|unmute|solo|band|bandh|off|on|chalu|wapas|loud|soft|kam|zyada|tez|dheere)\s+(?:karo|kar do|kardo|kariye)\s*$/.test(t)) return true; /* Hinglish, the verb last: "voice note mute karo" (QA, 22 Nov AI-14 fix 2) */
   const role=askRole(t)||(DRUM_VOICE.some(([k,re])=>re.test(t))?{k:'drums'}:null);
   if(role&&(LEVEL_UP.test(t)||LEVEL_DOWN.test(t)||PUNCH.test(t))) return true; /* "the bass quieter", "the chords up a bit" */
@@ -791,7 +792,7 @@ function audioMuteFix(t){ const on=AUD_ON.test(t), off=!on&&AUD_OFF.test(t); if(
   if(/\b(record|recording a|new|another|again|sing|hum|whistle)\b/.test(t.replace(/\b(?:mute|unmute) sing\b/,' ').replace(/\b(?:the|my|that|this) recording\b/,' '))&&!/\b(?:the|my|that|this) (?:voice ?notes?|recordings?)\b/.test(t)) return null;
   const nm=v=>String(v).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), aud=PROJ.tracks.filter(x=>x.kind==='audio'), s=' '+nm(t)+' ';
   const named=PROJ.tracks.filter(x=>x.name&&nm(x.name).length>2&&!/^(drums|bass|bassline|chords|melody|lead|keys|pads?)( \d+)?$/i.test(x.name)&&s.includes(' '+nm(x.name)+' ')).sort((a,b)=>b.name.length-a.name.length);
-  const noun=/\b(voice ?notes?|voice ?memos?|memos?|recordings?|audio( tracks?| clips?)?|clips?|samples?|vocals?|my voice)\b/.test(t);
+  const noun=/\b(voice ?notes?|voice ?memos?|memos?|recordings?|audio( tracks?| clips?)?|clips?|samples?|vocals?|my voice)\b/.test(t)||(aud.length&&/\b(?:old|last|previous|first) (?:voice )?takes?\b/.test(t)); /* "the old take" only when there is a recording */
   let T=named[0]||null;
   if(!T&&noun){ if(!aud.length) return /\bvocals?\b/.test(t)?null:{actions:[],reply:'There’s no voice note or recording in this song yet. Say “record a voice note” to add one.'}; T=on?([...aud].reverse().find(x=>x.mute)||aud[aud.length-1]):([...aud].reverse().find(x=>!x.mute)||aud[aud.length-1]); }
   if(!T) return null;
