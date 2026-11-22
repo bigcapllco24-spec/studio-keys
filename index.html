@@ -5891,8 +5891,10 @@ function onePart(list,depth){
   const askQ=!depth&&typeof askFix==='function'&&(()=>{ try{ const q=askFix(said.toLowerCase(),said); return q&&!(q.actions||[]).length?q:null; }catch(e){ return null; } })(), asked=!!askQ;
   /* words with one clear meaning that the AI sometimes sends as a new or remade part (QA, 22 Nov, AI-14): "pan the melody left" as add_melody,
      "bring the bass in at the intro" as add_bass. The offline brain's action runs instead, with its reply */
-  if(!depth&&ASSIST.engine&&typeof panFix==='function'&&list.some(a=>/^(add_\w+|vary|notes|hats|groove|reshape|sing)$/.test(a.type))){ try{ const tt=askText(said);
-    const L=PAN_SAID.test(tt)&&!list.some(a=>a.type==='track_fx'&&/pan/i.test(String(a.effect||'')))?panFix(tt):songArranged()&&secSaid()&&/\b(bring|start|let|add|put|take|drop|remove|kill|cut|pull)\b/.test(tt)&&!/\b(a|an|some|new|another|second)\s+(bass ?line|bass|chords?|melody|beat|drums)\b/.test(tt)?localBrain(said):null;
+  if(!depth&&ASSIST.engine&&typeof panFix==='function'&&list.some(a=>/^(add_\w+|vary|notes|hats|groove|reshape|sing|mix|track_fx|fx)$/.test(a.type))){ try{ const tt=askText(said), wide=list.some(a=>/^(add_\w+|vary|notes|hats|groove|reshape|sing)$/.test(a.type));
+    /* "make the drop bigger" sent as a whole-song groove or mix change: what the layout can do for that section, or the honest reply */
+    const SL=songArranged()&&!list.some(a=>/^(parts|transition|section)$/.test(a.type))?sectionSayFix(tt):null;
+    const L=SL?SL:!wide?null:PAN_SAID.test(tt)&&!list.some(a=>a.type==='track_fx'&&/pan/i.test(String(a.effect||'')))?panFix(tt):songArranged()&&secSaid()&&/\b(bring|start|let|add|put|take|drop|remove|kill|cut|pull)\b/.test(tt)&&!/\b(a|an|some|new|another|second)\s+(bass ?line|bass|chords?|melody|beat|drums)\b/.test(tt)?localBrain(said):null;
     if(L&&(L.reply||(L.actions||[]).length)&&(!(L.actions||[]).length||L.actions.every(a=>/^(track_fx|parts|mix)$/.test(a.type)))){ BATCH.local=L; return (L.actions||[]).map(normAction).filter(a=>a&&ACT[a.type]); } }catch(e){ console.warn('words first',e); } }
   for(let a of list){
     if(kept.size){ const r0=actRole(a);
