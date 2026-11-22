@@ -301,7 +301,7 @@ function onePart(list,depth){
      one-part change instead, with its own reply */
   if(!depth&&ASSIST.engine&&dropped.length&&!res.some(a=>a.type!=='transport')&&!BATCH.declined&&typeof localBrain==='function'){ try{ const L=localBrain(said); if(L&&L.actions&&L.actions.length){ res=onePart(L.actions.map(normAction).filter(a=>a&&ACT[a.type]),1); BATCH.local=L; } }catch(e){ console.warn('offline fallback',e); } }
   if(kept.size&&!depth){ const w=[...kept].map(r=>({drums:'drums|beat|kick',bass:'bass(?:line)?',chords:'chords',melody:'melody',voice:'vocals?|voice'})[r]||r).join('|');
-    songNote(keptTxt(kept),new RegExp('\\b(kept|keep|keeping|left|leaving|didn.t touch)\\b[^.]*\\b('+w+')\\b|\\b('+w+')\\b[^.]*\\b(stay|stays|unchanged|untouched|as (it|they) (is|are|was|were))\\b','i')); }
+    songNote(keptTxt(kept),new RegExp('\\b(kept|keep|keeping|left|leaving|didn.t touch)\\b[^.]*\\b('+w+')\\b|\\b('+w+')\\b[^.]*\\b(kept|stay|stays|unchanged|untouched|as (it|they) (is|are|was|were))\\b','i')); }
   return res; }
 /* the AI's reply after the guard dropped or moved some of its actions: its sentences about what didn't happen are left out
    ("Turned the whole song down 3 dB." when only the bass moved, "Here are fresh drums…" when the drums were kept). '' = say what changed. */
@@ -442,7 +442,7 @@ const ACT={
   revert(a){ const t=findTrack(a.track)||(ASSIST.focus&&partTrack(ASSIST.focus))||null, said=String(LAST_TEXT.text||'').toLowerCase();
     /* "the original/first chords": the oldest version this session; "go back" again right after going back: one more step back;
        "no, the other one": the one just before, so it toggles (QA, 22 Nov fix 2). Versions are kept, never used up. */
-    const first=a.to==='first'||/\b(original|first|very first|start)\b/.test(said), toggle=!first&&/\bother one\b/.test(said);
+    const first=a.to==='first'||/\b(original|first|very first|start|sabse pehl[aei]|sabse pahl[aei]|shuru wal[aei])\b/.test(said), toggle=!first&&/\bother one\b/.test(said);
     let i=VERSIONS.length-1, chain=false;
     if(t){ const cur=partSig(t), w=REVERT_AT.get(t.id), wi=w?VERSIONS.indexOf(w):-1;
       if(!first&&!toggle&&wi>=0&&w.tracks[t.id]&&partSig(w.tracks[t.id])===cur){ i=wi-1; chain=true; }
