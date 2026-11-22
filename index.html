@@ -3473,13 +3473,13 @@ function noteGenKey(o){ if(PROJ.key||!o||!o.gen||o.kind==='audio'||o.role==='dru
 /* setKey(k): the key the notes are already in, or one for parts not made yet; the notes only move from a key set before.
    setKey(k,{move:true}) (the user picks a key: the Key menu, Keys' "key" action on its own): from auto, the notes move from
    the key they are in now. Either way they move by the tonic difference, the shortest way; a change of mode alone (C minor →
-   C major) keeps the tonic and moves nothing, and a key whose scale already holds 98% of the note time (C major on an
-   A minor loop) only changes the label (lead, 22 Nov). Back to auto remembers the key the notes are in.
+   C major) keeps the tonic and moves nothing, and the relative key of the key the notes are in (C major on an A minor
+   loop: the same scale) only changes the label (lead, 22 Nov). Back to auto remembers the key the notes are in.
    Returns how far the notes moved (semitones). */
 function setKey(k,o={}){
   const old=PROJ.key, from=old||(k&&o.move?loopKey():null); PROJ.key=k; let d=0; if(!k&&old) PROJ.genKey=old;
-  const ev=k?[].concat(...keyedLists()):[], fits=ev.length>=4&&keyShare(ev,k)>=0.98;
-  if(from && k && from.tonic!==k.tonic && !fits){ d=mod(k.tonic-from.tonic,12); if(d>6) d-=12; keyedLists().forEach(ev=>ev.forEach(e=>e.n+=d)); }
+  const rel=from&&k&&from.mode!==k.mode&&mod(k.tonic-from.tonic,12)===(from.mode==='minor'?3:9);
+  if(from && k && from.tonic!==k.tonic && !rel){ d=mod(k.tonic-from.tonic,12); if(d>6) d-=12; keyedLists().forEach(ev=>ev.forEach(e=>e.n+=d)); }
   $('#keySel').value=k?`${k.tonic}:${k.mode}`:''; saveProject(); renderTracks(); return d;
 }
 /* what a key pick did, in words: "up 2 semitones", and that audio parts (voice notes, imports) stay as recorded */
