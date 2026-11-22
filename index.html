@@ -5635,6 +5635,7 @@ function songDbStep(db){ db=clamp(+db||0,-24,12); if(db<=0) return db; const top
 const STYLE_ALIAS={afrohouse:'afro',afrotech:'afro',afrobeat:'afro',afrobeats:'afro',ukgarage:'ukg',garage:'ukg',ukg:'ukg',lofihiphop:'lofi',lofihouse:'deephouse',chillhouse:'deephouse',deeptech:'techhouse',minimalhouse:'techhouse',minimaltechno:'techno',drumandbass:'dnb',drumnbass:'dnb',melodic:'melodichouse',boombap:'boombap',hiphop:'hiphop'};
 const pickStyle=s=>{ if(!s) return null; if(STYLES[s]) return s; const k=String(s).toLowerCase().replace(/[^a-z0-9& ]+/g,'').replace(/\s+/g,''); if(STYLES[k]) return k; if(STYLE_ALIAS[k]) return STYLE_ALIAS[k]; return (STYLE_WORDS.find(([key,re])=>re.test(' '+String(s).toLowerCase()+' '))||[])[0]||null; };
 let BATCH={}; const LAST_TEXT={text:''}; const LAST_TAKE={part:null};
+function singPart(a){ const raw=String(a.part||a.role||a.track||'melody').toLowerCase(); return /voice|audio|note/.test(raw)&&!/melody/.test(raw)?'voice':/bass/.test(raw)?'bass':/chord|pad|harmon/.test(raw)?'chords':'melody'; }
 const newSeed=()=>1+Math.floor(Math.random()*2e9);
 function tasteArtist(){ const p=TASTE.profile; if(!p||!p.artists) return null; for(const a of p.artists){ const A=findArtist(a); if(A) return artistAs(A,a); } return null; }
 /* style + artist for a request: named artist > named style > the song's vibe > the person's taste > house */
@@ -6285,9 +6286,11 @@ const ACT={
     if(LAST_TEXT.text&&typeof audioMuteFix==='function'){ const said=String(LAST_TEXT.text), segs=(typeof splitAsks==='function'&&splitAsks(said))||[{text:said}];
       const takeW=/\b(sing|hum|whistle|record|re-?record|retake|new take|voice ?note)\b/, mc=segs.map(g=>audioMuteFix(askText(g.text))), wants=segs.length>1&&segs.some((g,i)=>!mc[i]&&takeW.test(askText(g.text)));
       const sent=x=>{ const T0=x&&x.actions[0]&&findTrack(x.actions[0].track); return !!T0&&(BATCH.ran||[]).some(b=>b!==a&&b.type==='mix'&&b.mute!=null&&findTrack(b.track)===T0); };
-      if(wants){ const M=mc.find(x=>x&&x.actions.length); if(M&&!sent(M)) pre=M.actions.map(x=>ACT.mix(x)).filter(Boolean).join(', '); }
+      if(wants){ const M=mc.find(x=>x&&x.actions.length); if(M&&!sent(M)) pre=M.actions.map(x=>ACT.mix(x)).filter(Boolean).join(', ');
+        /* AI [sing voice, sing melody] for "mute the recording, I'll hum the melody": the voice one is the mute, the melody one is the take */
+        if(singPart(a)==='voice'&&(BATCH.ran||[]).some(b=>b!==a&&b.type==='sing'&&singPart(b)!=='voice')) return pre||undefined; }
       else { const T=audioMuteFix(askText(said)); if(T){ if(sent(T)) return; if(T.actions.length) return T.actions.map(x=>ACT.mix(x)).filter(Boolean).join(', '); songNote(T.reply); BATCH.declined=true; return; } } }
-    const raw=String(a.part||a.role||a.track||'melody').toLowerCase(); const part=/voice|audio|note/.test(raw)&&!/melody/.test(raw)?'voice':/bass/.test(raw)?'bass':/chord|pad|harmon/.test(raw)?'chords':'melody';
+    const part=singPart(a);
     BATCH.take=part; if(part==='melody') delete PROJ.progLocked; return (pre?pre+'. ':'')+(part==='voice'?`Recording a voice note after the count-in: ${PROJ.bars} bars`:`Sing the ${part==='bass'?'bassline':part==='chords'?'chord roots (one note per chord)':'melody'} after the count-in: ${PROJ.bars} bars`); },
   convert(a){ const t=findTrack(a.track||'melody'); if(!t||t.kind!=='notes'||(INST.get(t.inst)||{}).percussive) return; const to=/bass/.test(a.to||'')?'bass':/chord|pad/.test(a.to||'')?'chords':'melody';
     t.events=shapePart(t.events,to,projectKey()); t.role=to; t.inst=partInst(to); loadI(t.inst); t.gen=false; t.name=(to==='bass'?'Bassline':to==='chords'?'Chords':'Melody')+' (from '+t.name.replace(/^(Sung|Hummed) /,'').toLowerCase()+')';
